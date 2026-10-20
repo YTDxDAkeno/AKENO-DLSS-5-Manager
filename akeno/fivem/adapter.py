@@ -15,6 +15,7 @@ from akeno.security.catalog import Package
 from akeno.security.downloads import sha256_file
 from .compatibility import BackendReview, evidence_findings, policy_findings
 from .models import FiveMInstallation, ServerPolicy
+from .paths import guard_target
 
 
 class FiveMLegacyAdapter(BackendAdapter):
@@ -48,8 +49,7 @@ class FiveMLegacyAdapter(BackendAdapter):
         if self.review and self.review.target != "plugins":
             raise ValueError("Only FiveM.app/plugins is an eligible target")
         p = self.installation.plugin_dir
-        if p.is_symlink() or p.resolve() != self.installation.app_dir / "plugins":
-            raise ValueError("Plugin directory is linked or escaped the client")
+        guard_target(p, self.installation.app_dir)
         return p
 
     def target_game(self) -> Game:
@@ -71,6 +71,10 @@ class FiveMLegacyAdapter(BackendAdapter):
         findings = self._identity_findings(game)
         findings += policy_findings(self.policy, self.review, self.package)
         findings += evidence_findings(self.installation, ctx, self.review, self.package)
+        findings.append(Finding(Severity.WARNING, "fivem_experimental",
+            "Experimental FiveM integration: no RTX 4080 performance, VRAM-fit or ban-safety guarantee."))
+        if self.installation.errors:
+            return findings
         try:
             # Keep anti-cheat database blocks, hardware decisions and all underlying prerequisites.
             base = evaluate(self.database, self.target_game(), self.delegate, ctx)
@@ -84,6 +88,16 @@ class FiveMLegacyAdapter(BackendAdapter):
             in_target = item.path.is_relative_to(self.installation.plugin_dir)
             if item.kind in ("graphics_hook", "asi_plugin", "neural_consumer", "reshade_addon") and not in_target:
                 findings.append(Finding(Severity.BLOCKER, "fivem_external_hook", f"Review the graphics hook outside the plugin target: {item.path}"))
+        if self.review:
+            approved = dict(self.review.prerequisite_hashes)
+            for item in self.installation.inventory:
+                if not item.path.is_relative_to(self.installation.plugin_dir):
+                    continue
+                rel = item.path.relative_to(self.installation.plugin_dir).as_posix().casefold()
+                executable = item.path.suffix.lower() in (".dll", ".asi", ".addon", ".addon64", ".addon32")
+                if executable and rel not in ctx.managed_files and approved.get(rel) != item.sha256:
+                    findings.append(Finding(Severity.BLOCKER, "fivem_unreviewed_plugin",
+                        f"Existing plugin is not covered by the recipe's exact prerequisite hashes: {rel}"))
         return findings
 
     def required_package_files(self, game: Game, package: Package) -> dict[str, str | None]:
@@ -123,6 +137,7 @@ class FiveMLegacyAdapter(BackendAdapter):
         # Do not let a delegate pick a different target or disable another tool's files.
         if Path(plan.target_dir).resolve() != self.target.resolve() or plan.rename_away:
             raise PermissionError("Delegate escaped the approved FiveM target")
+        guard_target(self.target, self.installation.app_dir, [o.rel_path for o in plan.ops])
         paths = []
         for op in plan.ops:
             rel = normalize_member(op.rel_path)
@@ -148,6 +163,7 @@ class FiveMLegacyAdapter(BackendAdapter):
 
     def validate(self, game: Game, installed: dict[str, str]) -> list[Finding]:
         findings = self._identity_findings(game)
+        guard_target(self.target, self.installation.app_dir, installed)
         findings.extend(self.delegate.validate(self.target_game(), installed))
         for rel, expected in installed.items():
             try:

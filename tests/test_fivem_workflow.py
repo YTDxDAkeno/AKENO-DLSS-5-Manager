@@ -68,7 +68,8 @@ def workflow(tmp_path, db, monkeypatch):
     review = BackendReview("dlss5_feeder", entry["sha256"], installation.fingerprint,
         "https://example.org/FIXTURE-NOT-REAL-HARDWARE", "0" * 40, "RTX 40", ("617.14",), tuple(runtime_pins),
         frozenset({"dlss5-feed.addon64", SHADER, NR_RUNTIME, DLSS_RUNTIME, "akeno-install.json"}),
-        neural_feature_evaluated=True, signed_runtime=True)
+        neural_feature_evaluated=True, signed_runtime=True,
+        prerequisite_hashes=tuple((f.path.relative_to(plugins).as_posix().casefold(), f.sha256) for f in installation.inventory))
     service = FiveMService(svc, process_reader=lambda: [])
     return SimpleNamespace(service=service, svc=svc, installation=installation, policy=policy, review=review,
                            root=root, gta=gta, plugins=plugins, archive=archive, entry=entry)
@@ -128,7 +129,9 @@ def test_server_permission_gates(workflow, change, code):
 
 def test_pure_one_needs_exact_known_graphics_hashes(workflow):
     w = workflow
-    policy = replace(w.policy, pure_level=1, known_graphics_hashes=frozenset(w.entry["files"].values()))
+    policy = replace(w.policy, pure_level=1, known_graphics_hashes=frozenset(
+        [*w.entry["files"].values(), *(h for _, h in w.review.runtime_hashes),
+         *(h for _, h in w.review.prerequisite_hashes)]))
     assert not policy_findings(policy, w.review, adapter(w).package)
 
 
@@ -272,3 +275,81 @@ def test_anticheat_detection_is_never_overridden_by_ownership(workflow):
     w = workflow
     w.installation.game.anti_cheat = AntiCheatRisk.DETECTED
     assert w.service.compatibility(adapter(w)).status == CompatStatus.BLOCKED
+
+
+def test_unreviewed_existing_plugin_is_blocked(workflow):
+    w = workflow
+    (w.plugins / "unknown.asi").write_bytes(b"unknown")
+    w.installation = inspect_installation(w.root)
+    r = replace(w.review, client_fingerprint=w.installation.fingerprint)
+    assert "fivem_unreviewed_plugin" in {f.code for f in w.service.compatibility(adapter(w, review=r)).blockers}
+
+
+def test_existing_runtime_is_not_trusted_by_filename(workflow):
+    w = workflow
+    (w.plugins / NR_RUNTIME).write_bytes(b"untrusted runtime")
+    w.installation = inspect_installation(w.root)
+    r = replace(w.review, client_fingerprint=w.installation.fingerprint)
+    assert "fivem_existing_runtime" in {f.code for f in w.service.compatibility(adapter(w, review=r)).blockers}
+
+
+def test_changed_review_binding_after_prepare_is_rejected(workflow):
+    w = workflow
+    prepared = w.service.prepare(adapter(w))
+    prepared.adapter.review = replace(w.review, source="https://example.org/changed")
+    with pytest.raises(PermissionError, match="evidence changed"):
+        w.service.install(prepared, w.policy)
+
+
+def test_temporary_symlink_cannot_redirect_installer(workflow, tmp_path):
+    w = workflow
+    prepared = w.service.prepare(adapter(w))
+    outside = tmp_path / "unrelated.txt"
+    outside.write_bytes(b"preserve")
+    (w.plugins / "dlss5-feed.addon64.akeno-tmp").symlink_to(outside)
+    with pytest.raises(PermissionError, match="temporary"):
+        w.service.install(prepared, w.policy)
+    assert outside.read_bytes() == b"preserve"
+
+
+def test_temporary_symlink_cannot_redirect_restore(workflow, tmp_path):
+    w = workflow
+    applied = w.service.install(w.service.prepare(adapter(w)), w.policy)
+    assert applied.ok
+    outside = tmp_path / "unrelated.txt"
+    outside.write_bytes(b"preserve")
+    (w.plugins / "dlss5-feed.addon64.akeno-tmp").symlink_to(outside)
+    with pytest.raises(PermissionError, match="temporary"):
+        w.service.restore(w.installation, applied.tx_id)
+    assert outside.read_bytes() == b"preserve"
+
+
+def test_validation_failure_restores_plugin_files(workflow, monkeypatch):
+    from akeno.core.models import Finding, Severity
+    from akeno.fivem.adapter import FiveMLegacyAdapter
+    w = workflow
+    before = files(w.root)
+    prepared = w.service.prepare(adapter(w))
+    monkeypatch.setattr(FiveMLegacyAdapter, "validate", lambda *args: [Finding(Severity.BLOCKER, "fixture", "failed")])
+    applied = w.service.install(prepared, w.policy)
+    assert not applied.ok and applied.state == "rolled_back"
+    assert files(w.root) == before
+
+
+@pytest.mark.parametrize("change,code", [
+    ({"vendor": Vendor.AMD}, "fivem_gpu"),
+    ({"has_tensor_cores": None}, "fivem_gpu"),
+    ({"vram_bytes": None}, "fivem_vram_unknown"),
+    ({"driver_version": None}, "fivem_driver_unknown"),
+])
+def test_hardware_unknowns_are_not_filled_with_optimistic_defaults(workflow, change, code):
+    w = workflow
+    for key, value in change.items():
+        setattr(w.svc.system.gpus[0], key, value)
+    assert code in {f.code for f in w.service.compatibility(adapter(w)).blockers}
+
+
+def test_linux_deployment_is_blocked(workflow):
+    w = workflow
+    w.svc.system.os_name = "Linux"
+    assert "fivem_platform" in {f.code for f in w.service.compatibility(adapter(w)).blockers}

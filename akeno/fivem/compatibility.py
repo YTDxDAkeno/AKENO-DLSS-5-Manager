@@ -1,13 +1,12 @@
 """Fail-closed server and backend evidence gates on top of AKENO's compatibility engine."""
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 import re
 
-from akeno.backends.base import BackendAdapter, BackendContext
-from akeno.compat.engine import CompatDatabase, evaluate
-from akeno.core.models import (AntiCheatRisk, CompatibilityResult, CompatStatus, Finding,
+from akeno.backends.base import BackendContext
+from akeno.core.models import (AntiCheatRisk, Finding,
                                GraphicsApi, Severity, TrustState, Vendor)
 from akeno.security.catalog import Package
 from akeno.security.downloads import sha256_file
@@ -38,6 +37,7 @@ class BackendReview:
     neural_feature_evaluated: bool = False
     signed_runtime: bool = False
     api: GraphicsApi = GraphicsApi.D3D11
+    prerequisite_hashes: tuple[tuple[str, str], ...] = ()
 
 
 # Explicitly empty: a catalog package being verified does NOT establish FiveM compatibility.
@@ -48,7 +48,7 @@ def policy_findings(policy: ServerPolicy, review: BackendReview | None, package:
     out: list[Finding] = []
     def block(code, message):
         out.append(Finding(Severity.BLOCKER, code, message))
-    if not policy.own_server or not policy.server_id.strip() or not policy.permission_reference.strip():
+    if policy.own_server is not True or not policy.server_id.strip() or not policy.permission_reference.strip():
         block("fivem_server_permission", "An identified, operator-controlled test server and written plugin permission are required.")
     if policy.graphics_plugins_allowed is not True:
         block("fivem_graphics_permission", "Effective server permission for this graphics plugin is unknown or denied.")
@@ -59,6 +59,10 @@ def policy_findings(policy: ServerPolicy, review: BackendReview | None, package:
     elif policy.pure_level == 1:
         pins = {h for n, h in (package.files.items() if package else [])
                 if n.lower().endswith((".dll", ".asi", ".addon64"))}
+        if review:
+            pins.update(h for _, h in review.runtime_hashes)
+            pins.update(h for n, h in review.prerequisite_hashes
+                        if n.lower().endswith((".dll", ".asi", ".addon64", ".addon32")))
         if not pins or not pins.issubset(policy.known_graphics_hashes):
             block("fivem_known_graphics", "Pure level 1 only allows known graphics mods; this exact artifact set is not confirmed allowed.")
     if review:
@@ -66,7 +70,7 @@ def policy_findings(policy: ServerPolicy, review: BackendReview | None, package:
             block("fivem_backend_permission", "The selected backend is not covered by the operator's permission.")
         if review.requires_script_hook and policy.script_hook_allowed is not True:
             block("fivem_script_hook", "This recipe requires Script Hook permission, which is unknown or denied.")
-    if not policy.experimental_consent:
+    if policy.experimental_consent is not True:
         block("fivem_experiment_consent", "Explicit consent to an experimental FiveM test is required.")
     return out
 
@@ -114,6 +118,13 @@ def evidence_findings(installation: FiveMInstallation, ctx: BackendContext,
     pins = dict(review.runtime_hashes)
     if len(pins) != len(review.runtime_hashes) or set(pins) != needed:
         block("fivem_runtime_pins", "The reviewed runtime set is missing or ambiguous.")
+    for item in installation.inventory:
+        if item.path.name.lower() in needed:
+            try:
+                if item.sha256 != pins.get(item.path.name.lower()) or runtimes.evaluate(str(item.path)).trust != TrustState.VERIFIED:
+                    raise ValueError("existing runtime is not the reviewed signed copy")
+            except (OSError, ValueError) as exc:
+                block("fivem_existing_runtime", f"{item.path.name}: {exc}")
     for name in sorted(needed):
         record = ctx.runtime_lookup(name)
         # Existing files are not trusted merely because their names match.
@@ -132,17 +143,3 @@ def evidence_findings(installation: FiveMInstallation, ctx: BackendContext,
             block("fivem_runtime_integrity", f"{name}: {exc}")
     return out
 
-
-def assess(db: CompatDatabase, installation: FiveMInstallation, adapter: BackendAdapter,
-           ctx: BackendContext, policy: ServerPolicy, review: BackendReview | None,
-           package: Package | None) -> CompatibilityResult:
-    """Retain every shared-engine blocker; never promote FiveM to confirmed support."""
-    base = evaluate(db, installation.game, adapter, ctx)
-    extra = policy_findings(policy, review, package) + evidence_findings(installation, ctx, review, package)
-    findings = base.findings + extra
-    evidence = base.evidence + ([{"kind": "fivem_recipe", "source": review.source,
-                                  "commit": review.upstream_commit}] if review else [])
-    blocked = any(f.severity == Severity.BLOCKER for f in findings)
-    status = CompatStatus.BLOCKED if blocked or base.status in (CompatStatus.BLOCKED, CompatStatus.INCOMPATIBLE) else CompatStatus.EXPERIMENTAL
-    findings.append(Finding(Severity.WARNING, "fivem_experimental", "FiveM neural rendering is experimental. No RTX 4080/16 GB performance, memory-fit or ban-safety guarantee is made."))
-    return CompatibilityResult(status, adapter.id, findings, evidence, "low")

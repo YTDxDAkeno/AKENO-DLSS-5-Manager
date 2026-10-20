@@ -27,3 +27,12 @@
 - **54 new FiveM tests passed** (filesystem/PE fixtures; mocked Windows signature checks explicitly labelled). Initial fixture issue diagnosed: identical synthetic runtime hashes collided in the existing database primary key; fixture bytes corrected. No safety gate weakened.
 - Actual GitHub HTML search and pinned raw text/source retrieval worked. No FiveM pack, third-party installer, proprietary runtime or community mod binary was downloaded/executed for research.
 - Next: review safety edge cases, complete research/integration and real-machine test protocol docs; run combined regression suite and source smoke test; create draft PR if API access is available.
+
+## Checkpoint 4 — hardened safety checks and documentation
+
+- **65 FiveM tests passed** after adding existing-plugin hash approval, actual-runtime checks, immutable plan/evidence binding checks, Windows junction/link defenses, transaction-temp-file protection, validation rollback and unknown hardware cases.
+- Added `docs/FIVEM_LEGACY.md` (API integration contract and explicitly unexecuted real-machine acceptance protocol) and `docs/FIVEM_RESEARCH.md` (pinned sources, technical/security findings and limitations).
+- Network draft additions propagated: FiveM docs, NVIDIA developer page and GitHub API requests now return HTTP 200. Existing injected GitHub authentication works through `gh api`, including repository push permissions; no extra token required.
+- Research correction: the temporary official NVIDIA/DLSS SDK checkout included NVIDIA-distributed SDK binaries. None was used/executed/imported; checkout removed, only README/license/revision text retained outside the repository. Earlier "no proprietary runtime downloads" wording was too broad; no community/runtime pack or patched NR runtime was fetched. Source checkouts also include unexecuted build tools. No SDK/mod binaries are committed.
+- Claude's branch advanced after our starting snapshot. Fetch/read comparison confirms this branch adds only FiveM-specific modules/tests/docs; no attempt to update Claude's branch.
+- Remaining: final regression/source smoke validation, reusable environment setup fields, draft PR and handover completion.

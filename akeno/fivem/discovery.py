@@ -14,9 +14,11 @@ from akeno.games.launchers import RawGame
 from akeno.games import pe
 from akeno.security.downloads import sha256_file
 from .models import Edition, FiveMInstallation, InventoryFile
+from .paths import is_link
 
 MAX_FILES = 2000
 MAX_FILE_BYTES = 256 * 1024 * 1024
+MAX_INVENTORY_BYTES = 512 * 1024 * 1024
 
 
 def _child(directory: Path, name: str) -> Path:
@@ -28,7 +30,7 @@ def _child(directory: Path, name: str) -> Path:
 
 
 def _regular(path: Path) -> bool:
-    return path.is_file() and not path.is_symlink()
+    return path.is_file() and not is_link(path)
 
 
 def _kind(path: Path, plugin: bool) -> str | None:
@@ -53,8 +55,9 @@ def _inventory(app: Path, gta: Path | None) -> tuple[tuple[InventoryFile, ...], 
     if gta:
         roots.append((gta, False))  # inspect only; never write to the base game
     count = 0
+    total_bytes = 0
     for root, recursive in roots:
-        if root.is_symlink() or (root.exists() and not root.is_dir()):
+        if is_link(root) or (root.exists() and not root.is_dir()):
             errors.append(f"Unsafe inventory directory: {root}")
             continue
         if not root.is_dir():
@@ -62,7 +65,7 @@ def _inventory(app: Path, gta: Path | None) -> tuple[tuple[InventoryFile, ...], 
         for directory, dirs, files in os.walk(root, followlinks=False, onerror=lambda e: errors.append(str(e))):
             d = Path(directory)
             depth = len(d.relative_to(root).parts)
-            linked = [x for x in dirs if (d / x).is_symlink()]
+            linked = [x for x in dirs if is_link(d / x)]
             errors.extend(f"Linked inventory directory: {d / x}" for x in linked)
             dirs[:] = sorted(x for x in dirs if x not in linked) if recursive and depth < 3 else []
             for name in sorted(files):
@@ -77,6 +80,10 @@ def _inventory(app: Path, gta: Path | None) -> tuple[tuple[InventoryFile, ...], 
                 try:
                     if not _regular(p) or p.stat().st_size > MAX_FILE_BYTES:
                         raise ValueError("linked, non-regular or oversized file")
+                    total_bytes += p.stat().st_size
+                    if total_bytes > MAX_INVENTORY_BYTES:
+                        errors.append("Inventory byte limit reached; manual inspection required.")
+                        return tuple(found.values()), errors
                     found[p] = InventoryFile(p, kind, sha256_file(p))
                 except (OSError, ValueError) as exc:
                     errors.append(f"Cannot inspect {p}: {exc}")
@@ -86,13 +93,13 @@ def _inventory(app: Path, gta: Path | None) -> tuple[tuple[InventoryFile, ...], 
 def inspect_installation(path: str | Path) -> FiveMInstallation | None:
     """Accept an install root, FiveM.exe or FiveM.app; absent/ambiguous installs stay unknown."""
     supplied = Path(path).absolute()
-    if supplied.is_symlink():
+    if is_link(supplied):
         return None
     root = supplied.parent if supplied.suffix.lower() == ".exe" else supplied
     if root.name.lower() == "fivem.app":
         root = root.parent
     app, launcher = _child(root, "FiveM.app"), _child(root, "FiveM.exe")
-    if not app.is_dir() or not _regular(launcher) or app.is_symlink():
+    if not app.is_dir() or not _regular(launcher) or is_link(app):
         return None
     root, app, launcher = root.resolve(), app.resolve(), launcher.resolve()
     errors: list[str] = []

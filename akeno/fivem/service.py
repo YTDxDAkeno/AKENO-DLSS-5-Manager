@@ -17,6 +17,7 @@ from .adapter import FiveMLegacyAdapter
 from .compatibility import BackendReview
 from .discovery import classify_process, discover, inspect_installation
 from .models import FiveMInstallation, ServerPolicy
+from .paths import guard_target
 
 
 def _plan_digest(plan: InstallPlan) -> str:
@@ -29,12 +30,19 @@ def _plan_digest(plan: InstallPlan) -> str:
     return hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
 
+def _binding_digest(adapter: FiveMLegacyAdapter) -> str:
+    material = repr((adapter.id, adapter.delegate.id, adapter.policy, adapter.review,
+                     adapter.installation.root, adapter.installation.fingerprint))
+    return hashlib.sha256(material.encode()).hexdigest()
+
+
 @dataclass(frozen=True)
 class PreparedFiveMPlan:
     installation: FiveMInstallation
     adapter: FiveMLegacyAdapter
     plan: InstallPlan
     digest: str
+    binding_digest: str
 
 
 class FiveMService:
@@ -82,7 +90,7 @@ class FiveMService:
             staging = self.services.stage(game, adapter, package)
         plan = adapter.plan(game, package, params if params is not None else adapter.default_params(game),
                             self.context(adapter, staging))
-        return PreparedFiveMPlan(adapter.installation, adapter, plan, _plan_digest(plan))
+        return PreparedFiveMPlan(adapter.installation, adapter, plan, _plan_digest(plan), _binding_digest(adapter))
 
     def _stopped(self) -> None:
         try:
@@ -94,6 +102,8 @@ class FiveMService:
 
     def install(self, prepared: PreparedFiveMPlan, current_policy: ServerPolicy, log_cb=None) -> TxResult:
         self._stopped()
+        if _binding_digest(prepared.adapter) != prepared.binding_digest:
+            raise PermissionError("Backend or server evidence changed after planning")
         if current_policy != prepared.adapter.policy:
             raise PermissionError("Server permission changed; prepare and review a new plan")
         if _plan_digest(prepared.plan) != prepared.digest:
@@ -108,6 +118,7 @@ class FiveMService:
             raise PermissionError("; ".join(f.message for f in result.blockers))
         if Path(prepared.plan.target_dir).resolve() != a.target.resolve():
             raise PermissionError("Plan target is not the inspected FiveM plugin folder")
+        guard_target(a.target, fresh.app_dir, [o.rel_path for o in prepared.plan.ops])
         # Pin every source again, including runtimes; Installer does a further pre-copy check.
         for op in prepared.plan.ops:
             if op.source is not None and (not op.expected_sha256 or op.source.is_symlink()
@@ -121,7 +132,11 @@ class FiveMService:
             if applied.ok:
                 installed = {f["rel_path"]: f["installed_sha256"]
                              for f in self.services.db.tx_files(applied.tx_id)}
-                problems = [f for f in a.validate(fresh.game, installed) if f.severity == Severity.BLOCKER]
+                try:
+                    problems = [f for f in a.validate(fresh.game, installed) if f.severity == Severity.BLOCKER]
+                except (OSError, ValueError) as exc:
+                    from akeno.core.models import Finding
+                    problems = [Finding(Severity.BLOCKER, "fivem_validation", str(exc))]
                 if problems:
                     restored = self.services.installer.restore(applied.tx_id, game_running_dir=str(fresh.root))
                     return TxResult(False, applied.tx_id, "rolled_back" if restored.ok else "failed",
@@ -142,6 +157,7 @@ class FiveMService:
         target = installation.plugin_dir
         if target.is_symlink() or Path(tx["target_dir"]).resolve() != target.resolve() or target.resolve().parent != installation.app_dir:
             raise PermissionError("Restore target changed or escaped the client")
+        guard_target(target, installation.app_dir, [f["rel_path"] for f in self.services.db.tx_files(tx_id)])
         # Restore does not require renewed backend/server approval: it removes the modification.
         return self.services.installer.restore(tx_id, force=force, game_running_dir=str(installation.root))
 
@@ -151,6 +167,7 @@ class FiveMService:
         if target.is_symlink() or target.resolve().parent != installation.app_dir:
             raise PermissionError("Unsafe snapshot target")
         paths = [str(f.path.relative_to(target)) for f in installation.inventory if f.path.is_relative_to(target)]
+        guard_target(target, installation.app_dir, paths)
         return self.services.installer.snapshot(installation.game, str(target), paths, "FiveM plugin inventory")
 
     def restore_snapshot(self, installation: FiveMInstallation, tx_id: int, force: bool = False) -> TxResult:
@@ -160,4 +177,6 @@ class FiveMService:
             raise PermissionError("Snapshot does not belong to this FiveM client")
         if installation.plugin_dir.is_symlink() or Path(tx["target_dir"]).resolve() != installation.plugin_dir.resolve():
             raise PermissionError("Snapshot target changed")
+        guard_target(installation.plugin_dir, installation.app_dir,
+                     [f["rel_path"] for f in self.services.db.tx_files(tx_id)])
         return self.services.installer.restore_snapshot(tx_id, force)
