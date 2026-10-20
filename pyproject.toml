@@ -24,7 +24,7 @@ version = { attr = "akeno.__version__" }
 include = ["akeno*"]
 
 [tool.setuptools.package-data]
-akeno = ["data/*.json", "data/*.png", "data/*.ico"]
+akeno = ["data/*.json", "data/*.png", "data/*.ico", "data/assets/*/*.png", "data/assets/*/*.svg"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
