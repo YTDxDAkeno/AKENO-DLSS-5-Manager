@@ -232,6 +232,7 @@
  "How far the frame moves toward the model's picture: 0 = upscaler output unchanged, 1 = the model's picture.": "Wie weit sich das Bild dem Bild des Modells annähert: 0 = Upscaler-Ausgabe unverändert, 1 = Bild des Modells.",
  "I understand this is an experimental community mod, not supported by NVIDIA or the game developer, and that AKENO keeps a backup to undo it.": "Mir ist bewusst, dass dies eine experimentelle Community-Mod ist, die weder von NVIDIA noch vom Spieleentwickler unterstützt wird, und dass AKENO eine Sicherung zum Rückgängigmachen anlegt.",
  "ID": "ID",
+ "Illustration. Your GPU's real name and specifications are shown on the right.": "Illustration. Name und Daten deiner echten GPU stehen rechts daneben.",
  "Import NVIDIA runtime": "NVIDIA-Laufzeit importieren",
  "Import PresentMon CSV": "PresentMon-CSV importieren",
  "Import file…": "Datei importieren…",
@@ -525,6 +526,7 @@
  "Use for analysis": "Für die Analyse verwenden",
  "VRAM": "VRAM",
  "VRAM size unknown.": "VRAM-Größe unbekannt.",
+ "Values appear only after you measure them with a benchmark; estimates are labelled.": "Werte erscheinen erst, wenn du sie mit einem Benchmark misst; Schätzungen sind gekennzeichnet.",
  "Vendor": "Hersteller",
  "Violet": "Violett",
  "Vulkan": "Vulkan",
@@ -575,5 +577,6 @@
  "{b} is not installed in this game yet. Install it on the Secure Install page; the selected profile is used for the installation.": "{b} ist in diesem Spiel noch nicht installiert. Installiere es auf der Seite „Sichere Installation“; das ausgewählte Profil wird dabei verwendet.",
  "{f} FPS avg · 1% low {l} · median {m} ms · consistency {c} · {n} frames in {d} s": "{f} FPS Ø · 1 % Low {l} · Median {m} ms · Gleichmäßigkeit {c} · {n} Frames in {d} s",
  "{g} is not running. Start the game, load a repeatable scene, then start the benchmark.": "{g} läuft nicht. Starte das Spiel, lade eine wiederholbare Szene und starte dann den Benchmark.",
- "{n} managed install(s)": "{n} verwaltete Installation(en)"
+ "{n} managed install(s)": "{n} verwaltete Installation(en)",
+ "{n} of {m} checks passed": "{n} von {m} Prüfungen bestanden"
 }
