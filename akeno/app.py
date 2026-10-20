@@ -147,7 +147,7 @@ def smoke_test(app, ctl, win) -> int:
         loop = QEventLoop()
         QTimer.singleShot(150, loop.quit)
         loop.exec()
-    workers.wait_all(10000)
+    workers.drain(30000)
     lines = [f"AKENO {__version__} smoke test OK",
              f"OS: {info.os_name} {info.os_display_version or ''} build {info.os_build}"]
     for g in info.gpus:
@@ -190,7 +190,7 @@ def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
         loop = QEventLoop()
         QTimer.singleShot(300, loop.quit)
         loop.exec()
-        workers.wait_all(10000)
+        workers.drain(30000)
         app.processEvents()
         win.grab().save(os.path.join(out_dir, f"{key}.png"))
     print(f"saved screenshots to {out_dir}")

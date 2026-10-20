@@ -66,3 +66,20 @@ def run(fn: Callable[..., Any], on_done: Callable[[Any], None] | None = None,
 
 def wait_all(ms: int = 30000) -> bool:
     return QThreadPool.globalInstance().waitForDone(ms)
+
+
+def drain(ms: int = 30000) -> bool:
+    """Wait until every background task finished *and* its result callback ran on the UI thread.
+
+    ``wait_all`` only waits for the threads; results arrive as queued signals afterwards. Shutdown code
+    (tests, smoke test) uses this so no callback runs after the services were closed."""
+    import time
+    from PySide6.QtCore import QCoreApplication
+    deadline = time.monotonic() + ms / 1000
+    while time.monotonic() < deadline:
+        QThreadPool.globalInstance().waitForDone(50)
+        QCoreApplication.processEvents()
+        if not _live and QThreadPool.globalInstance().activeThreadCount() == 0:
+            QCoreApplication.processEvents()
+            return True
+    return False

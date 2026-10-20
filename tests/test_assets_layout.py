@@ -105,7 +105,7 @@ def window(qtbot, akeno_home, tmp_path):
     win.show()
     yield win
     from akeno.ui import workers
-    workers.wait_all(5000)
+    workers.drain(30000)    # the runtime search walks the real DriverStore on Windows runners
     svc.db.close()
 
 
