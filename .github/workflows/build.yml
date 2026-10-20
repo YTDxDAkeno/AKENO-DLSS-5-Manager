@@ -44,7 +44,9 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           AKENO_HOME: ${{ runner.temp }}\akeno-smoke
       - name: Screenshots of the running app (runner hardware, no NVIDIA GPU)
-        run: python -m akeno --screenshot screenshots\windows-runner
+        run: |
+          python -m akeno --screenshot screenshots\windows-runner
+          python -m akeno --screenshot screenshots\windows-runner-150pct --screenshot-size 1280x720 --screenshot-scale 1.5
         env:
           QT_QPA_PLATFORM: offscreen
           AKENO_HOME: ${{ runner.temp }}\akeno-smoke
@@ -60,6 +62,22 @@ jobs:
           $p = Start-Process -FilePath "dist\AKENO\AKENO.exe" -ArgumentList "--smoke-test" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "packaged smoke test failed with exit code $($p.ExitCode)" }
           Get-Content "$env:AKENO_HOME\logs\smoke-test.txt"
+      - name: Design assets are inside the package
+        shell: pwsh
+        run: |
+          $assets = Get-ChildItem -Recurse -File dist\AKENO -Include *.png,*.svg | Where-Object { $_.FullName -match '\\akeno\\data\\assets\\' }
+          $assets | ForEach-Object { $_.FullName.Substring((Resolve-Path dist\AKENO).Path.Length) }
+          if ($assets.Count -lt 19) { throw "expected 19 design assets in the package, found $($assets.Count)" }
+      - name: Packaged GUI starts normally and keeps running
+        shell: pwsh
+        run: |
+          $env:AKENO_HOME = "$env:RUNNER_TEMP\akeno-gui"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          $p = Start-Process -FilePath "dist\AKENO\AKENO.exe" -PassThru
+          Start-Sleep -Seconds 20
+          if ($p.HasExited) { throw "AKENO.exe exited during normal start (exit code $($p.ExitCode))" }
+          Stop-Process -Id $p.Id -Force
+          Get-Content "$env:AKENO_HOME\logs\akeno.log" -Tail 40
       - name: Portable ZIP
         shell: pwsh
         run: |
@@ -93,5 +111,7 @@ jobs:
           path: |
             test-results.xml
             screenshots/windows-runner/*.png
+            screenshots/windows-runner-150pct/*.png
+            ${{ runner.temp }}/akeno-gui/logs/*
             ${{ runner.temp }}/akeno-smoke/logs/*
             ${{ runner.temp }}/akeno-exe/logs/*
