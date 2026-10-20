@@ -46,3 +46,12 @@
 - Cloud draft saved and read back: complete `install_script` (venv + pinned requirements), `start_skill` (existing checkout, test/smoke commands and FiveM limitations), and four additive research/API domains. Exact install commands rerun successfully. No service processes are required. Configuration publication/new-task restoration is not tested or claimed.
 - No production FiveM backend is enabled. Remaining external evidence is a legal, signed-runtime neural-feature creation/evaluation result for the actual Windows/FiveM/RTX 4080/driver/server configuration. Final UI wiring remains deferred as requested.
 - Next: publish the draft PR, record its URL here, and hand over. Continue using five-minute commit/push checkpoints in any resumed active work.
+
+## Handover — draft published
+
+- Draft PR: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/pull/1
+- Head: `codex/fivem-legacy-support`; review base: `claude/affectionate-newton-cdn1tp`. The base is a comparison target only: no merge or push to any Claude branch was performed.
+- GitHub verified `isDraft: true`, `mergeable: MERGEABLE`; PR diff contains only nine `akeno/fivem` modules, three FiveM docs and two FiveM test files.
+- Final validation: 146/146 local tests passed (72 FiveM cases); repeat source smoke test passed. Remote Actions are separate from these local results; do not infer Windows/hardware success from the local run.
+- Ready for code review of the modular backend integration. Final UI wiring, real Windows/RTX 4080/FiveM-server validation and any production recipe approval remain future coordinated work. No automatic NR compatibility claim is made.
+- Continue from this branch, read the integration/research documents above, and keep five-minute commit/push checkpoints while actively working. Never reuse the synthetic test recipe as production evidence.
