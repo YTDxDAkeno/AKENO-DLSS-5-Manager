@@ -6,15 +6,24 @@ import os
 from datetime import datetime
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QRadioButton, QVBoxLayout, QWidget, QButtonGroup
+from PySide6.QtWidgets import (QButtonGroup, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QRadioButton, QVBoxLayout,
+                               QWidget)
 
 from akeno.core.models import Vendor
 from akeno.diagnostics import report
+from akeno.backends import runtimes
+from akeno.hardware import support
 from akeno.hardware.gpu_db import nr_hardware_support
 from akeno.i18n import t
 from akeno.ui import art, theme
 from akeno.ui.pages.dashboard import SUPPORT_TEXT, fmt_gb
-from akeno.ui.widgets import Card, KeyValueGrid, Spinner, StatusPill, button, clear_layout, confirm, info, label
+from akeno.ui.widgets import (Card, KeyValueGrid, Spinner, StatusPill, button, clear_layout, confirm, info, label,
+                              status_badge)
+
+
+R_LABEL = {"resolvable_local": "found on this PC — Resolve imports it",
+           "resolvable_download": "Resolve downloads and verifies it", "manual": "needs a manual step",
+           "blocked": "blocked", "unknown": "not searched yet"}
 
 
 def collect_diagnostics(s) -> dict:
@@ -82,6 +91,22 @@ class HardwarePage(QWidget):
         self.gpu_box = QVBoxLayout()
         self.gpu_box.setSpacing(12)
         lay.addLayout(self.gpu_box)
+        srow = QHBoxLayout()
+        srow.setSpacing(16)
+        self.nr_card = Card(t("DLSS 5 Neural Rendering on this GPU"), "sparkle", theme.VIOLET)
+        self.nr_grid = KeyValueGrid(190)
+        self.nr_card.body.addWidget(self.nr_grid)
+        srow.addWidget(self.nr_card, 6)
+        self.mx_card = Card(t("DLSS technologies by GPU generation"), "layers", theme.CYAN)
+        self.mx_grid = QGridLayout()
+        self.mx_grid.setHorizontalSpacing(14)
+        self.mx_grid.setVerticalSpacing(6)
+        self.mx_card.body.addLayout(self.mx_grid)
+        self.mx_card.body.addWidget(label(t("✓ = officially supported by NVIDIA. Neural Rendering is not an official "
+                                            "NVIDIA integration on any GPU; its row shows what upstream projects "
+                                            "documented with NVIDIA's signed runtime."), "muted", wrap=True))
+        srow.addWidget(self.mx_card, 5)
+        lay.addLayout(srow)
         row = QHBoxLayout()
         row.setSpacing(16)
         self.sys_card = Card(t("System"), "cpu", theme.BLUE)
@@ -99,6 +124,9 @@ class HardwarePage(QWidget):
         lay.addWidget(self.err_card)
         lay.addStretch(1)
         ctl.hardware_changed.connect(self.refresh)
+        ctl.deps_changed.connect(self.refresh)
+        ctl.installs_changed.connect(self.refresh)
+        ctl.selection_changed.connect(self.refresh)
         ctl.busy_changed.connect(self._busy)
         self.refresh()
 
@@ -122,7 +150,11 @@ class HardwarePage(QWidget):
             card = Card()
             h = QHBoxLayout()
             img = QLabel()
-            img.setPixmap(art.gpu_card(150, 100, theme.GREEN if g.vendor == Vendor.NVIDIA else theme.TEXT_MUTED))
+            if g.vendor == Vendor.NVIDIA and not g.is_software:
+                img.setPixmap(art.gpu_illustration(170, 120, max(2.0, self.devicePixelRatioF())))
+            else:
+                img.setPixmap(art.gpu_card(150, 100, theme.TEXT_MUTED))
+            img.setToolTip(t("Illustration. Your GPU's real name and specifications are shown on the right."))
             h.addWidget(img, 0, Qt.AlignmentFlag.AlignTop)
             col = QVBoxLayout()
             head = QHBoxLayout()
@@ -179,6 +211,95 @@ class HardwarePage(QWidget):
                                 or [(t("Displays"), t("Unknown"))])
         self.err_card.setVisible(bool(info_.detection_errors))
         self.err_text.setText("\n".join(info_.detection_errors))
+        self._refresh_support(selected)
+
+    def _refresh_support(self, gpu) -> None:
+        rt = self.s.runtime_lookup(runtimes.NR_RUNTIME)
+        rep = self.s.deps.reports.get(runtimes.NR_RUNTIME)
+        cand = rep.best() if rep and not rt else None
+        version = (rt or {}).get("version") or (cand.version if cand else None)
+        sup = support.gpu_support(gpu, version, bool(rt or cand), self.s.compat_db.nr_runtimes())
+        state = {"ok": "ok", "warn": "warn", "fail": "fail"}.get(sup.community_state, "unknown")
+        game = self.s.selected_game()
+        plan = self.s.dependency_plan(game) if game else None
+        missing = [f"{t(d.title)} — {t(R_LABEL.get(d.state, d.state))}" for d in (plan.items if plan else [])
+                   if d.required and not d.satisfied]
+        verification = self._verification()
+        rt_text = t("Not available yet")
+        if rt:
+            rt_text = t("{f} {v} (imported, NVIDIA-signed)", f=runtimes.NR_RUNTIME, v=rt.get("version") or "")
+        elif cand:
+            rt_text = t("{f} {v} found on this PC (not imported yet)", f=runtimes.NR_RUNTIME, v=cand.version or "")
+        if sup.runtime and sup.runtime.state in ("works", "fails"):
+            rt_text += "\n" + t(sup.runtime.text)
+        rows = [
+            (t("Official status"), StatusPill(t("No official NVIDIA support for these mods"), "warn")),
+            (t("Community status"), StatusPill(t(sup.community), state)),
+            (t("NVIDIA runtime"), rt_text),
+            (t("Required backend"), "\n".join(t(b) for b in sup.backends) or "—"),
+            (t("Missing dependencies") + (f" ({game.name})" if game else ""),
+             "\n".join(missing) if missing else (t("None") if plan else t("Select a game first."))),
+            (t("Known limitations"), "\n".join(t(x) for x in sup.limitations) or "—"),
+            (t("Performance recommendations"), "\n".join(t(x) for x in sup.recommendations) or "—"),
+            (t("Actual verification"), verification),
+        ]
+        self.nr_grid.set_rows(rows)
+        self._refresh_matrix(gpu.generation if gpu else None)
+
+    def _verification(self):
+        """Log-based result for the most recent AKENO installation (any game); never inferred."""
+        installed = [tx for tx in self.s.db.transactions() if tx["state"] == "installed" and tx["kind"] == "install"]
+        if not installed:
+            return StatusPill(t("Not verified on this PC (nothing installed by AKENO yet)"), "pending")
+        tx = installed[0]
+        try:
+            since = datetime.fromisoformat(str(tx["created_at"])).timestamp()
+        except (TypeError, ValueError):
+            since = None
+        v = support.verify_from_logs(tx["target_dir"], since)
+        pill = StatusPill(f"{tx['game_name']}: {t(v.text)}", {"verified": "ok", "failed": "fail"}.get(v.state, "pending"))
+        if v.line:
+            pill.setToolTip(f"{v.file} · {v.when}\n{v.line}")
+        return pill
+
+    def _refresh_matrix(self, generation: str | None) -> None:
+        clear_layout(self.mx_grid)
+        gens = list(support.GENERATIONS)
+        self.mx_grid.addWidget(label(t("Technology"), "key"), 0, 0)
+        for c, g in enumerate(gens, start=1):
+            hl = label(g + ("  ◀" if g == generation else ""), "h3")
+            hl.setStyleSheet("font-weight: 700;" + (f" color: {theme.CYAN};" if g == generation else ""))
+            hl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.mx_grid.addWidget(hl, 0, c)
+        nr = {"RTX 50": ("ok", t("Community")), "RTX 40": ("fail", t("Refused*")), "RTX 30": ("fail", t("Refused*")),
+              "RTX 20": ("fail", t("Refused*"))}
+        for r, (key, name, desc) in enumerate(support.FEATURES, start=1):
+            nl = label(t(name))
+            nl.setStyleSheet("font-weight: 600;")
+            nl.setToolTip(t(desc))
+            self.mx_grid.addWidget(nl, r, 0)
+            for c, g in enumerate(gens, start=1):
+                cell = QWidget()
+                cl = QHBoxLayout(cell)
+                cl.setContentsMargins(0, 0, 0, 0)
+                cl.setSpacing(4)
+                cl.addStretch(1)
+                if key == "nr":
+                    st, txt = nr[g]
+                else:
+                    st, txt = ("ok", "") if support.OFFICIAL[g][key] else ("fail", "")
+                b = QLabel()
+                b.setPixmap(status_badge(st, 16))
+                cl.addWidget(b)
+                if txt:
+                    cl.addWidget(label(txt, "muted"))
+                cl.addStretch(1)
+                cell.setToolTip(t(desc))
+                self.mx_grid.addWidget(cell, r, c)
+        foot = label(t("* NVIDIA's signed runtime 310.8.0 refuses the neural feature on RTX 20/30/40 (DLSS5-Feeder "
+                       "issue #131). Results on older GPUs rely on modified NVIDIA files, which AKENO never installs."),
+                     "muted", wrap=True)
+        self.mx_grid.addWidget(foot, len(support.FEATURES) + 1, 0, 1, len(gens) + 1)
 
     def _select(self, idx: int) -> None:
         self.ctl.set_setting("selected_gpu_index", idx)

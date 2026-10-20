@@ -43,6 +43,11 @@ def data_strings() -> set[str]:
     out |= {v[0] for v in dashboard.SUPPORT_TEXT.values()} | {v[0] for v in dashboard.COMPAT_TEXT.values()}
     out |= set(library.LAUNCHERS.values()) | set(backups.STATE.values()) | {n[1] for n in NAV}
     out |= {a.label for a in GraphicsApi}
+    from akeno.hardware import support
+    from akeno.ui.pages import hardware, install
+    out |= {x for _, n, d in support.FEATURES for x in (n, d)}
+    out |= set(hardware.R_LABEL.values()) | {title for _, title in install.INSTALL_STEPS}
+    out |= {"System", "Game", "Dependencies", "Installation"}
     out |= {"good", "fair", "poor", "Good", "Fair", "Poor", "low", "medium", "high", "bundled", "downloaded",
             "measured", "estimated", "hardware only"}
     return out
