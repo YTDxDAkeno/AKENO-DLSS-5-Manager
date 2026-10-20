@@ -193,8 +193,9 @@ class OptiScalerNrAdapter(BackendAdapter):
         runtime_present = any(m.kind == "nvidia_nr_runtime" for m in game.existing_mods)
         if not runtime_present and ctx.runtime_lookup(NR_RUNTIME) is None:
             f.append(self.finding(B, "runtime_missing",
-                                  "Cannot install: NVIDIA's nvngx_dlssnr.dll was not found. Import it from your "
-                                  "NVIDIA driver on the Secure Install page (AKENO does not redistribute NVIDIA files)."))
+                                  "Cannot install yet: NVIDIA's nvngx_dlssnr.dll is not imported. Use 'Resolve "
+                                  "Dependencies' on the Secure Install page to take it from your NVIDIA driver (AKENO "
+                                  "does not redistribute NVIDIA files)."))
         return f
 
     def _pick_proxy(self, game: Game, managed: set[str]) -> str | None:

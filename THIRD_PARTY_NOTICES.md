@@ -11,9 +11,20 @@ This file lists every third-party component AKENO bundles, downloads or interact
 | Qt for Python (PySide6, shiboken6) and Qt 6 libraries | 6.8.1 | LGPL-3.0 (Qt and PySide6 open-source licence) | User interface. Shipped as separate, replaceable DLLs in the one-folder build, as the LGPL requires. Source: https://code.qt.io/cgit/pyside/pyside-setup.git |
 | PyInstaller bootloader | 6.11.1 | GPL-2.0 with bootloader exception | Starts the bundled application |
 
-AKENO's icons, logo, header banner, GPU illustration and cover placeholders are original artwork drawn
-in code (`akeno/ui/art.py`, `akeno/ui/icons.py`). No third-party images or fonts are shipped; AKENO
-uses the fonts installed with Windows (Segoe UI).
+### AKENO design artwork (`akeno/data/assets/`)
+
+The header, recommendation and sidebar backgrounds, the GPU illustration, the AKENO logo/wordmark SVGs
+and the navigation icons come from the **AKENO design package** supplied by the project owner
+(`AKENO_DLSS5_Design_Assets.zip`, 2026-10). Per the package's own notes, the bitmaps were cut from
+generated design mock-ups and partly upscaled, and the logo SVG is a new vector trace of the AKENO "A".
+They are decoration only: every title, value, badge and button is a real UI widget drawn on top.
+The GPU picture is a generic illustration, not a photo or product image of any manufacturer.
+The package's game-cover concept image is deliberately **not** shipped (it shows a third-party game
+logo); games without local artwork get a neutral generated placeholder.
+
+Fallback artwork (used only if an asset file is missing) is original and drawn in code
+(`akeno/ui/art.py`, `akeno/ui/icons.py`). No fonts are shipped; AKENO uses the fonts installed with
+Windows (Segoe UI).
 
 ## Downloaded on demand from official sources (pinned SHA-256, see `akeno/data/catalog.json`)
 
@@ -29,9 +40,13 @@ upstream repositories above; the OptiScaler package also contains its own `Licen
 ## Referenced but never downloaded or redistributed
 
 * **NVIDIA DLSS / NGX runtimes** (`nvngx_dlssnr.dll`, `nvngx_dlss.dll`) — proprietary NVIDIA software.
-  AKENO only uses the copy the user's own NVIDIA driver installed (or a file the user selects), and
-  only if it carries a valid NVIDIA Authenticode signature. Modified NVIDIA binaries are refused.
-* **ReShade** (https://reshade.me) — required by DLSS5-Feeder; the user installs it.
+  AKENO only imports a copy that is already on the user's PC (NVIDIA driver, NGX model store, the user's
+  games, or a file the user selects), and only if it identifies itself correctly and carries a valid
+  NVIDIA Authenticode signature. Modified NVIDIA binaries are refused. NVIDIA's DLSS SDK licence does
+  not allow stand-alone redistribution, so AKENO neither bundles nor downloads these files.
+  Details: `docs/DEPENDENCIES.md`.
+* **ReShade** (https://reshade.me, BSD-3-Clause) — required by DLSS5-Feeder; the user installs it (no
+  reviewed, hash-pinned build in the catalog yet).
 * **Neural add-ons for ReShade** (renodx-dlss5, Deep Fried Chicken) — detected for conflict checks only.
 * **Dagherbou/OptiScaler_DLSSNR** — listed in the catalog for information; no reviewed release hash, so
   automatic installation is disabled.

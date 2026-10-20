@@ -8,7 +8,7 @@
                             │ plain Python calls
                    AppServices (akeno/services.py)
    ┌──────────┬──────────┬───────────┬────────────┬────────────┬───────────┐
-hardware/  games/     compat/    recommend/   backends/    benchmark/
+hardware/  games/     compat/    recommend/   backends/    benchmark/   deps/
 DXGI,reg,  launchers, evidence   measured >   adapters:    PresentMon,
 NVML,      PE + VDF   DB +       estimated >  OptiScaler   stats,
 displays   parsers,   engine     hardware     NR, Feeder;  CSV/JSON
@@ -19,6 +19,16 @@ displays   parsers,   engine     hardware     NR, Feeder;  CSV/JSON
                     core/     (models, SQLite db, settings, processes)
 ```
 
+* **Dependencies are resolved before anything is installed.** `deps/resolver.py` turns each backend's
+  `dependency_specs()` into a plan (ok / found locally / downloadable / manual / blocked / not searched).
+  "Resolve" imports verified NVIDIA runtimes found by `backends/runtimes.py` (DriverStore, System32, NGX
+  store, driver packages, games, RHI, Downloads — NVIDIA-signed and correctly named only) and fetches
+  hash-pinned packages; it never touches a game folder. See `docs/DEPENDENCIES.md`.
+* **Support knowledge vs. verification.** `hardware/support.py` keeps the official DLSS feature matrix,
+  the documented runtime-version × GPU-generation behaviour (`nr_runtimes` in `compatibility.json`) and
+  the only thing that counts as *verified*: success lines in the backend logs next to the game.
+* **Design assets are data.** `ui/assets.py` loads `data/assets/*` through `paths.resource_dir()` (source
+  and PyInstaller builds), scales for the device pixel ratio, and falls back to `ui/art.py` drawings.
 * **No Qt below `ui/`.** Every service is testable headless; `tests/` exercises them with synthetic
   PE files and fixture game folders.
 * **Adapters plan, the installer applies.** A backend adapter returns an `InstallPlan` (files, sources,

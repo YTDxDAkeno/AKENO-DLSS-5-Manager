@@ -103,7 +103,7 @@
  "Cancelled by you. Nothing was changed.": "Von dir abgebrochen. Es wurde nichts geändert.",
  "Cancelled. Nothing was changed in the game folder.": "Abgebrochen. Im Spielordner wurde nichts geändert.",
  "Cancelling…": "Wird abgebrochen…",
- "Cannot install: NVIDIA's nvngx_dlssnr.dll was not found. Import it from your NVIDIA driver on the Secure Install page (AKENO does not redistribute NVIDIA files).": "Installation nicht möglich: NVIDIAs nvngx_dlssnr.dll wurde nicht gefunden. Importiere sie aus deinem NVIDIA-Treiber auf der Seite „Sichere Installation“ (AKENO verteilt keine NVIDIA-Dateien).",
+ "Cannot install yet: NVIDIA's nvngx_dlssnr.dll is not imported. Use 'Resolve Dependencies' on the Secure Install page to take it from your NVIDIA driver (AKENO does not redistribute NVIDIA files).": "Noch keine Installation möglich: NVIDIAs nvngx_dlssnr.dll ist nicht importiert. Nutze „Abhängigkeiten auflösen“ auf der Seite „Sichere Installation“, um sie aus deinem NVIDIA-Treiber zu übernehmen (AKENO verteilt keine NVIDIA-Dateien).",
  "Cannot install: {need} was not found in the game folder and no verified copy was imported. Import it from your NVIDIA driver.": "Installation nicht möglich: {need} wurde im Spielordner nicht gefunden und es wurde keine geprüfte Kopie importiert. Importiere sie aus deinem NVIDIA-Treiber.",
  "Change Game": "Spiel wechseln",
  "Changed after installation:": "Nach der Installation geändert:",

@@ -183,8 +183,10 @@ def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
     win.setMinimumSize(min(w, 1100), min(h, 680))
     win.resize(w, h)
     win.show()
+    ctl.s.discover_dependencies()          # pages show the real dependency state of this PC
     ctl.hardware_changed.emit()
     ctl.games_changed.emit()
+    ctl.deps_changed.emit()
     for key in list(win.pages):
         win.go(key)
         loop = QEventLoop()

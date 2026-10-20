@@ -25,19 +25,19 @@ add regression tests, build Windows artifacts. Preserve all v1.0 features.
 
 | Step | State |
 |---|---|
-| Baseline: fast-forward active branch to d1611da, push | Done |
-| Baseline tests (Linux, offscreen): **74 passed** | Done |
-| Design assets → `akeno/data/assets/` (+ `akeno/ui/assets.py` loader, source + PyInstaller) | Done (79732d8) |
-| Theme = design tokens (`akeno/ui/theme.py`) | Done |
-| Header / sidebar / dashboard redesign, pinned action footer, density levels, ultrawide cap | Done (d62707e) |
-| NVIDIA runtime discovery (DriverStore, System32, NGX store .bin, driver pkg .dl_, games, RHI, Downloads) | Done (103e9f9) |
-| Dependency resolver service + "Resolve Dependencies" | **Next** |
-| Install wizard (System / Game / Dependencies / Installation sections) | Pending |
-| GPU-generation support matrix (RTX 20/30/40/50, SR vs NR vs FG vs MFG) + log-based verification | Pending |
-| Hardware page: use GPU illustration | Pending |
-| Tests: DPI, resolver, offline, corrupt packages, rollback, repeat install, packaged GUI start | Pending |
-| CI: packaged GUI startup + asset check, screenshots | Pending |
-| README / STATUS / THIRD_PARTY_NOTICES update | Pending |
+| Baseline: fast-forward active branch to d1611da, push; baseline tests 74 passed | Done |
+| Design assets → `akeno/data/assets/` + `akeno/ui/assets.py` loader (source + PyInstaller) | Done (79732d8) |
+| Theme = design tokens; header/sidebar/dashboard redesign; pinned action footer; density levels; ultrawide cap | Done (d62707e) |
+| NVIDIA runtime discovery (DriverStore, System32, NGX .bin, driver pkg .dl_, games, RHI, Downloads) | Done (103e9f9) |
+| Dependency resolver + services/readiness integration; support module; `msg()` i18n | Done (80d2185, 978db4f) |
+| Install wizard (System / Game / Dependencies / Installation) + Resolve Dependencies + dashboard tile | Done (3939d98) |
+| Hardware page: NR support report + DLSS technology matrix + GPU illustration | Done (bfef83b) |
+| Dynamic messages fully translatable (adapters, installer, compat, recommend) | Done (fbbc75c) |
+| Regression tests: assets, DPI, layout, wizard, support, 150 % end-to-end render (121 tests) | Done (4a9f171) |
+| Windows CI teardown race fixed (`workers.drain`) | Done (81b47e6) |
+| v1.1.0; CI checks packaged assets, real GUI start, 150 % screenshots | Done (fad222e) |
+| Docs: README, STATUS, DEPENDENCIES, THIRD_PARTY_NOTICES, ARCHITECTURE, screenshots | Done (this commit) |
+| Verify the CI run of the final commit; record artifact link here | In progress |
 
 ## Research results (2026-10-20) — keep, they drive the design
 
@@ -63,12 +63,23 @@ add regression tests, build Windows artifacts. Preserve all v1.0 features.
 
 ## Current unfinished work
 
-* Dependency resolver (`akeno/deps/`): plan + resolve actions, consent, progress; wire into services + UI.
+* Nothing half-done in the code. Remaining work is verification on real hardware (see below) and optional
+  follow-ups.
+
+## Optional follow-ups (ideas, not started)
+
+* Pin a reviewed ReShade (add-on) build in `catalog.json` once reshade.me is reachable from a review machine,
+  then automate the ReShade step of the DLSS5-Feeder backend (BSD-3-Clause allows it).
+* Add OptiScaler-specific neural-model log markers to `hardware/support.py` once a real log is available.
+* Hardware page: two-column GPU detail grid to reduce height with many GPUs.
 
 ## Known bugs / limitations
 
 * Not verified on a physical NVIDIA RTX GPU (dev container has none; CI runner has none).
-* `nvngx_dlssnr.dll` is NVIDIA proprietary. AKENO must not bundle or download it from unofficial hosts.
+* Where real NVIDIA drivers place `nvngx_dlssnr.dll` is unverified (see STATUS.md).
+* `nvngx_dlssnr.dll` is NVIDIA proprietary: AKENO only imports signed local copies (docs/DEPENDENCIES.md).
+* github.com release downloads and reshade.me are blocked from this dev environment (raw.githubusercontent.com
+  works), so package hashes were not re-verified in this session.
 
 ## Test results
 
@@ -76,20 +87,23 @@ add regression tests, build Windows artifacts. Preserve all v1.0 features.
 |---|---|---|
 | 2026-10-20 | Linux container, offscreen Qt, Python 3.13 / PySide6 6.8.1 | 74 passed (baseline, before changes) |
 | 2026-10-20 | same, after redesign + runtime discovery (103e9f9) | 87 passed |
+| 2026-10-20 | same, after wizard/resolver/support/tests (fad222e) | 121 passed |
+| 2026-10-20 | GitHub Actions run 23 (4a9f171): Windows tests + smoke + PyInstaller + ZIP + Inno Setup + checksums, Linux tests | success |
 
 ## Files currently being modified
 
-* `akeno/services.py`, new `akeno/deps/`, `akeno/ui/pages/install.py`
+* none (all committed)
 
-## Exact next steps
+## Exact next steps (for the next session)
 
-1. `akeno/deps/resolver.py`: `DependencyPlan` (items: package, nr_runtime, dlss_runtime, reshade, consumer) with
-   state ok / resolvable_local / resolvable_download / blocked + reason + guided action; `resolve()` imports
-   verified local runtimes, pre-downloads verified packages (with progress + cancel), never marks planned work
-   as passed.
-2. `AppServices.dependency_plan(game)` / `resolve_dependencies(game, progress, token)`.
-3. Install page → wizard with grouped sections + "Resolve Dependencies" button.
-4. Dashboard Install tile: enabled when only resolvable dependency blockers remain.
+1. Read this file and `git log --oneline -25`.
+2. Check the latest *Build and test* run on `claude/affectionate-newton-cdn1tp` (GitHub Actions). If red,
+   fetch the failed job log and fix; the Windows job is the one that matters.
+3. Ask the owner to run the portable build on the RTX 5090 PC: Hardware Scan → Secure Install → Resolve
+   Dependencies, and send the smoke-test output (`AKENO.exe --smoke-test`, then
+   `%LOCALAPPDATA%\AKENO\logs\smoke-test.txt`). It lists every runtime candidate AKENO found and why it
+   was accepted/refused — that settles where the driver puts `nvngx_dlssnr.dll`.
+4. Update STATUS.md "Not verified" with whatever the real-hardware run proves.
 
 ## How to render screenshots locally
 

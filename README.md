@@ -3,9 +3,10 @@
 A Windows desktop launcher that makes DLSS 5 Neural Rendering community mods easier to understand,
 safer to install and simple to undo — with honest answers about what works on your GPU.
 
-> **Status:** v1.0.0. The application, its tests and the Windows build pipeline are complete. What has
-> and has not been verified on real hardware is listed in [docs/STATUS.md](docs/STATUS.md). Please read
-> it before relying on any feature.
+> **Status:** v1.1.0 — new AKENO design, automatic dependency resolution and a guided install wizard.
+> The application, 121 automated tests and the Windows build pipeline pass. It has **not** yet been
+> verified on a physical NVIDIA RTX GPU; what has and has not been verified is listed in
+> [docs/STATUS.md](docs/STATUS.md). Please read it before relying on any feature.
 
 AKENO is an independent community project. It is **not affiliated with NVIDIA**, OptiScaler,
 DLSS5-Feeder or any game publisher. DLSS 5 Neural Rendering mods drive an undocumented NVIDIA feature:
@@ -13,18 +14,37 @@ nothing about them is officially supported.
 
 ![AKENO dashboard (rendered with test-fixture data)](docs/screenshots/dashboard.png)
 
-*Rendered by the app itself with synthetic test-fixture data — see [docs/screenshots](docs/screenshots/README.md).*
+*Rendered by the app itself (1920x1080 window) with synthetic test-fixture data (an RTX 5090 system) — see
+[docs/screenshots](docs/screenshots/README.md). Not a concept image.*
+
+## What's new in 1.1
+
+* **AKENO design**: the original anime/cyberpunk artwork (header, recommendation scene, sidebar landscape,
+  GPU illustration, logo and icons) is bundled and drawn behind real, data-driven widgets. The dashboard
+  fits a maximised 1920x1080 window, the action buttons stay pinned and reachable at 125–150 % scaling,
+  and ultrawide windows keep the content centred.
+* **Resolve Dependencies**: AKENO searches your NVIDIA driver (DriverStore, System32, NGX model store,
+  extracted driver packages), your installed games and a few documented folders for NVIDIA's runtimes,
+  imports only unmodified NVIDIA-signed copies, and downloads the reviewed open-source packages — after
+  you confirm the list. What cannot be obtained lawfully is explained with the shortest fix.
+  See [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+* **Install wizard**: System · Game · Dependencies · Installation, one line per check, details on click,
+  the exact blocking reason, progress, cancel and automatic rollback.
+* **GPU support report**: official vs. community status per RTX generation, the difference between
+  Super Resolution, Ray Reconstruction, Frame Generation, Multi Frame Generation and Neural Rendering,
+  and a real on-PC verification read from the game's logs after you played once.
+* **Complete German UI**, including messages that contain game names, versions and paths.
 
 ## What it does
 
 | Page | What you get |
 |---|---|
 | **Dashboard** | Detected GPU, game analysis, the recommended configuration, measured performance, profile comparison, safety checks and one-click actions. |
-| **Hardware Scan** | Every GPU (multi-GPU aware) via DXGI, the display-driver registry and NVML: PCI IDs, architecture, Tensor Cores, VRAM, driver version/date, D3D12 feature level, displays. Diagnostic export. |
+| **Hardware Scan** | Every GPU (multi-GPU aware) via DXGI, the display-driver registry and NVML: PCI IDs, architecture, Tensor Cores, VRAM, driver version/date, D3D12 feature level, displays. Neural Rendering support report and DLSS technology matrix. Diagnostic export. |
 | **Game Library** | Games from Steam (all libraries), Epic, GOG, Ubisoft Connect, EA app and Xbox/Microsoft Store, plus manual folders. Search, sort, filter, per-game executable/API overrides, mod and anti-cheat detection. |
 | **Smart Profiles** | Performance / Balanced / Quality / Custom built only from settings the backend really has (e.g. OptiScaler `[DlssNr] WorkingScale`, `PreSr`, `CacheInterval`). Apply to an installed backend. |
 | **Benchmark** | Real frame-time capture with Intel PresentMon, CSV import, avg/1%/0.1% low, percentiles, frame-time graphs, comparisons, CSV/JSON export. |
-| **Secure Install** | Reviewed, hash-pinned packages; NVIDIA runtime import from your own driver (signature-checked); a 12-step transactional installation with backup, validation and automatic rollback. |
+| **Secure Install** | Wizard with grouped checks (System, Game, Dependencies, Installation), **Resolve Dependencies** (verified NVIDIA runtime import from your own PC, reviewed package downloads), and a transactional installation with backup, validation and automatic rollback. |
 | **Backups** | Every installation and manual snapshot, files affected, logs, restore and delete. |
 | **Settings** | English/German, appearance, updates, cache, backups, benchmark defaults, FPS target, notifications, logging, safety defaults, factory reset. |
 
@@ -48,8 +68,8 @@ nothing about them is officially supported.
 
 | GPU | Status in AKENO |
 |---|---|
-| NVIDIA RTX 50 (Blackwell) | Community-supported: upstream reports NVIDIA's signed runtime creates the neural feature. |
-| NVIDIA RTX 40 / 30 / 20 | Experimental: upstream reports NVIDIA's signed `nvngx_dlssnr.dll` refusing the neural feature on these generations with some drivers ([DLSS5-Feeder #131](https://github.com/jlrouzies-fr/DLSS5-Feeder/issues/131)); the OptiScaler DLSS 5 fork publishes measurements on an RTX 4070. Whether it works depends on your driver. AKENO **will not** install modified NVIDIA DLLs. |
+| NVIDIA RTX 50 (Blackwell) | Community-verified: upstream reports NVIDIA's signed runtime (310.8.0) creates the neural feature (RTX 5090, drivers 616.64 / 617.14). |
+| NVIDIA RTX 40 / 30 / 20 | Experimental: upstream reports NVIDIA's **signed** `nvngx_dlssnr.dll` 310.8.0 refusing the neural feature on these generations (`0xbad00001`, [DLSS5-Feeder #131](https://github.com/jlrouzies-fr/DLSS5-Feeder/issues/131)). Community results on older GPUs (e.g. the RTX 4070 numbers in the OptiScaler DLSS 5 README) rely on a **modified** NVIDIA DLL, which AKENO **will not** install. AKENO shows this before you install, and reads the game's log afterwards to tell you whether it actually ran. DLSS Super Resolution keeps working. |
 | NVIDIA GTX (no Tensor Cores), AMD, Intel | Detected and shown, marked unsupported with the reason. |
 
 AKENO starts on any Windows 10/11 x64 PC; no NVIDIA library is needed to launch it.
@@ -58,7 +78,7 @@ AKENO starts on any Windows 10/11 x64 PC; no NVIDIA library is needed to launch 
 
 | Backend | APIs | AKENO automation |
 |---|---|---|
-| **OptiScaler DLSS 5** ([Skynizz/optiscaler-dlss5](https://github.com/Skynizz/optiscaler-dlss5) 1.3.0, built on Dagherbou's OptiScaler_DLSSNR) | DirectX 12, DirectX 11 (via dx11-on-12), Vulkan; 64-bit; game must already use DLSS, FSR 2+ or XeSS | Full: download → verify → choose a free proxy name (`winmm.dll` … or `OptiScaler.asi` beside an ASI loader) → write configured `OptiScaler.ini` → install your NVIDIA runtime → validate → record. |
+| **OptiScaler DLSS 5** ([Skynizz/optiscaler-dlss5](https://github.com/Skynizz/optiscaler-dlss5) 1.3.0, built on Dagherbou's OptiScaler_DLSSNR) | DirectX 12, DirectX 11 (via dx11-on-12), Vulkan; 64-bit; game must already use DLSS, FSR 2+ or XeSS | Full: resolve dependencies (find + import your NVIDIA runtime, download + verify the package) → choose a free proxy name (`winmm.dll` … or `OptiScaler.asi` beside an ASI loader) → write configured `OptiScaler.ini` → back up → install → validate → record. |
 | **DLSS5-Feeder** ([jlrouzies-fr/DLSS5-Feeder](https://github.com/jlrouzies-fr/DLSS5-Feeder) 1.19.0) | DirectX 9/11/12, OpenGL (32- and 64-bit); for games *without* DLSS | Partial: installs the feeder add-on/helper and shader once ReShade (with add-ons) and exactly one neural add-on are present. ReShade setup, Vulkan layer registration and in-overlay configuration remain guided manual steps. |
 | Dagherbou/OptiScaler_DLSSNR | — | Listed only: no reviewed release hash, so installation is disabled. |
 
@@ -70,8 +90,9 @@ AKENO starts on any Windows 10/11 x64 PC; no NVIDIA library is needed to launch 
   symlinks, reserved names, oversized members and zip bombs; only the named files are extracted and
   each is hash-checked again.
 * **No scripts.** AKENO never runs downloaded `.ps1`, `.bat` or `.py` files.
-* **No NVIDIA redistribution.** NVIDIA runtimes come from your own driver (`DriverStore`) or a file you
-  pick, and must carry a valid NVIDIA Authenticode signature.
+* **No NVIDIA redistribution.** NVIDIA runtimes come only from your own PC (NVIDIA driver, NGX store,
+  your games, or a file you pick), must name themselves as the runtime they are imported as, and must
+  carry a valid NVIDIA Authenticode signature. Modified NVIDIA DLLs are refused.
 * **Anti-cheat = blocked.** Known anti-cheat files (EAC, BattlEye, Vanguard, …) or a database entry block
   installation. "None found" is never presented as proof that a game has no anti-cheat.
 * **Transactional installs.** Game not running → permissions → conflicts → dependencies → summary →
@@ -97,10 +118,12 @@ then delete that folder.
 
 ## First steps
 
-1. **Dashboard → Scan Hardware.** Check that your RTX GPU and driver are shown.
+1. **Dashboard → Scan Hardware.** Check that your RTX GPU and driver are shown. *Hardware Scan* shows
+   what your GPU generation can and cannot do.
 2. **Game Library.** Pick your game. If the graphics API shows *Unknown*, select it.
-3. **Secure Install → Find in NVIDIA driver** to import `nvngx_dlssnr.dll` from your installed driver.
-4. **Benchmark.** Start the game, then record a *Baseline* run.
+3. **Benchmark.** Start the game, then record a *Baseline* run.
+4. **Secure Install → Resolve Dependencies.** Review the list (imports from your NVIDIA driver, package
+   download with size and licence) and confirm. Anything AKENO may not obtain is explained with a link.
 5. **Secure Install → Install.** Review the summary and confirm. A verified backup is made first.
 6. Benchmark again with the installed profile. The recommendation switches from *provisional* to
    *measured* and can tell you to use a cheaper profile — or to leave Neural Rendering off.
@@ -118,11 +141,12 @@ python -m pytest                       # unit, integration and offscreen UI test
 python -m akeno                        # run from source
 python packaging\make_icon.py          # application icon (original artwork)
 pyinstaller --noconfirm packaging\akeno.spec      # -> dist\AKENO\AKENO.exe
-iscc /DAppVersion=1.0.0 packaging\installer.iss   # -> packaging\out\...Setup-x64.exe (Inno Setup 6)
+iscc /DAppVersion=1.1.0 packaging\installer.iss   # -> packaging\out\...Setup-x64.exe (Inno Setup 6)
 ```
 
-`python -m akeno --smoke-test` scans real hardware and games, builds every page and exits;
-`--screenshot DIR` saves a PNG of every page. The CI workflow (`.github/workflows/build.yml`) runs all
+`python -m akeno --smoke-test` scans real hardware, games and NVIDIA runtimes, checks the bundled design
+assets, builds every page and exits; `--screenshot DIR [--screenshot-size 1920x1009]
+[--screenshot-scale 1.5]` saves a PNG of every page. The CI workflow (`.github/workflows/build.yml`) runs all
 of this on a Windows runner and publishes the installer, portable ZIP, checksums, test results and
 screenshots as artifacts. Tests also run on Linux with an offscreen Qt platform; on Linux the
 application starts but hardware detection, PresentMon and signature checks report that they need Windows.
@@ -134,21 +158,22 @@ akeno/
   app.py              entry point, logging, tray notifications, smoke-test / screenshot modes
   services.py         application facade used by the UI (no Qt)
   core/               models, SQLite store, settings, process inspection
-  hardware/           DXGI / registry / NVML / display probes, GPU identification
+  hardware/           DXGI / registry / NVML / display probes, GPU identification, support matrix + log verification
   games/              launcher scanners, VDF + PE parsers, game analysis, library
   compat/             compatibility database + engine
   recommend/          recommendation engine
-  backends/           adapter interface, OptiScaler DLSS-NR, DLSS5-Feeder, NVIDIA runtime import, INI editing
+  backends/           adapter interface, OptiScaler DLSS-NR, DLSS5-Feeder, NVIDIA runtime discovery/import, INI
+  deps/               dependency resolver (plan, local import, verified downloads, guidance)
   security/           catalog, download manager, archive extraction, Authenticode
   install/            transactional installer, backups, snapshots, restore
   benchmark/          PresentMon runner, frame-time statistics, storage/export
   diagnostics/        diagnostic package export
-  ui/                 theme, original artwork/icons, widgets, pages
-  data/               catalog.json, compatibility.json, i18n_de.json
+  ui/                 theme (design tokens), asset loader, artwork fallbacks, icons, widgets, pages
+  data/               catalog.json, compatibility.json, i18n_de.json, assets/ (AKENO design artwork)
 packaging/            PyInstaller spec, Inno Setup script, icon generator
 tests/                pytest suite (fixtures build synthetic PE files and game folders)
 tools/                i18n extraction, fixture data for screenshots
-docs/                 STATUS.md, ARCHITECTURE.md
+docs/                 STATUS.md, ARCHITECTURE.md, DEPENDENCIES.md, DEVELOPMENT_PROGRESS.md
 ```
 
 ## Updating the data files
