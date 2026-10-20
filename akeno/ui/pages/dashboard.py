@@ -6,8 +6,7 @@ import os
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices, QPixmap
-from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu, QPushButton, QSizePolicy,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu, QVBoxLayout, QWidget
 
 from akeno.core.models import CompatStatus, HardwareSupport, Vendor
 from akeno.hardware.gpu_db import nr_hardware_support
@@ -16,8 +15,7 @@ from akeno.recommend.engine import Recommendation
 from akeno.benchmark.stats import consistency_label
 from akeno.ui import art, icons, theme
 from akeno.ui.widgets import (ActionTile, ArtPanel, Card, CheckRow, ElidedLabel, GradientText, KeyValueGrid, Meter,
-                              ProfileRow, Spinner, StatusPill, SubCard, button, clear_layout, info, label, scaled,
-                              status_badge)
+                              ProfileRow, Spinner, StatusPill, SubCard, button, clear_layout, info, label, scaled)
 
 SUPPORT_TEXT = {HardwareSupport.OFFICIAL: ("Officially supported", "ok"),
                 HardwareSupport.COMMUNITY: ("Community-supported", "ok"),
@@ -260,6 +258,7 @@ class DashboardPage(QWidget):
         ctl.selection_changed.connect(self.refresh)
         ctl.installs_changed.connect(self.refresh)
         ctl.benchmarks_changed.connect(self.refresh)
+        ctl.deps_changed.connect(self.refresh)
         ctl.settings_changed.connect(self._on_setting)
         ctl.busy_changed.connect(self._busy)
         self.refresh()
@@ -553,15 +552,22 @@ class DashboardPage(QWidget):
         done = sum(1 for it in r.items if it.state == "ok")
         self.safe_sub.setText(t("{n} of {m} checks passed", n=done, m=len(r.items)) if r.items else "")
         active = self.s.installer.active_install(game.id) if game else None
-        self.a_install.setEnabled(r.can_install)
-        self.a_install.setToolTip("\n".join(t(x) for x in r.reasons) if r.reasons else t("Open the guided installer"))
+        self.a_install.setEnabled(r.can_install or r.can_resolve)
+        if r.can_resolve:
+            self.a_install.s.setText(t("Resolve dependencies, then install"))
+            self.a_install.setToolTip(t("Everything still missing can be obtained automatically. The guided installer "
+                                        "resolves it first, with your confirmation."))
+        else:
+            self.a_install.s.setText(t("Apply DLSS 5 mod"))
+            self.a_install.setToolTip("\n".join(t(x) for x in r.reasons) if r.reasons else
+                                      t("Open the guided installer"))
         self.a_restore.setEnabled(bool(active))
         self.a_restore.setToolTip(t("Restore the original files of {g}", g=game.name) if active else
                                   t("Nothing installed by AKENO for this game."))
         self.a_backup.setEnabled(bool(game and game.exe_path))
         self.a_analyze.setEnabled(not self.ctl.is_busy("analyze"))
         notes = []
-        if not r.can_install and r.reasons:
+        if not r.can_install and not r.can_resolve and r.reasons:
             notes.append(t("Install unavailable: ") + t(r.reasons[0]))
         if not active and game:
             notes.append(t("Restore unavailable: nothing installed by AKENO for this game."))

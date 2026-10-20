@@ -773,3 +773,28 @@ class ProfileRow(Clickable):
         p.setBrush(bg)
         p.setPen(QPen(border, 1.4 if self.selected else 1.0))
         p.drawRoundedRect(r, 10, 10)
+
+
+class WrapCheck(QWidget):
+    """Checkbox whose (long) text wraps; clicking the text toggles it. Exposes isChecked/setChecked/toggled."""
+
+    def __init__(self, text: str):
+        super().__init__()
+        from PySide6.QtWidgets import QCheckBox
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        self.box = QCheckBox()
+        self.box.setAccessibleName(text)
+        lay.addWidget(self.box, 0, Qt.AlignmentFlag.AlignTop)
+        self.text = label(text, wrap=True)
+        self.text.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.text.mouseReleaseEvent = lambda e: self.box.toggle()
+        lay.addWidget(self.text, 1)
+        self.toggled = self.box.toggled
+
+    def isChecked(self) -> bool:  # noqa: N802 (Qt naming)
+        return self.box.isChecked()
+
+    def setChecked(self, on: bool) -> None:  # noqa: N802 (Qt naming)
+        self.box.setChecked(on)

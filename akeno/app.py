@@ -107,7 +107,10 @@ def main(argv: list[str] | None = None) -> int:
         if services.system is None or services.settings.get("rescan_on_start"):
             ctl.scan_hardware()
         if not services.library.games() or services.settings.get("rescan_on_start"):
-            ctl.scan_games()
+            # the runtime search also looks in library games, so it runs after the library scan
+            ctl.scan_games(on_done=lambda games: ctl.discover_dependencies())
+        else:
+            ctl.discover_dependencies()
         if services.settings.get("auto_update_compat_db"):
             win.pages["settings"].update_compat()
         if services.settings.get("check_app_updates"):
@@ -130,11 +133,14 @@ def smoke_test(app, ctl, win) -> int:
     every page built and shown. Prints what was found; exits non-zero on any exception."""
     from akeno.ui import workers
     from PySide6.QtCore import QEventLoop, QTimer
+    from akeno.ui import assets
     s = ctl.s
     info = s.scan_hardware()
     games = s.library.scan()
+    reports = s.discover_dependencies()
     ctl.hardware_changed.emit()
     ctl.games_changed.emit()
+    ctl.deps_changed.emit()
     win.show()
     for key in list(win.pages):
         win.go(key)
@@ -152,6 +158,13 @@ def smoke_test(app, ctl, win) -> int:
         lines.append(f"Display: {d.name} {d.width}x{d.height}@{d.refresh_hz}")
     lines.append(f"Detection notes: {info.detection_errors}")
     lines.append(f"Games found: {len(games)}; library errors: {s.library.last_errors}")
+    for name, rep in reports.items():
+        lines.append(f"Runtime search {name}: {len(rep.searched)} locations, {len(rep.candidates)} candidate(s), "
+                     f"{len(rep.verified)} verified, {len(rep.refused)} refused")
+        for c in rep.candidates[:5]:
+            lines.append(f"  {c.trust.value:10} {c.version or '?':14} {c.source:14} {c.path} — {c.detail}")
+    lines.append(assets.summary())
+    problems = assets.verify_all()
     lines.append(f"Pages: {', '.join(win.pages)}")
     text = "\n".join(lines)
     from akeno.paths import logs_dir
@@ -159,7 +172,7 @@ def smoke_test(app, ctl, win) -> int:
     if sys.stdout is not None:
         print(text)
     win.close()
-    return 0
+    return 3 if problems else 0
 
 
 def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:

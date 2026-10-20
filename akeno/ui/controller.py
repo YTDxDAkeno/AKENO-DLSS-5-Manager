@@ -19,6 +19,7 @@ class Controller(QObject):
     selection_changed = Signal()
     installs_changed = Signal()
     benchmarks_changed = Signal()
+    deps_changed = Signal()                   # dependency search / resolution finished
     settings_changed = Signal(str)
     busy_changed = Signal(str, bool)          # task key, running
     status = Signal(str)                      # status-bar message
@@ -88,6 +89,14 @@ class Controller(QObject):
             if on_done:
                 on_done(g)
         return self.run("analyze", lambda: self.s.library.reanalyze(game.id), done)
+
+    def discover_dependencies(self, on_done=None) -> bool:
+        """Search this PC for NVIDIA runtimes in the background (read-only; no consent needed)."""
+        def done(reports):
+            self.deps_changed.emit()
+            if on_done:
+                on_done(reports)
+        return self.run("deps", self.s.discover_dependencies, done)
 
     def select_game(self, game_id: str) -> None:
         self.s.select_game(game_id)
