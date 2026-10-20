@@ -19,6 +19,7 @@ from akeno.backends import ini
 from akeno.backends.base import (BackendAdapter, BackendContext, FileOp, InstallPlan, ParamSpec, ProfileDef)
 from akeno.backends.runtimes import NR_RUNTIME
 from akeno.core.models import Finding, Game, GraphicsApi, Severity, Vendor
+from akeno.i18n import msg
 from akeno.security.catalog import Package
 
 PROXY_ORDER = ("winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll")
@@ -129,23 +130,25 @@ class OptiScalerNrAdapter(BackendAdapter):
         if gpu is None:
             f.append(self.finding(B, "gpu_unknown", "No GPU information is available. Run a hardware scan first."))
         elif gpu.vendor != Vendor.NVIDIA or gpu.has_tensor_cores is False:
-            f.append(self.finding(B, "gpu_unsupported", f"{gpu.name} cannot run DLSS (NVIDIA RTX GPU required)."))
+            f.append(self.finding(B, "gpu_unsupported", msg("{name} cannot run DLSS (NVIDIA RTX GPU required).",
+                                                            name=gpu.name)))
         elif gpu.generation in ("RTX 20", "RTX 30", "RTX 40"):
             f.append(self.finding(W, "gpu_experimental",
-                                  f"{gpu.generation}: the neural model may refuse to start with your driver's "
-                                  "signed runtime. Treat results as experimental.",
+                                  msg("{generation}: the neural model may refuse to start with your driver's signed "
+                                      "runtime. Treat results as experimental.", generation=gpu.generation),
                                   "jlrouzies-fr/DLSS5-Feeder README; Skynizz/optiscaler-dlss5 README (RTX 4070 tests)"))
         if not game.exe_path:
             f.append(self.finding(B, "no_exe", "The game executable is unknown. Select it in the Game Library."))
             return f
         if game.architecture and game.architecture not in self.supported_arch:
-            f.append(self.finding(B, "arch", f"{game.architecture} games are not supported by OptiScaler (64-bit only)."))
+            f.append(self.finding(B, "arch", msg("{architecture} games are not supported by OptiScaler (64-bit only).",
+                                                 architecture=game.architecture)))
         if game.api == GraphicsApi.UNKNOWN:
             f.append(self.finding(B, "api_unknown", "The game's graphics API could not be determined. Select it in "
                                   "the Game Library so AKENO can configure OptiScaler correctly."))
         elif game.api not in self.supported_apis:
-            f.append(self.finding(B, "api_unsupported", f"{game.api.label} is not supported by OptiScaler "
-                                  "(DirectX 11, DirectX 12 and Vulkan only)."))
+            f.append(self.finding(B, "api_unsupported", msg("{label} is not supported by OptiScaler (DirectX 11, "
+                                                            "DirectX 12 and Vulkan only).", label=game.api.label)))
         elif game.api == GraphicsApi.D3D11:
             f.append(self.finding(W, "d3d11_bridge", "DirectX 11 runs the model through OptiScaler's D3D11-on-12 "
                                   "bridge (dlss_12), which upstream says costs up to ~10% performance."))
@@ -165,19 +168,22 @@ class OptiScalerNrAdapter(BackendAdapter):
                 continue
             if m.kind == "optiscaler" or m.kind == "optiscaler_config":
                 f.append(self.finding(B, "foreign_optiscaler",
-                                      f"Another OptiScaler installation was found ({m.name}). Remove it with the tool "
-                                      "that installed it before AKENO manages OptiScaler here."))
+                                      msg("Another OptiScaler installation was found ({name}). Remove it with the "
+                                          "tool that installed it before AKENO manages OptiScaler here.", name=m.name)))
             elif m.kind == "neural_consumer" and m.name not in ctx.allow_disable:
                 f.append(self.finding(B, "second_consumer",
-                                      f"{m.name} is another DLSS 5 neural add-on. Two neural consumers must never run "
-                                      "together. AKENO can rename it to disable it (restored on uninstall).", m.path))
+                                      msg("{name} is another DLSS 5 neural add-on. Two neural consumers must never "
+                                          "run together. AKENO can rename it to disable it (restored on uninstall).",
+                                          name=m.name), m.path))
             elif m.kind == "unknown_proxy":
                 f.append(self.finding(B if ctx.strict_conflicts else W, "unknown_proxy",
-                                      f"{m.name} is an unknown graphics hook. Two interceptors may conflict, so AKENO "
-                                      "stops here (Settings → Safety defaults controls this).", m.path))
+                                      msg("{name} is an unknown graphics hook. Two interceptors may conflict, so "
+                                          "AKENO stops here (Settings → Safety defaults controls this).",
+                                          name=m.name), m.path))
             elif m.kind == "nvidia_nr_runtime":
-                f.append(self.finding(I, "runtime_present", f"{m.name} is already in the game folder and will be "
-                                      "left as it is (it was not installed by AKENO)."))
+                f.append(self.finding(I, "runtime_present", msg("{name} is already in the game folder and will be "
+                                                                "left as it is (it was not installed by AKENO).",
+                                                                name=m.name)))
             elif m.kind == "dlssg_to_fsr3":
                 f.append(self.finding(W, "fg_mod", "A DLSS-FG to FSR3 mod is installed; OptiScaler bundles its own "
                                       "frame generation handling and the two may conflict."))
@@ -233,7 +239,8 @@ class OptiScalerNrAdapter(BackendAdapter):
         template = (staged / "OptiScaler.ini").read_text(encoding="utf-8-sig")
         cfg = self.config_text(template, game, params)
         plan = InstallPlan(self.id, package, game.target_dir, params=dict(params))
-        plan.ops.append(FileOp(proxy, source=staged / "OptiScaler.dll", description=f"OptiScaler (loaded as {proxy})",
+        plan.ops.append(FileOp(proxy, source=staged / "OptiScaler.dll",
+                               description=msg("OptiScaler (loaded as {proxy})", proxy=proxy),
                                expected_sha256=package.files.get("OptiScaler.dll")))
         plan.ops.append(FileOp(FORWARDER, source=staged / FORWARDER, description="NGX caller forwarder (open source)",
                                expected_sha256=package.files.get(FORWARDER)))
@@ -246,16 +253,19 @@ class OptiScalerNrAdapter(BackendAdapter):
             if rt is None:
                 raise ValueError("nvngx_dlssnr.dll is required")
             plan.ops.append(FileOp(NR_RUNTIME, source=Path(rt["stored_path"]), expected_sha256=rt["sha256"],
-                                   description=f"NVIDIA Neural Rendering runtime {rt.get('version') or ''} (your copy)"))
+                                   description=msg("NVIDIA Neural Rendering runtime {v} (your copy)",
+                                                   v=rt.get('version') or '')))
         for name in ctx.allow_disable:
             plan.rename_away.append(name)
         plan.ops.append(FileOp(MARKER, content=json.dumps({
             "managed_by": "AKENO DLSS 5 Manager", "backend": self.id, "package": package.id,
             "proxy": proxy, "files": [o.rel_path for o in plan.ops]}, indent=2).encode(), kind="marker",
             description="AKENO installation marker"))
-        plan.summary = [f"Install {package.name} {package.version} into {game.target_dir}",
-                        f"OptiScaler loads as {proxy}",
-                        f"Upscaler setting: {'/'.join(UPSCALER_KEY[game.api][1:]) if game.api in UPSCALER_KEY else '-'}"]
+        plan.summary = [msg("Install {name} {version} into {target_dir}",
+                            name=package.name, version=package.version, target_dir=game.target_dir),
+                        msg("OptiScaler loads as {proxy}", proxy=proxy),
+                        msg("Upscaler setting: {v}",
+                            v='/'.join(UPSCALER_KEY[game.api][1:]) if game.api in UPSCALER_KEY else '-')]
         if plan.rename_away:
             plan.summary.append("Disable (rename): " + ", ".join(plan.rename_away))
         return plan
@@ -279,7 +289,8 @@ class OptiScalerNrAdapter(BackendAdapter):
             out.append(self.finding(Severity.BLOCKER, "validate_proxy", "OptiScaler DLL was not written."))
         for n in (FORWARDER, "OptiScaler.ini"):
             if not os.path.isfile(os.path.join(d, n)):
-                out.append(self.finding(Severity.BLOCKER, "validate_missing", f"{n} is missing after installation."))
+                out.append(self.finding(Severity.BLOCKER, "validate_missing", msg("{n} is missing after installation.",
+                                                                                  n=n)))
         if not os.path.isfile(os.path.join(d, NR_RUNTIME)):
             out.append(self.finding(Severity.BLOCKER, "validate_runtime", "nvngx_dlssnr.dll is missing."))
         cfg = os.path.join(d, "OptiScaler.ini")

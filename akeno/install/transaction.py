@@ -23,6 +23,7 @@ from akeno.backends.base import InstallPlan
 from akeno.core import processes
 from akeno.core.db import Database
 from akeno.core.models import Game
+from akeno.i18n import msg
 from akeno.paths import backups_dir
 from akeno.security.downloads import sha256_file
 
@@ -102,12 +103,13 @@ class Installer:
 
         target_dir = plan.target_dir
         if not os.path.isdir(target_dir):
-            return TxResult(False, None, "failed", [f"Installation blocked: the game folder does not exist ({target_dir})."])
+            return TxResult(False, None, "failed", [msg("Installation blocked: the game folder does not exist "
+                                                        "({target_dir}).", target_dir=target_dir)])
         running = self.running_check(game.install_dir)
         if running:
             return TxResult(False, None, "failed",
-                            ["Installation blocked: the game is currently running "
-                             f"({', '.join(sorted({p.name for p in running}))}). Close it and try again."])
+                            [msg("Installation blocked: the game is currently running ({v}). Close it and try again.",
+                                 v=', '.join(sorted({p.name for p in running})))])
         if not os.access(target_dir, os.W_OK):
             return TxResult(False, None, "failed", [
                 "Installation blocked: AKENO cannot write to the game folder. AKENO does not request administrator "
@@ -120,14 +122,15 @@ class Installer:
             dst = _safe_join(target_dir, op.rel_path)
             if dst.exists() and op.rel_path.lower() not in managed:
                 return TxResult(False, None, "failed", [
-                    f"Installation blocked: {op.rel_path} already exists and was not installed by AKENO. "
-                    "AKENO never overwrites files from other tools."])
+                    msg("Installation blocked: {rel_path} already exists and was not installed by AKENO. AKENO never "
+                        "overwrites files from other tools.", rel_path=op.rel_path)])
         for op in plan.ops:
             if op.source is not None and op.expected_sha256:
                 actual = sha256_file(op.source)
                 if actual != op.expected_sha256.lower():
                     return TxResult(False, None, "failed", [
-                        f"Installation blocked: {op.rel_path} failed verification (hash mismatch)."])
+                        msg("Installation blocked: {rel_path} failed verification (hash mismatch).",
+                            rel_path=op.rel_path)])
 
         tx = self.db.create_transaction(game_id=game.id, game_name=game.name, backend_id=plan.backend_id,
                                         package_id=plan.package.id if plan.package else None,
@@ -162,7 +165,7 @@ class Installer:
                 if src.exists():
                     self.db.record_tx_file(tx, name, "rename_away", original_sha256=sha256_file(src),
                                            original_size=src.stat().st_size, original_mtime=src.stat().st_mtime)
-            self.db.append_tx_log(tx, f"Backup verified in {bdir}")
+            self.db.append_tx_log(tx, msg("Backup verified in {bdir}", bdir=bdir))
             say("Backup verified.")
 
             # 2. apply
@@ -175,7 +178,7 @@ class Installer:
                         raise InstallError(f"Cannot disable {name}: {dst.name} already exists.")
                     os.replace(src, dst)
                     renamed.append(name)
-                    self.db.append_tx_log(tx, f"Disabled {name} (renamed to {dst.name})")
+                    self.db.append_tx_log(tx, msg("Disabled {name} (renamed to {name2})", name=name, name2=dst.name))
             for i, op in enumerate(plan.ops):
                 if fail_after is not None and i >= fail_after:
                     raise InstallError("Injected failure (test)")
@@ -189,17 +192,17 @@ class Installer:
             # 3. supersede the previous install of the same backend (its backups stay the restore point)
             if prior:
                 self.db.update_transaction(prior["id"], state="superseded")
-                self.db.append_tx_log(tx, f"Supersedes transaction {prior['id']}")
+                self.db.append_tx_log(tx, msg("Supersedes transaction {v}", v=prior['id']))
             self.db.update_transaction(tx, state="installed", finished_at=_now())
             self.db.append_tx_log(tx, "Installation recorded.")
-            return TxResult(True, tx, "installed", [f"Installed into {target_dir}."])
+            return TxResult(True, tx, "installed", [msg("Installed into {target_dir}.", target_dir=target_dir)])
         except Exception as exc:
             log.exception("install failed")
             self.db.append_tx_log(tx, f"FAILED: {exc}")
             rb = self._rollback(tx, target_dir, written, renamed)
             state = "rolled_back" if rb else "failed"
             self.db.update_transaction(tx, state=state, finished_at=_now())
-            msgs = [f"Installation failed: {exc}"]
+            msgs = [msg("Installation failed: {exc}", exc=exc)]
             msgs.append("All changes were rolled back." if rb else
                         "Rollback was incomplete; see the transaction log. Your backup is kept.")
             return TxResult(False, tx, state, msgs)
@@ -215,10 +218,10 @@ class Installer:
                     _atomic_write(dst, Path(rec["backup_path"]), None)
                 elif dst.exists():
                     dst.unlink()
-                self.db.append_tx_log(tx, f"Rolled back {rel}")
+                self.db.append_tx_log(tx, msg("Rolled back {rel}", rel=rel))
             except OSError as exc:
                 ok = False
-                self.db.append_tx_log(tx, f"Rollback of {rel} failed: {exc}")
+                self.db.append_tx_log(tx, msg("Rollback of {rel} failed: {exc}", rel=rel, exc=exc))
         for name in renamed:
             src = _safe_join(target_dir, name)
             disabled = src.with_name(src.name + DISABLED_SUFFIX)
@@ -227,7 +230,7 @@ class Installer:
                     os.replace(disabled, src)
             except OSError as exc:
                 ok = False
-                self.db.append_tx_log(tx, f"Re-enabling {name} failed: {exc}")
+                self.db.append_tx_log(tx, msg("Re-enabling {name} failed: {exc}", name=name, exc=exc))
         for leftover in Path(target_dir).glob("*.akeno-tmp"):
             try:
                 leftover.unlink()
@@ -282,7 +285,7 @@ class Installer:
         if not tx:
             return TxResult(False, tx_id, "failed", ["Transaction not found."])
         if tx["state"] not in ("installed", "superseded", "failed"):
-            return TxResult(False, tx_id, tx["state"], [f"Nothing to restore (state: {tx['state']})."])
+            return TxResult(False, tx_id, tx["state"], [msg("Nothing to restore (state: {v}).", v=tx['state'])])
         running = self.running_check(game_running_dir or tx["target_dir"])
         if running:
             return TxResult(False, tx_id, tx["state"], ["Restore blocked: the game is currently running."])
@@ -305,7 +308,7 @@ class Installer:
                     _atomic_write(p, Path(f["backup_path"]), None)
                     if sha256_file(p) != f["original_sha256"]:
                         raise InstallError(f"restored {rel} does not match its original hash")
-                    messages.append(f"Restored original {rel}")
+                    messages.append(msg("Restored original {rel}", rel=rel))
                 elif f["action"] == "create":
                     if p.exists():
                         p.unlink()
@@ -314,10 +317,10 @@ class Installer:
                     disabled = p.with_name(p.name + DISABLED_SUFFIX)
                     if disabled.exists() and not p.exists():
                         os.replace(disabled, p)
-                        messages.append(f"Re-enabled {rel}")
+                        messages.append(msg("Re-enabled {rel}", rel=rel))
             except (OSError, InstallError) as exc:
                 ok = False
-                messages.append(f"Could not restore {rel}: {exc}")
+                messages.append(msg("Could not restore {rel}: {exc}", rel=rel, exc=exc))
         # Remove now-empty folders AKENO created (e.g. reshade-shaders/Shaders), never others.
         for rel, f in originals.items():
             if f["action"] == "create" and "/" in rel.replace("\\", "/"):
@@ -357,12 +360,12 @@ class Installer:
                 self.db.record_tx_file(tx, rel, "snapshot", original_sha256=orig, original_size=st.st_size,
                                        original_mtime=st.st_mtime, backup_path=str(bpath), installed_sha256=orig)
             self.db.update_transaction(tx, state="snapshot", finished_at=_now())
-            self.db.append_tx_log(tx, f"Snapshot of {len(existing)} file(s). {note}".strip())
-            return TxResult(True, tx, "snapshot", [f"Backed up and verified {len(existing)} file(s)."])
+            self.db.append_tx_log(tx, msg("Snapshot of {v} file(s). {note}", v=len(existing), note=note).strip())
+            return TxResult(True, tx, "snapshot", [msg("Backed up and verified {v} file(s).", v=len(existing))])
         except (OSError, InstallError) as exc:
             shutil.rmtree(bdir, ignore_errors=True)
             self.db.update_transaction(tx, state="failed", finished_at=_now())
-            return TxResult(False, tx, "failed", [f"Backup failed: {exc}"])
+            return TxResult(False, tx, "failed", [msg("Backup failed: {exc}", exc=exc)])
 
     def restore_snapshot(self, tx_id: int, force: bool = False) -> TxResult:
         tx = self.db.get_transaction(tx_id)
@@ -375,7 +378,8 @@ class Installer:
         for f in files:
             p = _safe_join(tx["target_dir"], f["rel_path"])
             if not Path(f["backup_path"]).is_file() or sha256_file(f["backup_path"]) != f["original_sha256"]:
-                return TxResult(False, tx_id, tx["state"], [f"Backup of {f['rel_path']} is missing or damaged."])
+                return TxResult(False, tx_id, tx["state"], [msg("Backup of {v} is missing or damaged.",
+                                                                v=f['rel_path'])])
             if not p.exists() or sha256_file(p) != f["original_sha256"]:
                 changed.append(RestoreConflict(f["rel_path"], "differs from the snapshot" if p.exists() else "missing"))
         if not changed:

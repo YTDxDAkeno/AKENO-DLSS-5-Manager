@@ -16,6 +16,7 @@ from typing import Any
 from akeno.backends.base import BackendAdapter, BackendContext, FileOp, InstallPlan, ParamSpec, ProfileDef
 from akeno.backends.runtimes import DLSS_RUNTIME, NR_RUNTIME
 from akeno.core.models import Finding, Game, GraphicsApi, Severity, Vendor
+from akeno.i18n import msg
 from akeno.security.catalog import Package
 
 MARKER = "akeno-install.json"
@@ -52,7 +53,8 @@ class Dlss5FeederAdapter(BackendAdapter):
         if gpu is None:
             f.append(self.finding(B, "gpu_unknown", "No GPU information is available. Run a hardware scan first."))
         elif gpu.vendor != Vendor.NVIDIA or gpu.has_tensor_cores is False:
-            f.append(self.finding(B, "gpu_unsupported", f"{gpu.name} cannot run DLSS (NVIDIA RTX GPU required)."))
+            f.append(self.finding(B, "gpu_unsupported", msg("{name} cannot run DLSS (NVIDIA RTX GPU required).",
+                                                            name=gpu.name)))
         elif gpu.generation in ("RTX 20", "RTX 30", "RTX 40"):
             f.append(self.finding(W, "gpu_experimental",
                                   "Upstream reports that NVIDIA's signed nvngx_dlssnr.dll creates the neural feature "
@@ -96,12 +98,14 @@ class Dlss5FeederAdapter(BackendAdapter):
         for need in (NR_RUNTIME, DLSS_RUNTIME):
             present = need in names
             if not present and ctx.runtime_lookup(need) is None:
-                f.append(self.finding(B, f"missing_{need}", f"Cannot install: {need} was not found in the game folder "
-                                      "and no verified copy was imported. Import it from your NVIDIA driver."))
+                f.append(self.finding(B, f"missing_{need}", msg("Cannot install: {need} was not found in the game "
+                                                                "folder and no verified copy was imported. Import it "
+                                                                "from your NVIDIA driver.", need=need)))
         for m in game.existing_mods:
             if m.kind == "unknown_proxy" and m.name.lower() not in ctx.managed_files:
                 f.append(self.finding(B if ctx.strict_conflicts else W, "unknown_proxy",
-                                      f"{m.name} is an unknown graphics hook that may conflict with ReShade.", m.path))
+                                      msg("{name} is an unknown graphics hook that may conflict with ReShade.",
+                                          name=m.name), m.path))
         if any(m.kind == "dlss5_feeder" and m.name.lower() not in ctx.managed_files for m in game.existing_mods):
             f.append(self.finding(B, "foreign_feeder", "DLSS5-Feeder is already installed by another tool. Remove it "
                                   "with that tool first, or keep using it there."))
@@ -132,12 +136,13 @@ class Dlss5FeederAdapter(BackendAdapter):
                 raise ValueError(f"{need} is required")
             # 32-bit games: NGX runs in the 64-bit helper, which looks beside itself and beside the game exe.
             plan.ops.append(FileOp(need, source=Path(rt["stored_path"]), expected_sha256=rt["sha256"],
-                                   description=f"NVIDIA runtime {need} (your copy)"))
+                                   description=msg("NVIDIA runtime {need} (your copy)", need=need)))
         plan.ops.append(FileOp(MARKER, content=json.dumps({
             "managed_by": "AKENO DLSS 5 Manager", "backend": self.id, "package": package.id,
             "files": [o.rel_path for o in plan.ops]}, indent=2).encode(), kind="marker",
             description="AKENO installation marker"))
-        plan.summary = [f"Install {package.name} {package.version} into {game.target_dir}",
+        plan.summary = [msg("Install {name} {version} into {target_dir}",
+                            name=package.name, version=package.version, target_dir=game.target_dir),
                         "Afterwards: open the ReShade overlay, enable a motion-vector provider (e.g. LumeniteFX) "
                         "and the DLSS5_Feed technique, as described in the upstream README."]
         return plan
@@ -146,5 +151,6 @@ class Dlss5FeederAdapter(BackendAdapter):
         out = []
         for rel in self._addon_files(game) + [SHADER]:
             if not (Path(game.target_dir or "") / rel).is_file():
-                out.append(self.finding(Severity.BLOCKER, "validate_missing", f"{rel} is missing after installation."))
+                out.append(self.finding(Severity.BLOCKER, "validate_missing",
+                                        msg("{rel} is missing after installation.", rel=rel)))
         return out

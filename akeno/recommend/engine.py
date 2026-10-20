@@ -18,6 +18,7 @@ from typing import Any
 from akeno.backends.base import BackendAdapter, ProfileDef
 from akeno.benchmark.stats import consistency_label
 from akeno.core.models import CompatibilityResult, CompatStatus, FrameStats, Game, GpuInfo, GraphicsApi, SystemInfo
+from akeno.i18n import msg
 
 # Upstream per-preset model cost (ms/frame), Skynizz/optiscaler-dlss5 README "Results":
 # Control Resonant, RTX 4070, 2560x1440, DLSS Balanced.
@@ -86,7 +87,8 @@ def recommend(game: Game | None, system: SystemInfo | None, gpu: GpuInfo | None,
     profiles = {p.id: p for p in adapter.profiles(game)}
     if not profiles:
         return Recommendation(adapter.id, None, "—", None, None,
-                              f"{adapter.short} has no settings AKENO can configure; use its own overlay.",
+                              msg("{short} has no settings AKENO can configure; use its own overlay.",
+                                  short=adapter.short),
                               ["Profiles are not available for this backend."], basis="none")
 
     display = system.primary_display if system else None
@@ -117,10 +119,10 @@ def recommend(game: Game | None, system: SystemInfo | None, gpu: GpuInfo | None,
     vram = gpu.vram_gb if gpu else None
     if vram is not None:
         if vram < 8:
-            rec.vram_note = (f"{vram:.0f} GB VRAM: keep a single model pass and a working resolution of 67% or "
-                             "lower; extra passes each need their own video memory.")
+            rec.vram_note = (msg("{vram:.0f} GB VRAM: keep a single model pass and a working resolution of 67% or "
+                                 "lower; extra passes each need their own video memory.", vram=vram))
         else:
-            rec.vram_note = f"{vram:.0f} GB VRAM: enough for one model pass at any working resolution."
+            rec.vram_note = msg("{vram:.0f} GB VRAM: enough for one model pass at any working resolution.", vram=vram)
     else:
         rec.vram_note = "VRAM size unknown."
 
@@ -132,9 +134,11 @@ def recommend(game: Game | None, system: SystemInfo | None, gpu: GpuInfo | None,
         if good:
             best = min(good, key=lambda o: QUALITY_ORDER.index(o.profile_id))
             _pick(rec, profiles[best.profile_id])
-            rec.headline = f"{best.label} is recommended for this game."
-            rec.reasons.append(f"Measured {best.measured.avg_fps:.0f} FPS average (target {target_fps}) with "
-                               f"{best.consistency} frame-time consistency (1% low {best.measured.low_1pct_fps:.0f} FPS).")
+            rec.headline = msg("{label} is recommended for this game.", label=msg(best.label))
+            rec.reasons.append(msg("Measured {avg_fps:.0f} FPS average (target {target_fps}) with {consistency} "
+                                   "frame-time consistency (1% low {low_1pct_fps:.0f} FPS).",
+                                   avg_fps=best.measured.avg_fps, target_fps=target_fps,
+                                   consistency=msg(best.consistency or "?"), low_1pct_fps=best.measured.low_1pct_fps))
             untested = [o.label for o in outlooks if not o.measured and QUALITY_ORDER.index(o.profile_id)
                         < QUALITY_ORDER.index(best.profile_id)]
             if untested:
@@ -145,17 +149,19 @@ def recommend(game: Game | None, system: SystemInfo | None, gpu: GpuInfo | None,
             nxt = max(cheaper, key=lambda o: QUALITY_ORDER.index(o.profile_id))
             _pick(rec, profiles[nxt.profile_id])
             rec.provisional, rec.confidence = True, "low"
-            rec.headline = f"Try {nxt.label}: the measured profiles missed your target."
-            rec.reasons.append("Measured: " + ", ".join(f"{o.label} {o.measured.avg_fps:.0f} FPS" for o in measured) +
-                               f" (target {target_fps}). Benchmark {nxt.label} next.")
+            rec.headline = msg("Try {label}: the measured profiles missed your target.", label=msg(nxt.label))
+            rec.reasons.append(msg("Measured: {results} (target {target_fps}). Benchmark {label} next.",
+                                   results=", ".join(f"{o.label} {o.measured.avg_fps:.0f} FPS" for o in measured),
+                                   target_fps=target_fps, label=msg(nxt.label)))
         else:
             if "disabled" in profiles:
                 _pick(rec, profiles["disabled"])
             rec.profile_id, rec.profile_label = "disabled", "Disabled"
             rec.headline = "Neural Rendering is not recommended: the measured performance impact is too large."
             fastest = max(measured, key=lambda o: o.measured.avg_fps)
-            rec.reasons.append(f"Best measured profile ({fastest.label}) reached {fastest.measured.avg_fps:.0f} FPS, "
-                               f"below your {target_fps} FPS target or with poor frame-time consistency.")
+            rec.reasons.append(msg("Best measured profile ({label}) reached {avg_fps:.0f} FPS, below your "
+                                   "{target_fps} FPS target or with poor frame-time consistency.",
+                                   label=msg(fastest.label), avg_fps=fastest.measured.avg_fps, target_fps=target_fps))
     elif baseline:
         rec.basis, rec.provisional, rec.confidence = "estimated", True, "low"
         est = [o for o in outlooks if o.estimated_fps is not None]
@@ -163,17 +169,21 @@ def recommend(game: Game | None, system: SystemInfo | None, gpu: GpuInfo | None,
         if est and fitting:
             best = min(fitting, key=lambda o: QUALITY_ORDER.index(o.profile_id))
             _pick(rec, profiles[best.profile_id])
-            rec.headline = f"{best.label} is provisionally recommended."
-            rec.reasons.append(f"Your measured baseline is {baseline.avg_fps:.0f} FPS; {best.label} is estimated "
-                               f"at ~{best.estimated_fps:.0f} FPS (target {target_fps}).")
+            rec.headline = msg("{label} is provisionally recommended.", label=msg(best.label))
+            rec.reasons.append(msg("Your measured baseline is {avg_fps:.0f} FPS; {label} is estimated at "
+                                   "~{estimated_fps:.0f} FPS (target {target_fps}).",
+                                   avg_fps=baseline.avg_fps, label=msg(best.label), estimated_fps=best.estimated_fps,
+                                   target_fps=target_fps))
             rec.reasons.append(REFERENCE_NOTE)
         elif est:
             if "disabled" in profiles:
                 _pick(rec, profiles["disabled"])
             rec.profile_id, rec.profile_label = "disabled", "Disabled"
             rec.headline = "Neural Rendering would probably drop below your FPS target."
-            rec.reasons.append(f"Baseline {baseline.avg_fps:.0f} FPS; even Performance is estimated at "
-                               f"~{max(o.estimated_fps for o in est):.0f} FPS (target {target_fps}).")
+            rec.reasons.append(msg("Baseline {avg_fps:.0f} FPS; even Performance is estimated at ~{max:.0f} FPS "
+                                   "(target {target_fps}).",
+                                   avg_fps=baseline.avg_fps, max=max(o.estimated_fps for o in est),
+                                   target_fps=target_fps))
             rec.reasons.append(REFERENCE_NOTE)
         else:
             _hardware_pick(rec, profiles, gpu, pixels)
@@ -212,11 +222,11 @@ def _hardware_pick(rec: Recommendation, profiles: dict[str, ProfileDef], gpu: Gp
     if gen == "RTX 50" and not four_k:
         choice, why = "quality", "RTX 50 GPUs have the most Tensor throughput of the supported generations."
     elif gen in ("RTX 50", "RTX 40") or (gen == "RTX 30" and not four_k and (vram or 0) >= 10):
-        choice, why = "balanced", f"{gen} at your resolution: a middle setting is a safe starting point."
+        choice, why = "balanced", msg("{gen} at your resolution: a middle setting is a safe starting point.", gen=gen)
     else:
         choice, why = "performance", "Older GPUs, 4K displays and smaller VRAM benefit most from the cheapest preset."
     if choice not in profiles:
         choice = next(iter(p for p in QUALITY_ORDER if p in profiles))
     _pick(rec, profiles[choice])
     rec.headline = "Provisional recommendation based on your hardware."
-    rec.reasons.append(f"Provisional: based on hardware only. {why}")
+    rec.reasons.append(msg("Provisional: based on hardware only. {why}", why=why))

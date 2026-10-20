@@ -13,6 +13,7 @@ from akeno.backends.base import BackendAdapter, BackendContext
 from akeno.core.models import (AntiCheatRisk, CompatibilityResult, CompatStatus, Finding, Game, GraphicsApi,
                                HardwareSupport, Severity)
 from akeno.hardware.gpu_db import nr_hardware_support
+from akeno.i18n import msg
 from akeno.paths import compat_override_path, resource_dir
 
 log = logging.getLogger(__name__)
@@ -116,7 +117,7 @@ def evaluate(db: CompatDatabase, game: Game, adapter: BackendAdapter, ctx: Backe
     if game.anti_cheat == AntiCheatRisk.DETECTED or ac:
         details = list(game.anti_cheat_details)
         if ac:
-            details.append(f"{ac.get('system')} (AKENO database)")
+            details.append(msg("{v} (AKENO database)", v=ac.get('system')))
         findings.append(Finding(Severity.BLOCKER, "anti_cheat",
                                 "Installation blocked for safety: anti-cheat protection detected (" +
                                 "; ".join(details) + "). Modifying this game can lead to bans."))
@@ -148,8 +149,8 @@ def evaluate(db: CompatDatabase, game: Game, adapter: BackendAdapter, ctx: Backe
             findings.append(Finding(Severity.WARNING, "known_issue", issue, ev.get("source")))
         if e.get("api") and e["api"] != "unknown" and game.api not in (GraphicsApi.UNKNOWN,) and e["api"] != game.api.value:
             findings.append(Finding(Severity.WARNING, "api_mismatch",
-                                    f"The evidence was recorded with {GraphicsApi(e['api']).label}, but this game is "
-                                    f"set to {game.api.label}."))
+                                    msg("The evidence was recorded with {label}, but this game is set to {label2}.",
+                                        label=GraphicsApi(e['api']).label, label2=game.api.label)))
         st = CompatStatus(e["status"])
         if st in (CompatStatus.INCOMPATIBLE, CompatStatus.BLOCKED):
             return CompatibilityResult(st, adapter.id, findings, evidence, "high")
@@ -161,11 +162,12 @@ def evaluate(db: CompatDatabase, game: Game, adapter: BackendAdapter, ctx: Backe
             status, confidence = CompatStatus.EXPERIMENTAL, "medium"
             if st == CompatStatus.CONFIRMED:
                 findings.append(Finding(Severity.INFO, "other_gpu",
-                                        f"Confirmed upstream on {ev.get('gpu_tested')}, not on your GPU generation."))
+                                        msg("Confirmed upstream on {v}, not on your GPU generation.",
+                                            v=ev.get('gpu_tested'))))
     if status == CompatStatus.INSUFFICIENT:
         findings.append(Finding(Severity.INFO, "no_evidence",
-                                f"Compatibility unknown: no documented test of {adapter.short} in this game. "
-                                "Installation is possible as an experiment; AKENO keeps a full backup."))
+                                msg("Compatibility unknown: no documented test of {short} in this game. Installation "
+                                    "is possible as an experiment; AKENO keeps a full backup.", short=adapter.short)))
     if hw.level in (HardwareSupport.EXPERIMENTAL, HardwareSupport.UNKNOWN) and status == CompatStatus.CONFIRMED \
             and confidence != "high":
         status, confidence = CompatStatus.EXPERIMENTAL, "medium"

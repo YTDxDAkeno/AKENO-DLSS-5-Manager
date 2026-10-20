@@ -226,7 +226,7 @@ class AppServices:
     def configure(self, game: Game, adapter: BackendAdapter, params: dict[str, Any], profile_name: str) -> TxResult:
         active = self.installer.active_install(game.id, adapter.id)
         if not active:
-            return TxResult(False, None, "failed", [f"{adapter.short} is not installed in this game."])
+            return TxResult(False, None, "failed", [msg("{short} is not installed in this game.", short=adapter.short)])
         cfg_path = Path(active["target_dir"]) / "OptiScaler.ini"
         current = cfg_path.read_text(encoding="utf-8-sig", errors="replace") if cfg_path.is_file() else None
         plan = adapter.plan_configure(game, self.catalog.package(active["package_id"] or ""), params,
@@ -284,7 +284,9 @@ class AppServices:
             r.items.append(CheckItem("source", "fail", "No package", "No reviewed package is listed for this backend."))
         elif pkg.trust == TrustState.VERIFIED:
             r.items.append(CheckItem("source", "ok", "Source verified",
-                                     f"{pkg.name} {pkg.version} from {pkg.upstream} (reviewed {pkg.reviewed})."))
+                                     msg("{name} {version} from {upstream} (reviewed {reviewed}).",
+                                         name=pkg.name, version=pkg.version, upstream=pkg.upstream,
+                                         reviewed=pkg.reviewed)))
         else:
             r.items.append(CheckItem("source", "fail", "Source needs review",
                                      f"{pkg.name}: {pkg.trust.value.replace('_', ' ')}. {pkg.review_notes}"))
