@@ -1,0 +1,88 @@
+{
+  "schema": 1,
+  "catalog_version": "2026.10.20",
+  "notes": "Reviewed artifact manifest. A package is 'verified' only when the downloaded bytes match the SHA-256 pinned here, which was recorded by the AKENO maintainers from the official upstream release URL at review time (not taken from the download source at install time). Entries without a pinned hash are 'needs_review' and cannot be installed automatically.",
+  "allowed_hosts": [
+    "github.com",
+    "objects.githubusercontent.com",
+    "release-assets.githubusercontent.com",
+    "raw.githubusercontent.com"
+  ],
+  "packages": [
+    {
+      "id": "optiscaler-dlss5-skynizz-1.3.0",
+      "backend": "optiscaler_nr",
+      "name": "OptiScaler DLSS 5 (Skynizz fork)",
+      "version": "1.3.0",
+      "upstream": "https://github.com/Skynizz/optiscaler-dlss5",
+      "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.3.0/OptiScaler-DLSS5-1.3.0-win-x64.zip",
+      "sha256": "2f0ee88ac00848602c1422db19c29b3c992d3e0039675aa900a3cde9cf05dd8a",
+      "size": 6714186,
+      "license": "GPL-3.0",
+      "trust": "verified",
+      "reviewed": "2026-10-20",
+      "review_notes": "Release zip from the official GitHub releases page. Contents listed below; AKENO installs only OptiScaler.dll (under a proxy name), OptiScaler.ini and nvngx.dll_dlssnr.dll. The bundled .bat/.py installers are never executed.",
+      "root": "DLSS5-Optimised",
+      "files": {
+        "OptiScaler.dll": "90b813108f8aea5a0a9335c6b0cd6a8927bdce438d512c07435f2071209045e9",
+        "nvngx.dll_dlssnr.dll": "903d1b39889ddb4893a45825783d1b5d79387ba0645872d7dbe6938e9b37b9ec",
+        "OptiScaler.ini": "4bfe7a4ec6ed7ebdc024ab4be15f21a898d53a99249e8bd34ddadc8dfa9309b5"
+      },
+      "apis": ["d3d12", "d3d11", "vulkan"],
+      "architectures": ["x64"]
+    },
+    {
+      "id": "optiscaler-dlssnr-dagherbou",
+      "backend": "optiscaler_nr",
+      "name": "OptiScaler_DLSSNR (Dagherbou)",
+      "version": "v0.2.0-patch1",
+      "upstream": "https://github.com/Dagherbou/OptiScaler_DLSSNR",
+      "url": null,
+      "sha256": null,
+      "license": "GPL-3.0",
+      "trust": "needs_review",
+      "reviewed": "2026-10-20",
+      "review_notes": "Release asset could not be resolved and pinned during review. Listed for information; automatic installation stays disabled until a reviewed hash is published in a catalog update.",
+      "apis": ["d3d12", "d3d11", "vulkan"],
+      "architectures": ["x64"]
+    },
+    {
+      "id": "dlss5-feeder-1.19.0",
+      "backend": "dlss5_feeder",
+      "name": "DLSS5-Feeder",
+      "version": "1.19.0",
+      "upstream": "https://github.com/jlrouzies-fr/DLSS5-Feeder",
+      "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.19.0/DLSS5-Feeder-1.19.0.zip",
+      "sha256": "9cc19e28f8fb4e216ea61621fdf6443e207e338ec639979ab335503c75f48f36",
+      "size": 503554,
+      "license": "MIT",
+      "trust": "verified",
+      "reviewed": "2026-10-20",
+      "review_notes": "Official release zip (the only official source per upstream's CAREFUL_FAKE_MALICIOUS_FEEDER.txt). AKENO copies the ReShade add-on and shader; it never runs Verify-DLSS5Feeder.ps1 or the .bat layer launchers.",
+      "root": "",
+      "files": {
+        "dlss5-feed.addon64": "2b8c905012fd464ddf0554c6b178cba55030ec10eb917acdcee0e7a2376fe4dd",
+        "dlss5-feed.addon32": "34c767bd53a99f51a6cb5d87b267734e04314d16bf495a6c69ab98acd62d0874",
+        "host64/dlss5-feed-host64.exe": "79e427430c5c0102f6c7a557155b706ad51b0c40933f6e245fce922bf5b1401e",
+        "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+      },
+      "apis": ["d3d12", "d3d11", "d3d9", "opengl"],
+      "architectures": ["x64", "x86"]
+    }
+  ],
+  "tools": [
+    {
+      "id": "presentmon-2.6.0",
+      "name": "Intel PresentMon (console)",
+      "version": "2.6.0",
+      "upstream": "https://github.com/GameTechDev/PresentMon",
+      "url": "https://github.com/GameTechDev/PresentMon/releases/download/v2.6.0/PresentMon-2.6.0-x64.exe",
+      "sha256": "b2a706bc6ad475749e3b7e3409263aa1e6906d45bdcf993f6dbc0f660188f1af",
+      "size": 980320,
+      "license": "MIT",
+      "trust": "verified",
+      "reviewed": "2026-10-20",
+      "file_name": "PresentMon-2.6.0-x64.exe"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+build/
+dist/
+*.spec.bak
+.venv/
+venv/
+*.egg-info/
+packaging/out/
+packaging/akeno.ico
+screenshots/raw/

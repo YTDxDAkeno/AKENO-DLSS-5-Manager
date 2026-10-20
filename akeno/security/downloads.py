@@ -1,0 +1,206 @@
+"""Secure download manager.
+
+* HTTPS only, every request and every redirect hop must target an allow-listed host.
+* Size limits (declared size from the catalog, plus a hard ceiling).
+* Downloads stream to a ``.part`` file, are hashed while streaming, and are only moved into the
+  content-addressed cache when the SHA-256 matches the pinned hash from the reviewed catalog.
+* Cancellation and bounded retries with backoff.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+import shutil
+import ssl
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Callable
+
+from akeno import __version__
+from akeno.core.db import iter_chunks
+from akeno.paths import cache_dir
+
+log = logging.getLogger(__name__)
+
+HARD_LIMIT = 256 * 1024 * 1024
+
+
+class DownloadError(Exception):
+    pass
+
+
+class VerificationError(DownloadError):
+    pass
+
+
+class Cancelled(DownloadError):
+    pass
+
+
+def sha256_file(path: str | os.PathLike) -> str:
+    h = hashlib.sha256()
+    for chunk in iter_chunks(path):
+        h.update(chunk)
+    return h.hexdigest()
+
+
+@dataclass
+class DownloadResult:
+    path: Path
+    sha256: str
+    size: int
+    from_cache: bool
+
+
+class _AllowlistRedirects(urllib.request.HTTPRedirectHandler):
+    def __init__(self, check: Callable[[str], None]):
+        self.check = check
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        self.check(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+class CancelToken:
+    def __init__(self):
+        self._ev = threading.Event()
+
+    def cancel(self) -> None:
+        self._ev.set()
+
+    @property
+    def cancelled(self) -> bool:
+        return self._ev.is_set()
+
+
+class DownloadManager:
+    def __init__(self, allowed_hosts: list[str], cache: Path | None = None, opener=None,
+                 retries: int = 3, timeout: float = 30.0):
+        self.allowed_hosts = {h.lower() for h in allowed_hosts}
+        self.cache = Path(cache or cache_dir())
+        self.cache.mkdir(parents=True, exist_ok=True)
+        self.retries = retries
+        self.timeout = timeout
+        self._opener = opener
+
+    def check_url(self, url: str) -> None:
+        u = urllib.parse.urlsplit(url)
+        if u.scheme != "https":
+            raise DownloadError(f"Refusing non-HTTPS URL: {url}")
+        host = (u.hostname or "").lower()
+        if host not in self.allowed_hosts:
+            raise DownloadError(f"Host '{host}' is not on AKENO's allow-list of official sources.")
+
+    def opener(self):
+        if self._opener is None:
+            ctx = ssl.create_default_context()
+            self._opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ctx),
+                                                       _AllowlistRedirects(self.check_url))
+        return self._opener
+
+    def cached_path(self, sha256: str, name: str) -> Path:
+        safe = "".join(c for c in os.path.basename(name) if c.isalnum() or c in "._-") or "download"
+        return self.cache / f"{sha256[:16]}-{safe}"
+
+    def fetch(self, url: str, sha256: str, name: str, expected_size: int | None = None,
+              progress: Callable[[int, int | None], None] | None = None,
+              token: CancelToken | None = None) -> DownloadResult:
+        """Download ``url`` and verify it against the pinned ``sha256``. Returns the cached file."""
+        sha256 = sha256.lower()
+        self.check_url(url)
+        dest = self.cached_path(sha256, name)
+        if dest.is_file():
+            if sha256_file(dest) == sha256:
+                return DownloadResult(dest, sha256, dest.stat().st_size, True)
+            log.warning("cached file %s is corrupt; downloading again", dest)
+            dest.unlink()
+        limit = min(HARD_LIMIT, int(expected_size * 1.05) + 4096) if expected_size else HARD_LIMIT
+        last: Exception | None = None
+        for attempt in range(1, self.retries + 1):
+            if token and token.cancelled:
+                raise Cancelled("Download cancelled.")
+            try:
+                return self._attempt(url, sha256, dest, limit, progress, token)
+            except (Cancelled, VerificationError):
+                raise
+            except DownloadError as exc:
+                if "allow-list" in str(exc) or "non-HTTPS" in str(exc):
+                    raise
+                last = exc
+            except (urllib.error.URLError, OSError, TimeoutError) as exc:
+                last = exc
+            log.info("download attempt %d failed: %s", attempt, last)
+            if attempt < self.retries:
+                for _ in range(int(2 ** attempt * 10)):
+                    if token and token.cancelled:
+                        raise Cancelled("Download cancelled.")
+                    time.sleep(0.1)
+        raise DownloadError(f"Download failed after {self.retries} attempts: {last}")
+
+    def _attempt(self, url, sha256, dest: Path, limit, progress, token) -> DownloadResult:
+        part = dest.with_suffix(dest.suffix + ".part")
+        req = urllib.request.Request(url, headers={"User-Agent": f"AKENO-DLSS5-Manager/{__version__}"})
+        h = hashlib.sha256()
+        size = 0
+        try:
+            with self.opener().open(req, timeout=self.timeout) as resp:
+                self.check_url(resp.geturl())
+                total = resp.headers.get("Content-Length")
+                total_i = int(total) if total and total.isdigit() else None
+                if total_i and total_i > limit:
+                    raise DownloadError(f"File is larger than expected ({total_i} bytes); refusing it.")
+                with open(part, "wb") as out:
+                    while True:
+                        if token and token.cancelled:
+                            raise Cancelled("Download cancelled.")
+                        chunk = resp.read(256 * 1024)
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        if size > limit:
+                            raise DownloadError("Download exceeded its size limit; refusing it.")
+                        h.update(chunk)
+                        out.write(chunk)
+                        if progress:
+                            progress(size, total_i)
+            digest = h.hexdigest()
+            if digest != sha256:
+                raise VerificationError(
+                    f"SHA-256 mismatch: expected {sha256}, got {digest}. The file was discarded.")
+            os.replace(part, dest)
+            return DownloadResult(dest, digest, size, False)
+        finally:
+            if part.exists():
+                try:
+                    part.unlink()
+                except OSError:
+                    pass
+
+    def cache_size(self) -> int:
+        return sum(p.stat().st_size for p in self.cache.glob("*") if p.is_file())
+
+    def clear_cache(self) -> int:
+        n = 0
+        for p in self.cache.glob("*"):
+            if p.is_file():
+                p.unlink()
+                n += 1
+            elif p.is_dir():
+                shutil.rmtree(p, ignore_errors=True)
+                n += 1
+        return n
+
+    def enforce_limit(self, limit_bytes: int) -> None:
+        files = sorted((p for p in self.cache.glob("*") if p.is_file()), key=lambda p: p.stat().st_mtime)
+        total = sum(p.stat().st_size for p in files)
+        while files and total > limit_bytes:
+            p = files.pop(0)
+            total -= p.stat().st_size
+            p.unlink()

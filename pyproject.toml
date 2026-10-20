@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "akeno-dlss5-manager"
+dynamic = ["version"]
+description = "AKENO DLSS 5 Manager - safe analysis, recommendation and installation manager for DLSS 5 Neural Rendering community mods"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "GPL-3.0-or-later" }
+dependencies = ["PySide6>=6.6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-qt>=4.4", "pyinstaller>=6.6"]
+
+[project.gui-scripts]
+akeno = "akeno.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "akeno.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["akeno*"]
+
+[tool.setuptools.package-data]
+akeno = ["data/*.json", "data/*.png", "data/*.ico"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"
