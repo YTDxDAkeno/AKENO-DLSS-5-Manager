@@ -69,6 +69,8 @@ class FiveMLegacyAdapter(BackendAdapter):
 
     def check(self, game: Game, ctx: BackendContext) -> list[Finding]:
         findings = self._identity_findings(game)
+        if self.review and self.review.backend_id != self.delegate.id:
+            findings.append(Finding(Severity.BLOCKER, "fivem_review_backend", "The recipe names a different backend."))
         findings += policy_findings(self.policy, self.review, self.package)
         findings += evidence_findings(self.installation, ctx, self.review, self.package)
         findings.append(Finding(Severity.WARNING, "fivem_experimental",

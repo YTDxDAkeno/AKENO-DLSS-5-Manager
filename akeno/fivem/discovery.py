@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-from akeno.core.models import Game, GraphicsApi, AntiCheatRisk
+from akeno.core.models import Game, GraphicsApi
 from akeno.games.analyzer import detect_api, detect_anti_cheat, KNOWN_FILES, PROXY_NAMES
 from akeno.games.launchers import RawGame
 from akeno.games import pe
@@ -183,7 +183,7 @@ def discover(extra_roots: Iterable[str | Path] = (), processes: Iterable | None 
     for proc in process_api.list_processes() if processes is None else processes:
         if proc.path and re.fullmatch(r"FiveM(?:_b\d+)?(?:_GTAProcess)?\.exe", proc.name, re.I):
             p = Path(proc.path)
-            candidates.extend([p.parent, p.parent.parent])
+            candidates.extend(list(p.parents)[:6])  # includes FiveM.app/data/cache/subprocess layouts
     found = {}
     for candidate in candidates:
         try:

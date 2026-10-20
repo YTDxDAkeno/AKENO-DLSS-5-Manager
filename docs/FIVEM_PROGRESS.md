@@ -36,3 +36,13 @@
 - Research correction: the temporary official NVIDIA/DLSS SDK checkout included NVIDIA-distributed SDK binaries. None was used/executed/imported; checkout removed, only README/license/revision text retained outside the repository. Earlier "no proprietary runtime downloads" wording was too broad; no community/runtime pack or patched NR runtime was fetched. Source checkouts also include unexecuted build tools. No SDK/mod binaries are committed.
 - Claude's branch advanced after our starting snapshot. Fetch/read comparison confirms this branch adds only FiveM-specific modules/tests/docs; no attempt to update Claude's branch.
 - Remaining: final regression/source smoke validation, reusable environment setup fields, draft PR and handover completion.
+
+## Checkpoint 5 — final validation and environment configuration
+
+- Final suite: **146 passed**, including **72 FiveM tests**, on Linux/Python 3.12 with offscreen Qt. Tests use temporary files/synthetic PE images; Windows Authenticode and neural-feature execution are not real-hardware results.
+- Source launcher smoke test: `AKENO 1.0.0 smoke test OK`, all eight pages built. Hardware detection correctly reports unavailable Windows APIs on Linux; no installed games found. Read-only FiveM CLI reports zero installations/zero approved backends on this machine; a subprocess fixture test independently validates positive Legacy CLI discovery without writes.
+- Exact PCI device/VRAM evidence now required, so an RTX 4070 result cannot approve an RTX 4080 merely because both are RTX 40. Portable discovery also covers `FiveM.app/data/cache/subprocess` process paths.
+- `git diff --check` and compile checks passed. Read-only `git merge-tree` preview against the fetched Claude development branch completed without conflicts; no Claude ref was updated. Full runtime validation is on this branch's starting launcher snapshot, not a claim that future launcher changes are tested.
+- Cloud draft saved and read back: complete `install_script` (venv + pinned requirements), `start_skill` (existing checkout, test/smoke commands and FiveM limitations), and four additive research/API domains. Exact install commands rerun successfully. No service processes are required. Configuration publication/new-task restoration is not tested or claimed.
+- No production FiveM backend is enabled. Remaining external evidence is a legal, signed-runtime neural-feature creation/evaluation result for the actual Windows/FiveM/RTX 4080/driver/server configuration. Final UI wiring remains deferred as requested.
+- Next: publish the draft PR, record its URL here, and hand over. Continue using five-minute commit/push checkpoints in any resumed active work.

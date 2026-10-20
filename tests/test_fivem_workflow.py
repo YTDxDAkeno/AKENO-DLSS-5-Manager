@@ -1,6 +1,5 @@
 """Synthetic reviewed recipes exercise the transaction pipeline, NOT real compatibility."""
 from dataclasses import replace
-import hashlib
 from pathlib import Path
 from types import SimpleNamespace
 import zipfile
@@ -16,6 +15,7 @@ from akeno.fivem.compatibility import BackendReview, REVIEWED_BACKENDS, policy_f
 from akeno.fivem.service import FiveMService
 from akeno.install.transaction import Installer
 from akeno.security.catalog import Catalog
+from akeno.security.downloads import VerificationError
 from akeno.services import AppServices
 from helpers import make_pe, sha, FakeDownloads
 
@@ -50,7 +50,7 @@ def workflow(tmp_path, db, monkeypatch):
     downloads = FakeDownloads({entry["url"]: archive}, tmp_path / "download-cache")
     svc = AppServices(db=db, catalog=catalog, downloads=downloads,
                       installer=Installer(db, tmp_path / "backups", running_check=lambda d: []))
-    gpu = GpuInfo("NVIDIA GeForce RTX 4080", vendor=Vendor.NVIDIA, generation="RTX 40",
+    gpu = GpuInfo("NVIDIA GeForce RTX 4080", vendor=Vendor.NVIDIA, vendor_id=0x10DE, device_id=0x2704, generation="RTX 40",
                   has_tensor_cores=True, vram_bytes=16 * 1024**3, driver_version="617.14")
     svc.system = SystemInfo(os_name="Windows 11 Pro", is_64bit=True, gpus=[gpu])
     runtime_pins = []
@@ -69,7 +69,8 @@ def workflow(tmp_path, db, monkeypatch):
         "https://example.org/FIXTURE-NOT-REAL-HARDWARE", "0" * 40, "RTX 40", ("617.14",), tuple(runtime_pins),
         frozenset({"dlss5-feed.addon64", SHADER, NR_RUNTIME, DLSS_RUNTIME, "akeno-install.json"}),
         neural_feature_evaluated=True, signed_runtime=True,
-        prerequisite_hashes=tuple((f.path.relative_to(plugins).as_posix().casefold(), f.sha256) for f in installation.inventory))
+        prerequisite_hashes=tuple((f.path.relative_to(plugins).as_posix().casefold(), f.sha256) for f in installation.inventory),
+        gpu_device_id=0x2704, tested_vram_bytes=16 * 1024**3)
     service = FiveMService(svc, process_reader=lambda: [])
     return SimpleNamespace(service=service, svc=svc, installation=installation, policy=policy, review=review,
                            root=root, gta=gta, plugins=plugins, archive=archive, entry=entry)
@@ -267,7 +268,7 @@ def test_unverified_catalog_or_tampered_archive_is_rejected(workflow):
         w.service.prepare(a)
     a.package.trust = TrustState.VERIFIED
     w.archive.write_bytes(b"tampered archive")
-    with pytest.raises(Exception, match="SHA-256 mismatch"):
+    with pytest.raises(VerificationError, match="SHA-256 mismatch"):
         w.service.prepare(a)
 
 
@@ -341,6 +342,9 @@ def test_validation_failure_restores_plugin_files(workflow, monkeypatch):
     ({"has_tensor_cores": None}, "fivem_gpu"),
     ({"vram_bytes": None}, "fivem_vram_unknown"),
     ({"driver_version": None}, "fivem_driver_unknown"),
+    ({"device_id": None}, "fivem_gpu_identity"),
+    ({"device_id": 0x2782}, "fivem_gpu_identity"),
+    ({"vram_bytes": 8 * 1024**3}, "fivem_memory_evidence"),
 ])
 def test_hardware_unknowns_are_not_filled_with_optimistic_defaults(workflow, change, code):
     w = workflow
@@ -353,3 +357,17 @@ def test_linux_deployment_is_blocked(workflow):
     w = workflow
     w.svc.system.os_name = "Linux"
     assert "fivem_platform" in {f.code for f in w.service.compatibility(adapter(w)).blockers}
+
+
+def test_unsafe_target_returns_blocker_for_future_ui(workflow):
+    w = workflow
+    a = adapter(w, review=replace(w.review, target="../../GTAV"))
+    result = w.service.compatibility(a)
+    assert result.status == CompatStatus.BLOCKED
+    assert "fivem_target" in {f.code for f in result.blockers}
+
+
+def test_recipe_for_different_backend_is_rejected(workflow):
+    w = workflow
+    a = adapter(w, review=replace(w.review, backend_id="optiscaler_nr"))
+    assert "fivem_review_backend" in {f.code for f in w.service.compatibility(a).blockers}

@@ -38,6 +38,8 @@ class BackendReview:
     signed_runtime: bool = False
     api: GraphicsApi = GraphicsApi.D3D11
     prerequisite_hashes: tuple[tuple[str, str], ...] = ()
+    gpu_device_id: int | None = None
+    tested_vram_bytes: int | None = None
 
 
 # Explicitly empty: a catalog package being verified does NOT establish FiveM compatibility.
@@ -91,7 +93,7 @@ def evidence_findings(installation: FiveMInstallation, ctx: BackendContext,
     gpu = ctx.gpu
     if not gpu or gpu.vendor != Vendor.NVIDIA or gpu.has_tensor_cores is not True or gpu.is_software:
         block("fivem_gpu", "A positively identified NVIDIA RTX GPU with Tensor cores is required.")
-    if gpu and gpu.vram_bytes is None:
+    if gpu and (gpu.vram_bytes is None or gpu.vram_bytes <= 0):
         block("fivem_vram_unknown", "Dedicated VRAM could not be detected; no memory-fit claim is possible.")
     if not gpu or not gpu.driver_version or not re.fullmatch(r"\d{3}\.\d{2}", gpu.driver_version):
         block("fivem_driver_unknown", "A detected NVIDIA driver version is required; no minimum version is guessed.")
@@ -104,6 +106,11 @@ def evidence_findings(installation: FiveMInstallation, ctx: BackendContext,
         block("fivem_neural_evidence", "Successful neural-feature creation/evaluation with an unmodified signed runtime is not documented.")
     if review.client_fingerprint != installation.fingerprint:
         block("fivem_client_revision", "The inspected client/configuration differs from the reviewed test configuration.")
+    if gpu and (gpu.vendor_id != 0x10DE or gpu.device_id is None or review.gpu_device_id is None
+                or gpu.device_id != review.gpu_device_id):
+        block("fivem_gpu_identity", "The exact detected NVIDIA PCI device is not covered by the reviewed test.")
+    if not review.tested_vram_bytes or (gpu and gpu.vram_bytes is not None and gpu.vram_bytes < review.tested_vram_bytes):
+        block("fivem_memory_evidence", "Dedicated VRAM is below the reviewed test configuration, or memory evidence is missing.")
     if gpu and gpu.generation != review.gpu_generation:
         block("fivem_generation_evidence", "The reviewed GPU generation differs from the selected GPU; RTX 4080 support cannot be inferred.")
     if gpu and gpu.driver_version not in review.driver_versions:

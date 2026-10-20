@@ -1,5 +1,4 @@
 """Filesystem fixtures only: none of these tests launch FiveM or use an NVIDIA GPU."""
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -36,10 +35,11 @@ def test_discovery_separates_client_and_base_game(installation, monkeypatch):
     assert inspect_installation(gta) is None
 
 
-def test_portable_discovery_from_running_process(installation, monkeypatch):
+@pytest.mark.parametrize("subdir", ["", "data/cache/subprocess"])
+def test_portable_discovery_from_running_process(installation, monkeypatch, subdir):
     root, app, _ = installation
     monkeypatch.delenv("LOCALAPPDATA", raising=False)
-    procs = [SimpleNamespace(name="FiveM_b3258_GTAProcess.exe", path=str(app / "FiveM_b3258_GTAProcess.exe"))]
+    procs = [SimpleNamespace(name="FiveM_b3258_GTAProcess.exe", path=str(app / subdir / "FiveM_b3258_GTAProcess.exe"))]
     assert [i.root for i in discover(processes=procs)] == [root]
 
 
@@ -105,3 +105,16 @@ def test_inventory_limit_is_explicit(installation, monkeypatch):
     (app / "one.asi").write_bytes(b"1")
     monkeypatch.setattr(discovery, "MAX_FILES", 0)
     assert any("limit" in e for e in inspect_installation(root).errors)
+
+
+def test_cli_reports_real_fixture_without_installing(installation):
+    import json
+    import subprocess
+    import sys
+    root, app, _ = installation
+    result = subprocess.run([sys.executable, "-m", "akeno.fivem", str(root)],
+                            capture_output=True, text=True, check=True)
+    data = json.loads(result.stdout)
+    assert data["approved_backends"] == [] and data["experimental"] is True
+    assert data["installations"][0]["edition"] == "legacy"
+    assert not (app / "plugins").exists()

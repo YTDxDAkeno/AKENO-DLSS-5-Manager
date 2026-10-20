@@ -10,7 +10,7 @@ from typing import Callable
 from akeno.backends.base import BackendContext, InstallPlan
 from akeno.compat.engine import evaluate
 from akeno.core import processes
-from akeno.core.models import CompatibilityResult, CompatStatus, Severity
+from akeno.core.models import CompatibilityResult, CompatStatus, Finding, Severity
 from akeno.install.transaction import TxResult
 from akeno.security.downloads import sha256_file
 from .adapter import FiveMLegacyAdapter
@@ -74,7 +74,12 @@ class FiveMService:
             strict_conflicts=True)
 
     def compatibility(self, adapter: FiveMLegacyAdapter) -> CompatibilityResult:
-        result = evaluate(self.services.compat_db, adapter.installation.game, adapter, self.context(adapter))
+        try:
+            context = self.context(adapter)
+        except (OSError, ValueError) as exc:
+            return CompatibilityResult(CompatStatus.BLOCKED, adapter.id,
+                [Finding(Severity.BLOCKER, "fivem_target", str(exc))], confidence="low")
+        result = evaluate(self.services.compat_db, adapter.installation.game, adapter, context)
         result.status = CompatStatus.BLOCKED if result.blockers or result.status in (
             CompatStatus.BLOCKED, CompatStatus.INCOMPATIBLE) else CompatStatus.EXPERIMENTAL
         result.confidence = "low"
@@ -135,7 +140,6 @@ class FiveMService:
                 try:
                     problems = [f for f in a.validate(fresh.game, installed) if f.severity == Severity.BLOCKER]
                 except (OSError, ValueError) as exc:
-                    from akeno.core.models import Finding
                     problems = [Finding(Severity.BLOCKER, "fivem_validation", str(exc))]
                 if problems:
                     restored = self.services.installer.restore(applied.tx_id, game_running_dir=str(fresh.root))
