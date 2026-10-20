@@ -18,3 +18,12 @@
 - Git push works. GitHub API returns proxy 403 (despite injected GH_TOKEN presence); `gh auth status` cannot establish API access. No new token requested. GitHub HTML search works and identified actual FiveM projects for source inspection.
 - Saved draft additions for api.github.com, docs.fivem.net, developer.nvidia.com and support.cfx.re. This does not prove active network access changed.
 - Next: finish planner/transaction facade, inspect FiveM-specific upstream source, add safety and rollback tests.
+
+## Checkpoint 3 — transaction pipeline and first tests
+
+- Implemented an opt-in `BackendAdapter` wrapper and `FiveMService` using the existing registry/catalog, secure staging, Compatibility Engine and Transaction Installer. Default launcher/discovery/UI remain untouched.
+- Supports reviewable plans, fresh client/permission/source checks, all-client running-process checks, rollback, restore conflicts, snapshots and restore. No installable FiveM recipe is shipped.
+- Added pinned-source candidate assessments for kerim0x1, LanteanDev, BMTB, VannWasHere, DLSS5-Feeder and Skynizz.
+- **54 new FiveM tests passed** (filesystem/PE fixtures; mocked Windows signature checks explicitly labelled). Initial fixture issue diagnosed: identical synthetic runtime hashes collided in the existing database primary key; fixture bytes corrected. No safety gate weakened.
+- Actual GitHub HTML search and pinned raw text/source retrieval worked. No FiveM pack, third-party installer, proprietary runtime or community mod binary was downloaded/executed for research.
+- Next: review safety edge cases, complete research/integration and real-machine test protocol docs; run combined regression suite and source smoke test; create draft PR if API access is available.
