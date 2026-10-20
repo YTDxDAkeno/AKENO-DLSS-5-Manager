@@ -10,3 +10,5 @@ venv/
 packaging/out/
 packaging/akeno.ico
 screenshots/raw/
+packaging/version_info.txt
+packaging/akeno-256.png

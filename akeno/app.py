@@ -136,16 +136,22 @@ def smoke_test(app, ctl, win) -> int:
         QTimer.singleShot(150, loop.quit)
         loop.exec()
     workers.wait_all(10000)
-    print(f"AKENO {__version__} smoke test OK")
-    print(f"OS: {info.os_name} {info.os_display_version or ''} build {info.os_build}")
+    lines = [f"AKENO {__version__} smoke test OK",
+             f"OS: {info.os_name} {info.os_display_version or ''} build {info.os_build}"]
     for g in info.gpus:
-        print(f"GPU: {g.name} vendor={g.vendor.value} dev=0x{(g.device_id or 0):04X} arch={g.architecture} "
-              f"gen={g.generation} vram={g.vram_gb and round(g.vram_gb, 1)}GB driver={g.driver_version} "
-              f"fl={g.feature_level} via={','.join(g.sources)}")
+        lines.append(f"GPU: {g.name} vendor={g.vendor.value} dev=0x{(g.device_id or 0):04X} arch={g.architecture} "
+                     f"gen={g.generation} vram={g.vram_gb and round(g.vram_gb, 1)}GB driver={g.driver_version} "
+                     f"fl={g.feature_level} via={','.join(g.sources)}")
     for d in info.displays:
-        print(f"Display: {d.name} {d.width}x{d.height}@{d.refresh_hz}")
-    print(f"Detection notes: {info.detection_errors}")
-    print(f"Games found: {len(games)}; library errors: {s.library.last_errors}")
+        lines.append(f"Display: {d.name} {d.width}x{d.height}@{d.refresh_hz}")
+    lines.append(f"Detection notes: {info.detection_errors}")
+    lines.append(f"Games found: {len(games)}; library errors: {s.library.last_errors}")
+    lines.append(f"Pages: {', '.join(win.pages)}")
+    text = "\n".join(lines)
+    from akeno.paths import logs_dir
+    (logs_dir() / "smoke-test.txt").write_text(text, encoding="utf-8")   # windowed builds have no console
+    if sys.stdout is not None:
+        print(text)
     win.close()
     return 0
 
