@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" role="img" aria-label="AKENO A logo">
+<defs><linearGradient id="a" x1="10%" y1="98%" x2="90%" y2="5%"><stop stop-color="#03C8FC"/><stop offset=".34" stop-color="#278EFF"/><stop offset=".72" stop-color="#7C4CF7"/><stop offset="1" stop-color="#CB61FF"/></linearGradient></defs>
+<path fill="url(#a)" d="M49 5 L96 91 L76 82 L49 33 L23 85 L3 96 Z"/>
+<path fill="url(#a)" d="M33 62 L66 62 L74 77 L25 77 Z"/>
+<path fill="#06101E" d="M49 40 L60 59 L39 59 Z"/>
+</svg>

@@ -1,6 +1,7 @@
-"""Original procedural artwork: logo, header banner, GPU illustration, game cover fallbacks.
+"""Artwork: AKENO brand marks, header/recommendation backgrounds, GPU illustration, game cover fallbacks.
 
-Everything is drawn with QPainter at runtime, so AKENO ships no third-party artwork.
+The design package in ``akeno/data/assets`` (see :mod:`akeno.ui.assets`) is used first. The procedural
+QPainter artwork below is the fallback when an asset file is missing, so the UI never breaks.
 """
 
 from __future__ import annotations
@@ -24,6 +25,25 @@ def _painter(pm: QPixmap) -> QPainter:
 
 
 def logo_mark(size: int = 64) -> QPixmap:
+    """The AKENO 'A' (design package SVG; procedural fallback)."""
+    from akeno.ui import assets
+    if assets.exists(assets.LOGO):
+        pm = assets.svg_pixmap(assets.LOGO, size, size, dpr=2)
+        if not pm.isNull():
+            return pm
+    return _logo_mark_fallback(size)
+
+
+def wordmark(height: int, dpr: float = 2.0) -> QPixmap:
+    """The AKENO wordmark (logo + name) from the design package; null pixmap when unavailable."""
+    from akeno.ui import assets
+    if not assets.exists(assets.WORDMARK):
+        return QPixmap()
+    w = round(height * assets.svg_aspect(assets.WORDMARK))
+    return assets.svg_pixmap(assets.WORDMARK, w, height, dpr=dpr)
+
+
+def _logo_mark_fallback(size: int = 64) -> QPixmap:
     """The AKENO 'A': two blade strokes in a blue-violet gradient."""
     pm = QPixmap(size * 2, size * 2)
     pm.fill(Qt.GlobalColor.transparent)
@@ -50,6 +70,38 @@ def logo_mark(size: int = 64) -> QPixmap:
     bar.lineTo(s * 0.25, s * 0.80)
     bar.closeSubpath()
     p.fillPath(bar, QColor(255, 255, 255, 210))
+    p.end()
+    return pm
+
+
+def header_background(width: int, height: int, dpr: float = 1.0) -> QPixmap:
+    """Header: anime/cyberpunk artwork right-aligned (cover), dark gradient on the left for the title,
+    soft fade at the bottom. Falls back to the procedural skyline when the asset is missing."""
+    from akeno.ui import assets
+    art_pm = assets.cover(assets.HEADER, width, height, dpr, h_align=1.0, v_align=0.35)
+    if art_pm.isNull():
+        return banner(width, height)
+    pm = QPixmap(max(1, round(width * dpr)), max(1, round(height * dpr)))
+    pm.setDevicePixelRatio(dpr)
+    pm.fill(QColor(theme.BG))
+    p = _painter(pm)
+    p.drawPixmap(0, 0, art_pm)
+    # The artwork is dark on its left already; strengthen that so the title is always readable, even when
+    # a very wide window shows more of the picture.
+    fade = QLinearGradient(0, 0, width, 0)
+    fade.setColorAt(0.0, QColor(6, 13, 28, 245))
+    fade.setColorAt(0.30, QColor(6, 13, 28, 200))
+    fade.setColorAt(0.55, QColor(6, 13, 28, 60))
+    fade.setColorAt(1.0, QColor(6, 13, 28, 0))
+    p.fillRect(QRectF(0, 0, width, height), fade)
+    glow = QRadialGradient(QPointF(width * 0.86, height * 0.2), width * 0.35)
+    glow.setColorAt(0, QColor(142, 66, 255, 46))
+    glow.setColorAt(1, QColor(142, 66, 255, 0))
+    p.fillRect(QRectF(0, 0, width, height), glow)
+    bottom = QLinearGradient(0, height * 0.65, 0, height)
+    bottom.setColorAt(0, QColor(6, 13, 28, 0))
+    bottom.setColorAt(1, QColor(6, 13, 28, 150))
+    p.fillRect(QRectF(0, 0, width, height), bottom)
     p.end()
     return pm
 
@@ -142,6 +194,15 @@ def banner(width: int, height: int, seed: int = 7) -> QPixmap:
     return pm
 
 
+def gpu_illustration(width: int, height: int, dpr: float = 2.0, accent: str = theme.GREEN) -> QPixmap:
+    """Graphics-card artwork from the design package (edges feathered into the card), else :func:`gpu_card`.
+
+    It is a generic illustration: the actual GPU name and specifications are always shown as text."""
+    from akeno.ui import assets
+    pm = assets.feathered(assets.GPU, width, height, dpr, feather=0.16)
+    return pm if not pm.isNull() else gpu_card(width, height, accent)
+
+
 def gpu_card(width: int, height: int, accent: str = theme.GREEN) -> QPixmap:
     """A stylised dual-fan graphics card."""
     pm = QPixmap(width * 2, height * 2)
@@ -218,16 +279,17 @@ def cover_fallback(title: str, width: int, height: int) -> QPixmap:
 
 
 def app_icon_pixmap(size: int = 256) -> QPixmap:
+    """Application icon: the AKENO 'A' (design package SVG) on a dark rounded tile."""
     pm = QPixmap(size, size)
     pm.fill(Qt.GlobalColor.transparent)
     p = _painter(pm)
     bg = QLinearGradient(0, 0, size, size)
-    bg.setColorAt(0, QColor("#141a3e"))
-    bg.setColorAt(1, QColor("#070a1c"))
+    bg.setColorAt(0, QColor("#101d38"))
+    bg.setColorAt(1, QColor(theme.BG))
     p.setBrush(bg)
     p.setPen(QPen(QColor(theme.VIOLET), size * 0.02))
     p.drawRoundedRect(QRectF(size * 0.04, size * 0.04, size * 0.92, size * 0.92), size * 0.2, size * 0.2)
-    mark = logo_mark(int(size * 0.62))
-    p.drawPixmap(QRectF(size * 0.19, size * 0.17, size * 0.62, size * 0.62), mark, QRectF(mark.rect()))
+    mark = logo_mark(int(size * 0.66))
+    p.drawPixmap(QRectF(size * 0.17, size * 0.15, size * 0.66, size * 0.66), mark, QRectF(mark.rect()))
     p.end()
     return pm

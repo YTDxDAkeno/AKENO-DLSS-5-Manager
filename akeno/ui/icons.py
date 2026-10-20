@@ -1,7 +1,12 @@
-"""Original line icons (24x24 SVG paths drawn for AKENO), rendered in any colour."""
+"""Line icons rendered in any colour.
+
+Navigation and action icons come from the AKENO design package (``akeno/data/assets/icons``); every other
+icon, and the fallback when an asset file is missing, is one of the original 24x24 paths below.
+"""
 
 from __future__ import annotations
 
+import math
 from functools import lru_cache
 
 from PySide6.QtCore import QByteArray, QRectF, Qt
@@ -50,13 +55,31 @@ P = {
 }
 
 
+def device_ratio() -> int:
+    """Integer render ratio for crisp icons on the primary screen (at least 2, more on 250%+ scaling)."""
+    from PySide6.QtGui import QGuiApplication
+    scr = QGuiApplication.primaryScreen() if QGuiApplication.instance() else None
+    return max(2, math.ceil(scr.devicePixelRatio())) if scr else 2
+
+
+# AKENO icon name -> design package SVG (assets/icons/<file>.svg)
+ASSET_ICONS = {"home": "home", "chip": "cpu", "gamepad": "gamepad", "sliders": "sliders", "chart": "chart",
+               "shield": "shield", "database": "database", "gear": "settings", "restore": "rotate",
+               "folder": "folder", "download": "download"}
+
+
 @lru_cache(maxsize=512)
 def pixmap(name: str, color: str = "#e8ebf7", size: int = 20, stroke: float = 1.7) -> QPixmap:
-    body = P.get(name, P["info"])
-    svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" '
-           f'stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round">{body}</svg>')
-    r = QSvgRenderer(QByteArray(svg.encode()))
-    ratio = 2
+    r = None
+    if name in ASSET_ICONS:
+        from akeno.ui import assets
+        r = assets.svg_renderer(f"icons/{ASSET_ICONS[name]}.svg", recolor=color, stroke_width=stroke)
+    if r is None:
+        body = P.get(name, P["info"])
+        svg = (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="{color}" '
+               f'stroke-width="{stroke}" stroke-linecap="round" stroke-linejoin="round">{body}</svg>')
+        r = QSvgRenderer(QByteArray(svg.encode()))
+    ratio = device_ratio()
     pm = QPixmap(size * ratio, size * ratio)
     pm.fill(Qt.GlobalColor.transparent)
     p = QPainter(pm)
