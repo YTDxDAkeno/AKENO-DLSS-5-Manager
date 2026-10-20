@@ -77,7 +77,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
       - name: Checksums
         shell: pwsh
-        run: Get-FileHash packaging\out\* -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } | Out-File packaging\out\SHA256SUMS.txt -Encoding ascii
+        run: |
+          $lines = Get-ChildItem packaging\out -File | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" }
+          $lines | Set-Content -Path packaging\out\SHA256SUMS.txt -Encoding ascii
+          Get-Content packaging\out\SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: AKENO-DLSS5-Manager-windows-x64

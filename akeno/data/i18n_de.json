@@ -382,6 +382,7 @@
  "Profiles appear here once a game with a configurable backend is selected.": "Profile erscheinen hier, sobald ein Spiel mit konfigurierbarem Backend ausgewählt ist.",
  "Profiles are not available for this backend.": "Für dieses Backend sind keine Profile verfügbar.",
  "Provisional": "Vorläufig",
+ "Provisional recommendation based on your hardware.": "Vorläufige Empfehlung auf Basis deiner Hardware.",
  "Quality": "Qualität",
  "Re-analyze": "Neu analysieren",
  "ReShade with full add-on support was not found next to the game executable. Install it from reshade.me first (\"with full add-on support\").": "ReShade mit voller Add-on-Unterstützung wurde neben der ausführbaren Datei nicht gefunden. Installiere es zuerst von reshade.me („with full add-on support“).",

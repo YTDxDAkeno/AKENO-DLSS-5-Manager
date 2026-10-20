@@ -11,6 +11,10 @@ AKENO is an independent community project. It is **not affiliated with NVIDIA**,
 DLSS5-Feeder or any game publisher. DLSS 5 Neural Rendering mods drive an undocumented NVIDIA feature:
 nothing about them is officially supported.
 
+![AKENO dashboard (rendered with test-fixture data)](docs/screenshots/dashboard.png)
+
+*Rendered by the app itself with synthetic test-fixture data — see [docs/screenshots](docs/screenshots/README.md).*
+
 ## What it does
 
 | Page | What you get |

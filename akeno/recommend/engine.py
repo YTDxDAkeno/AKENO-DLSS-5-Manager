@@ -218,5 +218,5 @@ def _hardware_pick(rec: Recommendation, profiles: dict[str, ProfileDef], gpu: Gp
     if choice not in profiles:
         choice = next(iter(p for p in QUALITY_ORDER if p in profiles))
     _pick(rec, profiles[choice])
-    rec.headline = f"{profiles[choice].label} (provisional)"
+    rec.headline = "Provisional recommendation based on your hardware."
     rec.reasons.append(f"Provisional: based on hardware only. {why}")
