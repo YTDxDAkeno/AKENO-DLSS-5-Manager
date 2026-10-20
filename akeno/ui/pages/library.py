@@ -213,7 +213,7 @@ class LibraryPage(QWidget):
             (t("Install folder"), g.install_dir),
             (t("Executable"), exe_combo),
             (t("Graphics API"), api_combo),
-            (t("API evidence"), (g.api_source or "—") + (f" ({', '.join(g.api_candidates)})" if g.api_candidates else "")),
+            (t("API evidence"), (t(g.api_source) if g.api_source else "—") + (f" ({', '.join(g.api_candidates)})" if g.api_candidates else "")),
             (t("Architecture"), g.architecture or t("Unknown")),
             (t("Upscalers in game"), ", ".join(x.upper() for x in g.upscaler_inputs) or t("None found")),
             (t("DLSS (game)"), g.dlss_version or t("Not found")),

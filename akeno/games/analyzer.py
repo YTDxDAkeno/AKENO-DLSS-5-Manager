@@ -14,6 +14,7 @@ from akeno.core.db import now_iso
 from akeno.core.models import AntiCheatRisk, DetectedFile, Game, GraphicsApi
 from akeno.games import pe
 from akeno.games.launchers import RawGame
+from akeno.i18n import msg
 
 # Files that are never the game's main executable.
 NON_GAME_EXE = re.compile(
@@ -210,7 +211,7 @@ def choose_exe(raw: RawGame) -> tuple[str | None, list[str]]:
 def detect_api(exe: str) -> tuple[GraphicsApi, list[str], str]:
     info = pe.parse(exe, with_version=False)
     if not info.valid:
-        return GraphicsApi.UNKNOWN, [], "unreadable executable"
+        return GraphicsApi.UNKNOWN, [], msg("unreadable executable")
     apis = []
     for imp in info.imports:
         api = GRAPHICS_IMPORTS.get(imp)
@@ -224,10 +225,10 @@ def detect_api(exe: str) -> tuple[GraphicsApi, list[str], str]:
         if h not in apis:
             apis.append(h)
     if len(apis) == 1:
-        return GraphicsApi(apis[0]), apis, "executable imports"
+        return GraphicsApi(apis[0]), apis, msg("executable imports")
     if not apis:
-        return GraphicsApi.UNKNOWN, apis, "no graphics API import found (the game may load it dynamically)"
-    return GraphicsApi.UNKNOWN, apis, "several graphics APIs are referenced; select the one the game uses"
+        return GraphicsApi.UNKNOWN, apis, msg("no graphics API import found (the game may load it dynamically)")
+    return GraphicsApi.UNKNOWN, apis, msg("several graphics APIs are referenced; select the one the game uses")
 
 
 def detect_anti_cheat(install_dir: str, exe_dir: str | None) -> tuple[AntiCheatRisk, list[str]]:
@@ -279,7 +280,7 @@ def analyze(raw: RawGame, exe_override: str | None = None, api_override: str | N
     api, apis, source = detect_api(exe)
     game.api, game.api_candidates, game.api_source = api, apis, source
     if api_override:
-        game.api, game.api_source = GraphicsApi(api_override), "selected by you"
+        game.api, game.api_source = GraphicsApi(api_override), msg("selected by you")
 
     exe_dir = os.path.dirname(exe)
     mods = scan_dir_mods(exe_dir)

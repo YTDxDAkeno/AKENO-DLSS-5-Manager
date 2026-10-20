@@ -480,7 +480,7 @@ class InstallPage(QWidget):
                         os.path.basename(g.exe_path) if exe_ok else t("The game executable was not found."),
                         g.exe_path or "", blocking=not exe_ok))
         api_bad = [f for f in findings if f.code in ("api_unknown", "api_unsupported", "arch", "vulkan_guided")]
-        api_txt = t(g.api.label) + (f" ({g.api_source})" if g.api_source and g.api != GraphicsApi.UNKNOWN else "")
+        api_txt = t(g.api.label) + (f" ({t(g.api_source)})" if g.api_source and g.api != GraphicsApi.UNKNOWN else "")
         rows.append(Row("fail" if api_bad else ("warn" if any(f.code == "d3d11_bridge" for f in findings) else "ok"),
                         t("Rendering API"), " ".join(t(f.message) for f in api_bad) or api_txt,
                         ", ".join(g.api_candidates), blocking=bool(api_bad)))

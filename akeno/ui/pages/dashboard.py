@@ -364,7 +364,7 @@ class DashboardPage(QWidget):
         self.game_path.setCursorPosition(0)
         adapter = self.s.backend_for(game)
         compat = self.s.compatibility(game, adapter) if adapter else None
-        api = t(game.api.label) + (f"  ({game.api_source})" if game.api_source and game.api.value != "unknown" else "")
+        api = t(game.api.label) + (f"  ({t(game.api_source)})" if game.api_source and game.api.value != "unknown" else "")
         if game.api.value == "unknown" and game.api_candidates:
             api = t("Unknown") + " — " + t("candidates: {c}", c=", ".join(game.api_candidates))
         ac_state = {"detected": ("fail", t("Detected — installation blocked")),
