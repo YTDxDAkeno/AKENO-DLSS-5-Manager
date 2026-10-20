@@ -4,7 +4,7 @@ Creates a fake game folder, a synthetic system description (an RTX 3080 at 1440p
 fixture benchmark sessions. Nothing here is used by the shipped application; fixture benchmarks are
 stored with source="fixture" so the UI shows they are not real measurements.
 
-    python tools/fixture_home.py <akeno_home> <games_dir> [--with-benchmarks]
+    python tools/fixture_home.py <akeno_home> <games_dir> [--with-benchmarks] [--gpu rtx5090]
 """
 
 from __future__ import annotations
@@ -29,8 +29,12 @@ def main() -> None:
     from akeno.hardware import gpu_db
 
     svc = AppServices()
-    gpu = rtx()
-    gpu.driver_date = "1-16-2025"
+    if "rtx5090" in sys.argv:
+        gpu = rtx("NVIDIA GeForce RTX 5090", device=0x2B85, vram_gb=32, driver_raw="32.0.15.8180")
+        gpu.driver_date = "9-30-2026"
+    else:
+        gpu = rtx()
+        gpu.driver_date = "1-16-2025"
     gpu.sources = ["fixture"]
     igpu = gpu_db.classify(GpuInfo("Intel(R) UHD Graphics 770", vendor_id=0x8086, device_id=0x4680,
                                    vram_bytes=128 << 20, driver_version="31.0.101.4502", sources=["fixture"]))

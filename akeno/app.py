@@ -33,6 +33,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--smoke-test", action="store_true",
                         help="build every page, run startup checks, print a summary and exit (CI)")
     parser.add_argument("--screenshot", metavar="DIR", help="save a PNG of every page into DIR and exit")
+    parser.add_argument("--screenshot-size", metavar="WxH", default="1920x1009",
+                        help="window size for --screenshot (default: a maximised window on a 1920x1080 screen)")
+    parser.add_argument("--screenshot-scale", metavar="FACTOR", type=float, default=None,
+                        help="render screenshots at this display scaling (e.g. 1.25, 1.5) to check High-DPI layout")
     parser.add_argument("--version", action="version", version=__version__)
     args = parser.parse_args(argv)
 
@@ -47,6 +51,8 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtGui import QGuiApplication, QIcon
     from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
+    if args.screenshot and args.screenshot_scale:
+        os.environ["QT_SCALE_FACTOR"] = str(args.screenshot_scale)
     QGuiApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
     app = QApplication(sys.argv[:1])
     app.setApplicationName(APP_NAME)
@@ -110,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.smoke_test:
         return smoke_test(app, ctl, win)
     if args.screenshot:
-        return screenshots(app, ctl, win, args.screenshot)
+        return screenshots(app, ctl, win, args.screenshot, args.screenshot_size)
     if args.minimized:
         win.showMinimized()
     else:
@@ -156,11 +162,13 @@ def smoke_test(app, ctl, win) -> int:
     return 0
 
 
-def screenshots(app, ctl, win, out_dir: str) -> int:
+def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
     from PySide6.QtCore import QEventLoop, QTimer
     from akeno.ui import workers
     os.makedirs(out_dir, exist_ok=True)
-    win.resize(1672, 1000)
+    w, h = (int(x) for x in size.lower().split("x"))
+    win.setMinimumSize(min(w, 1100), min(h, 680))
+    win.resize(w, h)
     win.show()
     ctl.hardware_changed.emit()
     ctl.games_changed.emit()

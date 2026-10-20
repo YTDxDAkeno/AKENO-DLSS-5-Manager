@@ -15,8 +15,9 @@ from akeno.i18n import t
 from akeno.recommend.engine import Recommendation
 from akeno.benchmark.stats import consistency_label
 from akeno.ui import art, icons, theme
-from akeno.ui.widgets import (ActionTile, Card, CheckRow, Clickable, KeyValueGrid, Meter, Spinner, StatusPill, SubCard,
-                              button, clear_layout, confirm, info, label, scaled)
+from akeno.ui.widgets import (ActionTile, ArtPanel, Card, CheckRow, ElidedLabel, GradientText, KeyValueGrid, Meter,
+                              ProfileRow, Spinner, StatusPill, SubCard, button, clear_layout, info, label, scaled,
+                              status_badge)
 
 SUPPORT_TEXT = {HardwareSupport.OFFICIAL: ("Officially supported", "ok"),
                 HardwareSupport.COMMUNITY: ("Community-supported", "ok"),
@@ -35,16 +36,46 @@ def fmt_gb(b: int | None) -> str:
     return t("Unknown") if not b else f"{b / 1024 ** 3:.0f} GB"
 
 
+def _shield_badge(size: int) -> QPixmap:
+    """Large green shield badge for the safety panel header (decorative; the checks carry the status)."""
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QColor, QPainter, QPen, QRadialGradient
+    ratio = icons.device_ratio()
+    pm = QPixmap(size * ratio, size * ratio)
+    pm.fill(Qt.GlobalColor.transparent)
+    pm.setDevicePixelRatio(ratio)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    g = QRadialGradient(size / 2, size / 2, size / 2)
+    g.setColorAt(0, QColor(32, 217, 145, 90))
+    g.setColorAt(1, QColor(32, 217, 145, 20))
+    p.setBrush(g)
+    p.setPen(QPen(QColor(32, 217, 145, 160), 1.2))
+    p.drawRoundedRect(QRectF(1, 1, size - 2, size - 2), 12, 12)
+    p.drawPixmap(QRectF(size * 0.2, size * 0.2, size * 0.6, size * 0.6), icons.pixmap("shield", theme.GREEN, 28, 2.0),
+                 QRectF())
+    p.end()
+    return pm
+
+
 class DashboardPage(QWidget):
+    """Composition follows the AKENO reference design at 1920x1080: hardware + game analysis, recommendation +
+    profile comparison, safety panel, and the action buttons pinned below the scroll area (``footer``)."""
+
+    GPU_ART = ((230, 160), (190, 132), (160, 112))      # per density level
+    COVER = ((210, 136), (184, 120), (160, 104))
+    HERO_PT = (44, 38, 32)
+
     def __init__(self, ctl, window):
         super().__init__()
         self.ctl = ctl
         self.win = window
         self.s = ctl.s
+        self.density = 0
         grid = QGridLayout(self)
         grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(16)
-        grid.setVerticalSpacing(16)
+        grid.setHorizontalSpacing(14)
+        grid.setVerticalSpacing(14)
 
         # --- Detected hardware ---------------------------------------------------------------
         self.hw_spinner = Spinner()
@@ -57,22 +88,27 @@ class DashboardPage(QWidget):
         rl.addWidget(self.btn_rescan)
         self.hw_card = Card(t("Detected Hardware"), "chip", theme.BLUE, rescan_row)
         hw_body = QHBoxLayout()
-        hw_body.setSpacing(18)
+        hw_body.setSpacing(16)
         self.gpu_img = QLabel()
-        self.gpu_img.setFixedSize(190, 130)
+        self.gpu_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.gpu_img.setToolTip(t("Illustration. Your GPU's real name and specifications are shown on the right."))
         hw_body.addWidget(self.gpu_img, 0, Qt.AlignmentFlag.AlignVCenter)
         col = QVBoxLayout()
+        col.setSpacing(6)
         name_row = QHBoxLayout()
+        name_row.setSpacing(8)
         self.gpu_logo = QLabel()
         name_row.addWidget(self.gpu_logo)
         self.gpu_name = label("", "h2")
+        self.gpu_name.setStyleSheet("font-size: 14pt; font-weight: 700;")
         name_row.addWidget(self.gpu_name, 1)
         col.addLayout(name_row)
-        self.hw_grid = KeyValueGrid(130)
+        self.hw_grid = KeyValueGrid(138)
+        self.hw_grid.grid.setVerticalSpacing(3)
         col.addWidget(self.hw_grid)
         hw_body.addLayout(col, 1)
         self.hw_card.body.addLayout(hw_body)
-        grid.addWidget(self.hw_card, 0, 0, 1, 5)
+        grid.addWidget(self.hw_card, 0, 0, 1, 10)
 
         # --- Game analysis --------------------------------------------------------------------
         self.btn_change = button(t("Change Game"), tip=t("Pick another installed game"))
@@ -81,14 +117,18 @@ class DashboardPage(QWidget):
         gb = QHBoxLayout()
         gb.setSpacing(16)
         self.cover = QLabel()
-        self.cover.setFixedSize(220, 140)
-        self.cover.setStyleSheet(f"border-radius: 10px; border: 1px solid {theme.BORDER};")
+        self.cover.setAlignment(Qt.AlignmentFlag.AlignCenter)
         gb.addWidget(self.cover, 0, Qt.AlignmentFlag.AlignTop)
         gcol = QVBoxLayout()
+        gcol.setSpacing(6)
         self.game_name = label("", "h2")
+        self.game_name.setStyleSheet("font-size: 14pt; font-weight: 700;")
         gcol.addWidget(self.game_name)
-        gcol.addWidget(label(t("Game Path"), "key"))
         prow = QHBoxLayout()
+        prow.setSpacing(8)
+        pk = label(t("Game Path"), "key")
+        pk.setFixedWidth(104)
+        prow.addWidget(pk)
         self.game_path = QLineEdit()
         self.game_path.setReadOnly(True)
         self.game_path.setAccessibleName(t("Game Path"))
@@ -96,38 +136,46 @@ class DashboardPage(QWidget):
         self.btn_open = button("", "folder", tip=t("Open the game folder"), on_click=self._open_folder)
         prow.addWidget(self.btn_open)
         gcol.addLayout(prow)
-        self.game_grid = KeyValueGrid(110)
+        self.game_grid = KeyValueGrid(104)
+        self.game_grid.grid.setVerticalSpacing(3)
         gcol.addWidget(self.game_grid)
         gb.addLayout(gcol, 1)
         self.game_card.body.addLayout(gb)
-        grid.addWidget(self.game_card, 0, 5, 1, 4)
+        grid.addWidget(self.game_card, 0, 10, 1, 10)
 
         # --- Smart recommendation ---------------------------------------------------------------
         self.rec_badge = StatusPill("", "pending")
-        self.rec_card = Card(t("Smart Recommendation"), "sparkle", theme.VIOLET, self.rec_badge)
-        self.hero = QFrame()
+        self.rec_card = Card(t("Smart Recommendation"), "sparkle", theme.VIOLET, self.rec_badge, fill=True)
+        from akeno.ui import assets
+        self.hero = ArtPanel(assets.RECOMMENDATION, fade_to=0.78)
+        self.hero.setMinimumHeight(118)
         self.hero.setObjectName("Hero")
-        self.hero.setStyleSheet(
-            "#Hero { border-radius: 12px; border: 1px solid #3b2d8a; background: qlineargradient(x1:0,y1:0,x2:1,y2:0,"
-            " stop:0 #1a1145, stop:0.6 #241a63, stop:1 #2b1f75); }")
         hl = QVBoxLayout(self.hero)
-        hl.setContentsMargins(18, 12, 18, 12)
+        hl.setContentsMargins(20, 12, 20, 12)
+        hl.setSpacing(2)
         self.hero_title = label("", "h3")
+        self.hero_title.setStyleSheet("font-size: 12.5pt; font-weight: 700;")
         hl.addWidget(self.hero_title)
         hrow = QHBoxLayout()
-        self.hero_value = QLabel("—")
-        self.hero_value.setStyleSheet("font-size: 40pt; font-weight: 800; color: #c4b5fd;")
+        hrow.setSpacing(16)
+        self.hero_value = GradientText("—", self.HERO_PT[0])
         self.hero_value.setToolTip(t("Neural model working resolution (OptiScaler DlssNr.WorkingScale): the share "
                                      "of the frame the model works at. It is a real backend setting, not a quality score."))
-        hrow.addWidget(self.hero_value)
+        hrow.addWidget(self.hero_value, 0, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft)
         hcol = QVBoxLayout()
+        hcol.setSpacing(4)
+        hcol.addStretch(1)
         self.hero_profile = StatusPill("", "pending")
         hcol.addWidget(self.hero_profile, 0, Qt.AlignmentFlag.AlignLeft)
         self.hero_text = label("", "dim", wrap=True)
+        self.hero_text.setStyleSheet("color: #C9D3EA;")
+        self.hero_text.setMaximumWidth(560)
         hcol.addWidget(self.hero_text)
+        hcol.addStretch(1)
         hrow.addLayout(hcol, 1)
-        hl.addLayout(hrow)
-        self.rec_card.body.addWidget(self.hero)
+        hrow.addStretch(0)
+        hl.addLayout(hrow, 1)
+        self.rec_card.body.addWidget(self.hero, 1)
         subs = QHBoxLayout()
         subs.setSpacing(10)
         self.perf_sub = SubCard()
@@ -136,24 +184,56 @@ class DashboardPage(QWidget):
         for sc in (self.perf_sub, self.cons_sub, self.vram_sub):
             subs.addWidget(sc, 1)
         self.rec_card.body.addLayout(subs)
-        grid.addWidget(self.rec_card, 1, 0, 1, 6)
+        grid.addWidget(self.rec_card, 1, 0, 1, 13)
 
         # --- Profile comparison ---------------------------------------------------------------
-        self.cmp_card = Card(t("Profile Comparison"), "chart", theme.BLUE)
+        self.cmp_card = Card(t("Profile Comparison"), "chart", theme.BLUE, fill=True)
         self.cmp_list = QVBoxLayout()
-        self.cmp_list.setSpacing(8)
-        self.cmp_card.body.addLayout(self.cmp_list)
-        self.cmp_card.body.addStretch(1)
-        grid.addWidget(self.cmp_card, 1, 6, 1, 3)
+        self.cmp_list.setSpacing(6)
+        self.cmp_card.body.addLayout(self.cmp_list, 1)
+        self.cmp_note = label(t("Values appear only after you measure them with a benchmark; estimates are labelled."),
+                              "muted", wrap=True)
+        self.cmp_card.body.addWidget(self.cmp_note)
+        grid.addWidget(self.cmp_card, 1, 13, 1, 7)
 
         # --- Safety / verification --------------------------------------------------------------
-        self.safe_card = Card(t("Safety / Verification"), "shield", theme.GREEN)
+        self.safe_card = Card()
+        self.safe_card.setAccessibleName(t("Safety / Verification"))
+        self.safe_card.outer.setContentsMargins(18, 12, 18, 12)
+        srow = QHBoxLayout()
+        srow.setSpacing(24)
+        shead = QHBoxLayout()
+        shead.setSpacing(12)
+        self.safe_icon = QLabel()
+        self.safe_icon.setPixmap(_shield_badge(44))
+        shead.addWidget(self.safe_icon, 0, Qt.AlignmentFlag.AlignVCenter)
+        stcol = QVBoxLayout()
+        stcol.setSpacing(2)
+        stcol.addStretch(1)
+        stitle = label(t("Safety / Verification"), "h2")
+        stcol.addWidget(stitle)
+        self.safe_sub = label("", "muted", wrap=True)
+        stcol.addWidget(self.safe_sub)
+        stcol.addStretch(1)
+        shead.addLayout(stcol)
+        swrap = QWidget()
+        swrap.setFixedWidth(260)
+        swrap.setLayout(shead)
+        srow.addWidget(swrap)
         self.safe_grid = QGridLayout()
-        self.safe_grid.setHorizontalSpacing(30)
-        self.safe_card.body.addLayout(self.safe_grid)
-        grid.addWidget(self.safe_card, 2, 0, 1, 9)
+        self.safe_grid.setHorizontalSpacing(26)
+        self.safe_grid.setVerticalSpacing(6)
+        srow.addLayout(self.safe_grid, 1)
+        self.safe_card.body.addLayout(srow)
+        grid.addWidget(self.safe_card, 2, 0, 1, 20)
 
-        # --- Actions ---------------------------------------------------------------------------
+        # --- Actions (pinned footer, always reachable) -------------------------------------------
+        self.footer = QWidget()
+        fl = QVBoxLayout(self.footer)
+        fl.setContentsMargins(0, 0, 0, 0)
+        fl.setSpacing(4)
+        self.action_note = ElidedLabel("", "muted")
+        fl.addWidget(self.action_note)
         actions = QHBoxLayout()
         actions.setSpacing(12)
         self.a_scan = ActionTile(t("Scan Hardware"), t("Detect GPU and system info"), "chip", "blue")
@@ -168,11 +248,12 @@ class DashboardPage(QWidget):
         self.a_backup.clicked.connect(self._backup)
         self.a_install.clicked.connect(lambda: self.ctl.navigate.emit("install"))
         self.a_restore.clicked.connect(self._restore)
-        grid.addLayout(actions, 3, 0, 1, 9)
-        self.action_note = label("", "muted", wrap=True)
-        grid.addWidget(self.action_note, 4, 0, 1, 9)
-        for c in range(9):
+        fl.addLayout(actions)
+        for c in range(20):
             grid.setColumnStretch(c, 1)
+        grid.setRowStretch(0, 0)
+        grid.setRowStretch(1, 1)
+        grid.setRowStretch(2, 0)
 
         ctl.hardware_changed.connect(self.refresh)
         ctl.games_changed.connect(self.refresh)
@@ -182,6 +263,32 @@ class DashboardPage(QWidget):
         ctl.settings_changed.connect(self._on_setting)
         ctl.busy_changed.connect(self._busy)
         self.refresh()
+
+    def set_density(self, level: int) -> None:
+        """Called by the main window: smaller artwork and headline on short windows."""
+        if level == self.density:
+            return
+        self.density = level
+        self.hero_value.set_point_size(self.HERO_PT[level])
+        self._refresh_art()
+
+    def _refresh_art(self) -> None:
+        gpu = self.s.selected_gpu()
+        accent = theme.GREEN if gpu and gpu.vendor == Vendor.NVIDIA else theme.TEXT_MUTED
+        w, h = self.GPU_ART[self.density]
+        self.gpu_img.setFixedSize(w, h)
+        self.gpu_img.setPixmap(art.gpu_illustration(w, h, max(2.0, self.devicePixelRatioF()), accent))
+        self.gpu_logo.setPixmap(icons.pixmap("chip", accent, 24))
+        cw, ch = self.COVER[self.density]
+        self.cover.setFixedSize(cw, ch)
+        game = self.s.selected_game()
+        if game is None:
+            self.cover.setPixmap(art.cover_fallback("?", cw, ch))
+            return
+        pm = QPixmap(game.artwork_path) if game.artwork_path and os.path.isfile(game.artwork_path) else None
+        src = scaled(pm, cw, ch) if pm and not pm.isNull() else art.cover_fallback(game.name, cw, ch)
+        from akeno.ui import assets
+        self.cover.setPixmap(assets.rounded(src, 10))
 
     def _on_setting(self, key: str) -> None:
         if key not in ("language", "*", "theme_accent"):
@@ -197,6 +304,7 @@ class DashboardPage(QWidget):
             self.a_analyze.setEnabled(not on)
 
     def refresh(self) -> None:
+        self._refresh_art()
         self._refresh_hw()
         game = self.s.selected_game()
         self._refresh_game(game)
@@ -209,9 +317,6 @@ class DashboardPage(QWidget):
         sysinfo = self.s.system
         gpu = self.s.selected_gpu()
         verdict = nr_hardware_support(gpu)
-        accent = theme.GREEN if gpu and gpu.vendor == Vendor.NVIDIA else theme.TEXT_MUTED
-        self.gpu_img.setPixmap(art.gpu_card(190, 130, accent))
-        self.gpu_logo.setPixmap(icons.pixmap("chip", accent, 26))
         if sysinfo is None:
             self.gpu_name.setText(t("Not scanned yet"))
             self.hw_grid.set_rows([(t("Status"), t("Run a hardware scan to detect your GPU."))])
@@ -252,13 +357,12 @@ class DashboardPage(QWidget):
         if game is None:
             self.game_name.setText(t("No game selected"))
             self.game_path.setText("")
-            self.cover.setPixmap(art.cover_fallback("?", 220, 140))
             self.game_grid.set_rows([(t("Status"), t("Scan your game library or add a game folder."))])
             return
         self.game_name.setText(game.name)
         self.game_path.setText(game.install_dir)
-        pm = QPixmap(game.artwork_path) if game.artwork_path and os.path.isfile(game.artwork_path) else None
-        self.cover.setPixmap(scaled(pm, 220, 140) if pm and not pm.isNull() else art.cover_fallback(game.name, 220, 140))
+        self.game_path.setToolTip(game.install_dir)
+        self.game_path.setCursorPosition(0)
         adapter = self.s.backend_for(game)
         compat = self.s.compatibility(game, adapter) if adapter else None
         api = t(game.api.label) + (f"  ({game.api_source})" if game.api_source and game.api.value != "unknown" else "")
@@ -300,9 +404,10 @@ class DashboardPage(QWidget):
         text = t(rec.headline)
         if rec.pre_sr:
             text += " " + t("Runs before upscaling (pre-SR), at the game's render resolution.")
-        if rec.reasons:
-            text += "\n" + "\n".join("• " + t(r) for r in rec.reasons[:3])
-        self.hero_text.setText(text)
+        # Keep the hero compact: first reason visible, everything in the tooltip.
+        visible = text + ("\n• " + t(rec.reasons[0]) if rec.reasons else "")
+        self.hero_text.setText(visible)
+        self.hero_text.setToolTip("\n".join([text] + ["• " + t(r) for r in rec.reasons]))
         self.rec_badge.set(t("Basis: {b}", b=t({"measured": "measured", "estimated": "estimated",
                                                 "hardware": "hardware only", "none": "—"}[rec.basis]))
                            + f" · {t('confidence')}: {t(rec.confidence)}",
@@ -386,14 +491,17 @@ class DashboardPage(QWidget):
         if game is None or adapter is None or not adapter.profiles(game):
             self.cmp_list.addWidget(label(t("Profiles appear here once a game with a configurable backend is selected."),
                                           "dim", wrap=True))
+            self.cmp_note.setVisible(False)
             return
         base = rec.baseline
         out = {o.profile_id: o for o in rec.outlooks}
-        colors = {"performance": (theme.GREEN, "#4ade80"), "balanced": (theme.BLUE, theme.VIOLET),
-                  "quality": (theme.CYAN, theme.BLUE), "custom": (theme.MAGENTA, "#f0abfc")}
+        colors = {"performance": theme.GRAD_GREEN, "balanced": theme.GRAD_NEON,
+                  "quality": theme.GRAD_BLUE, "custom": theme.GRAD_PINK}
+        icon_for = {"performance": "gauge", "balanced": "sliders", "quality": "eye", "custom": "sparkle"}
         active = self.s.db.active_profile(game.id, adapter.id) if game else None
         profiles = [p for p in adapter.profiles(game) if p.id != "disabled"]
         custom = next((p for p in self.s.db.profiles(game.id, adapter.id) if p["name"] == "custom"), None)
+        any_value = False
         for p in profiles + [None]:
             pid = p.id if p else "custom"
             title = t(p.label) if p else t("Custom")
@@ -401,26 +509,12 @@ class DashboardPage(QWidget):
             ws = params.get("DlssNr.WorkingScale")
             if ws:
                 title += f"  ({ws * 100:.0f}%)"
+            if active and active["name"] == pid:
+                title += f"  · {t('active')}"
             sub = t(p.summary) if p else (t("Your saved settings") if custom else t("Not configured yet"))
-            row = Clickable()
-            row.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-            row.setAccessibleName(title)
-            sel = rec.profile_id == pid
-            border = theme.VIOLET if sel else theme.BORDER
-            row.setStyleSheet(f"Clickable {{ background: rgba(255,255,255,{0.06 if sel else 0.02});"
-                              f" border: 1px solid {border}; border-radius: 10px; }}")
-            rl = QHBoxLayout(row)
-            rl.setContentsMargins(12, 8, 12, 8)
-            ic = QLabel()
-            ic.setPixmap(icons.pixmap({"performance": "gauge", "balanced": "sliders", "quality": "eye"}.get(pid, "gear"),
-                                      colors[pid][0], 22))
-            rl.addWidget(ic)
-            col = QVBoxLayout()
-            col.setSpacing(2)
-            tl = label(title + (f"  · {t('active')}" if active and active["name"] == pid else ""))
-            tl.setStyleSheet("font-weight: 600;")
-            col.addWidget(tl)
-            col.addWidget(label(sub, "muted", wrap=True))
+            if rec.profile_id == pid:
+                sub = t("Recommended") + " · " + sub
+            row = ProfileRow(title, sub, icon_for.get(pid, "gear"), colors[pid], selected=rec.profile_id == pid)
             o = out.get(pid)
             val, frac, kind = None, None, ""
             if o and o.measured:
@@ -429,29 +523,35 @@ class DashboardPage(QWidget):
                 val, kind = o.estimated_fps, t("estimated")
             if val and base:
                 frac = val / max(base.avg_fps, val)
-            col.addWidget(Meter(frac, colors[pid], 6))
-            rl.addLayout(col, 1)
-            right = label(f"{val:.0f} FPS\n{kind}" if val else t("Not measured"), "dim")
-            right.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             if val and base:
+                any_value = True
                 d = (val / base.avg_fps - 1) * 100
-                right.setText(f"<b style='color:{theme.GREEN if d >= 0 else theme.AMBER}'>{d:+.0f}%</b><br>"
-                              f"<span style='color:{theme.TEXT_MUTED}'>{val:.0f} FPS · {kind}</span>")
-            rl.addWidget(right)
+                row.set_value(f"<b style='font-size:11pt; color:{theme.GREEN if d >= 0 else theme.AMBER}'>{d:+.0f}%</b>"
+                              f"<br><span style='color:{theme.TEXT_MUTED}'>{val:.0f} FPS · {kind}</span>", frac)
+            elif val:
+                any_value = True
+                row.set_value(f"{val:.0f} FPS<br><span style='color:{theme.TEXT_MUTED}'>{kind}</span>", None)
+            else:
+                row.set_value(f"<span style='color:{theme.TEXT_MUTED}'>{t('Not measured')}</span>", None)
             tip = t(p.tradeoff) if p else t("Your own combination of supported settings.")
             if p and p.reference:
                 tip += "\n" + t("Reference (not your system): ") + p.reference
             row.setToolTip(tip)
             row.clicked.connect(lambda pid=pid: self.win.open_profile(pid))
             self.cmp_list.addWidget(row)
+        self.cmp_note.setVisible(not any_value)
 
     def _refresh_safety(self, game) -> None:
         clear_layout(self.safe_grid)
         r = self.s.readiness(game)
+        rows = 2
         for i, it in enumerate(r.items):
-            self.safe_grid.addWidget(CheckRow(it.state, t(it.title), t(it.detail)), i % 3, i // 3)
-        for c in range(3):
+            self.safe_grid.addWidget(CheckRow(it.state, t(it.title), t(it.detail), compact=True), i % rows, i // rows)
+        cols = max(1, (len(r.items) + rows - 1) // rows)
+        for c in range(cols):
             self.safe_grid.setColumnStretch(c, 1)
+        done = sum(1 for it in r.items if it.state == "ok")
+        self.safe_sub.setText(t("{n} of {m} checks passed", n=done, m=len(r.items)) if r.items else "")
         active = self.s.installer.active_install(game.id) if game else None
         self.a_install.setEnabled(r.can_install)
         self.a_install.setToolTip("\n".join(t(x) for x in r.reasons) if r.reasons else t("Open the guided installer"))
@@ -465,7 +565,8 @@ class DashboardPage(QWidget):
             notes.append(t("Install unavailable: ") + t(r.reasons[0]))
         if not active and game:
             notes.append(t("Restore unavailable: nothing installed by AKENO for this game."))
-        self.action_note.setText("   ·   ".join(notes))
+        self.action_note.set_text("   ·   ".join(notes))
+        self.action_note.setVisible(bool(notes))
 
     # -- actions -------------------------------------------------------------------------------
     def _change_game_menu(self) -> None:
