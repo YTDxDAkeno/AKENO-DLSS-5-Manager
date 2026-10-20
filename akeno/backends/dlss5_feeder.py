@@ -107,6 +107,10 @@ class Dlss5FeederAdapter(BackendAdapter):
                                   "with that tool first, or keep using it there."))
         return f
 
+    def dependency_specs(self, game: Game) -> list[tuple[str, bool]]:
+        return [("package", True), ("reshade", True), ("consumer", True), ("nr_runtime", True),
+                ("dlss_runtime", True)]
+
     def required_package_files(self, game: Game, package: Package) -> dict[str, str | None]:
         files = self._addon_files(game) + [SHADER]
         return {n: package.files.get(n) for n in files}

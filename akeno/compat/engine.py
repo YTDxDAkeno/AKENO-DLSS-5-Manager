@@ -54,6 +54,9 @@ class CompatDatabase:
         for h in data.get("hardware", []):
             if h.get("support") not in {s.value for s in HardwareSupport}:
                 raise CompatDbError(f"invalid hardware support level {h.get('support')}")
+        for r in data.get("nr_runtimes", []):
+            if not r.get("version") or not (r.get("evidence") or {}).get("source"):
+                raise CompatDbError("nr_runtimes entries need a version pattern and an evidence source")
 
     @classmethod
     def load(cls) -> "CompatDatabase":
@@ -97,6 +100,11 @@ class CompatDatabase:
 
     def hardware_evidence(self, generation: str | None) -> dict[str, Any] | None:
         return next((h for h in self.data.get("hardware", []) if h.get("generation") == generation), None)
+
+    def nr_runtimes(self) -> list[dict[str, Any]]:
+        """Documented behaviour of NVIDIA Neural Rendering runtime versions per GPU generation."""
+        from akeno.hardware.support import DEFAULT_NR_RUNTIMES
+        return list(self.data.get("nr_runtimes") or DEFAULT_NR_RUNTIMES)
 
 
 def evaluate(db: CompatDatabase, game: Game, adapter: BackendAdapter, ctx: BackendContext) -> CompatibilityResult:

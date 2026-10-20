@@ -24,6 +24,7 @@ from akeno.core.settings import Settings
 from akeno.games.library import GameLibrary
 from akeno.hardware import gpu_db
 from akeno.hardware.detect import HardwareService
+from akeno.i18n import msg
 from akeno.install.transaction import Installer, TxResult
 from akeno.paths import backups_dir, cache_dir, db_path, is_windows
 from akeno.recommend.engine import Recommendation, recommend
@@ -47,6 +48,11 @@ class Readiness:
     items: list[CheckItem] = field(default_factory=list)
     can_install: bool = False
     reasons: list[str] = field(default_factory=list)
+    # True when the only blockers are dependencies that "Resolve Dependencies" can obtain automatically
+    can_resolve: bool = False
+
+# Compatibility blocker codes that mean "a dependency is missing" (the resolver may be able to obtain it).
+DEPENDENCY_CODES = {"runtime_missing", "missing_nvngx_dlssnr.dll", "missing_nvngx_dlss.dll"}
 
 
 class AppServices:
@@ -65,6 +71,8 @@ class AppServices:
         self.compat_db = compat_db or CompatDatabase.load()
         pm = self.catalog.tool("presentmon")
         self.benchmarks = BenchmarkService(self.db, PresentMonRunner(pm, self.downloads) if pm else None)
+        from akeno.deps.resolver import DependencyResolver
+        self.deps = DependencyResolver(self)
         self.system: SystemInfo | None = None
         cached = self.db.get_setting("_last_system")
         if cached:
@@ -141,6 +149,21 @@ class AppServices:
         compat = self.compatibility(game, adapter) if game and adapter else None
         return recommend(game, self.system, self.selected_gpu(), adapter, compat,
                          self.benchmarks.sessions(game.id) if game else [], int(self.settings.get("target_fps")))
+
+    # -- dependencies ------------------------------------------------------------------------
+    def discover_dependencies(self):
+        """Search this PC for NVIDIA runtimes (disk walk: call from a worker thread)."""
+        return self.deps.discover()
+
+    def dependency_plan(self, game: Game | None):
+        """Cheap: uses the last discovery results, never walks the disk."""
+        return self.deps.plan(game, self.backend_for(game))
+
+    def resolve_dependencies(self, game: Game, progress=None, token: CancelToken | None = None):
+        adapter = self.backend_for(game)
+        if adapter is None:
+            raise ValueError("No backend is available for this game.")
+        return self.deps.resolve(game, adapter, progress, token)
 
     # -- packages ----------------------------------------------------------------------------
     def package_for(self, adapter: BackendAdapter) -> Package | None:
@@ -279,14 +302,21 @@ class AppServices:
         # NVIDIA runtime
         names = {m.name.lower() for m in game.existing_mods}
         rt = self.runtime_lookup(runtimes.NR_RUNTIME)
+        plan = self.dependency_plan(game)
+        rt_dep = plan.get("nr_runtime")
         if runtimes.NR_RUNTIME in names:
             r.items.append(CheckItem("runtime", "warn", "NVIDIA runtime present in game",
                                      "nvngx_dlssnr.dll already exists in the game folder (not installed by AKENO)."))
         elif rt:
             r.items.append(CheckItem("runtime", "ok", "NVIDIA runtime ready",
-                                     f"nvngx_dlssnr.dll {rt.get('version') or ''} signed by {rt.get('signer')}."))
+                                     msg("nvngx_dlssnr.dll {v} signed by {s}.", v=rt.get("version") or "",
+                                         s=rt.get("signer") or "?")))
+        elif rt_dep is not None and rt_dep.state == "resolvable_local":
+            # Found but not imported yet: blue "info", never green.
+            r.items.append(CheckItem("runtime", "info", "NVIDIA runtime found", rt_dep.detail))
         else:
             r.items.append(CheckItem("runtime", "fail", "NVIDIA runtime missing",
+                                     rt_dep.detail if rt_dep is not None and rt_dep.detail else
                                      "Import nvngx_dlssnr.dll from your NVIDIA driver on the Secure Install page."))
         # Backups
         bdir = backups_dir()
@@ -317,6 +347,9 @@ class AppServices:
         r.can_install = not r.reasons and bool(pkg and pkg.installable)
         if pkg and not pkg.installable and not r.reasons:
             r.reasons.append("The package is not a reviewed, verified release.")
+        if not r.can_install and compat and pkg and pkg.installable and not game.is_running:
+            codes = {f.code for f in compat.blockers}
+            r.can_resolve = bool(codes) and codes <= DEPENDENCY_CODES and plan.ready_after_resolve
         return r
 
 

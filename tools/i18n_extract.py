@@ -1,6 +1,6 @@
 """List UI strings that need a German translation.
 
-Collects literal arguments of ``t("...")`` calls plus the static display strings that reach ``t()``
+Collects literal arguments of ``t("...")`` and ``msg("...")`` calls plus the static display strings that reach ``t()``
 through data (profile labels, parameter help, status names). Used by tests/test_i18n_coverage.py.
 """
 
@@ -18,7 +18,8 @@ def literal_calls() -> set[str]:
     for path in (ROOT / "akeno").rglob("*.py"):
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "t" and node.args:
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in ("t", "msg") \
+                    and node.args:
                 a = node.args[0]
                 if isinstance(a, ast.Constant) and isinstance(a.value, str):
                     out.add(a.value)

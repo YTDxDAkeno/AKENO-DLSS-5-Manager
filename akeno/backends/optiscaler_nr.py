@@ -207,6 +207,10 @@ class OptiScalerNrAdapter(BackendAdapter):
     def required_package_files(self, game: Game, package: Package) -> dict[str, str | None]:
         return {n: package.files.get(n) for n in ("OptiScaler.dll", FORWARDER, "OptiScaler.ini")}
 
+    def dependency_specs(self, game: Game) -> list[tuple[str, bool]]:
+        # nvngx_dlss.dll: the game's own copy is used; without one OptiScaler's DLSS output and pre-SR need it.
+        return [("package", True), ("nr_runtime", True), ("dlss_runtime", "dlss" not in game.upscaler_inputs)]
+
     def config_text(self, template: str, game: Game, params: dict[str, Any]) -> str:
         values = ini.split_params(params)
         up = UPSCALER_KEY.get(game.api)

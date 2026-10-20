@@ -34,6 +34,16 @@
       ]
     }
   ],
+  "nr_runtimes": [
+    {
+      "version": "310.8.*",
+      "signed": true,
+      "works_on": ["RTX 50"],
+      "fails_on": ["RTX 20", "RTX 30", "RTX 40"],
+      "failure": "feature 18 create failed with 0xbad00001",
+      "evidence": {"source": "DLSS5-Feeder README: NVIDIA's signed nvngx_dlssnr.dll 310.8.0 creates the neural feature on RTX 50-series GPUs only (issue #131)", "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/issues/131", "date": "2026-10"}
+    }
+  ],
   "drivers": [
     {
       "backend": "dlss5_feeder",

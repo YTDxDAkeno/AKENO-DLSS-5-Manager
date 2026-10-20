@@ -119,6 +119,11 @@ class BackendAdapter(ABC):
         """Package members (relative to package root) that must be extracted for this game."""
         return {}
 
+    def dependency_specs(self, game: Game) -> list[tuple[str, bool]]:
+        """(dependency key, required) for this game. Keys: package, nr_runtime, dlss_runtime, reshade, consumer.
+        See :mod:`akeno.deps.resolver` for how each key is found, obtained or explained."""
+        return [("package", True)]
+
     @abstractmethod
     def plan(self, game: Game, package: Package, params: dict[str, Any], ctx: BackendContext) -> InstallPlan:
         """Files to write for an installation (or reconfiguration)."""
