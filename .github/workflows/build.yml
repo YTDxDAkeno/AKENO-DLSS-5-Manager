@@ -62,6 +62,10 @@ jobs:
           $p = Start-Process -FilePath "dist\AKENO\AKENO.exe" -ArgumentList "--smoke-test" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "packaged smoke test failed with exit code $($p.ExitCode)" }
           Get-Content "$env:AKENO_HOME\logs\smoke-test.txt"
+          "### Packaged AKENO.exe smoke test (runner hardware, no NVIDIA GPU)" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Get-Content "$env:AKENO_HOME\logs\smoke-test.txt" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - name: Design assets are inside the package
         shell: pwsh
         run: |
@@ -99,6 +103,10 @@ jobs:
           $lines = Get-ChildItem packaging\out -File | Get-FileHash -Algorithm SHA256 | ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" }
           $lines | Set-Content -Path packaging\out\SHA256SUMS.txt -Encoding ascii
           Get-Content packaging\out\SHA256SUMS.txt
+          "### SHA-256 of the build artifacts" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Get-Content packaging\out\SHA256SUMS.txt | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
           name: AKENO-DLSS5-Manager-windows-x64
