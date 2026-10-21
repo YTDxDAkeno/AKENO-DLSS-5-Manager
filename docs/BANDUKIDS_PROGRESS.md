@@ -50,3 +50,10 @@ Use Git checkpoints within five minutes during active work. Continue from git st
 - Final review found that an unrelated signed-runtime FiveM recipe could otherwise populate the Bandukids-specific diagnostic eligibility label. Bound that label to the exact named community policy/candidate/runtime hash; added both signed and named-recipe diagnostic regression cases.
 - Focused FiveM diagnostics/integration tests passed (see current test output); prior e090b09 full suite was 304 passed, 1 Windows-only skip. Final Windows build must use this follow-up source, not an older green checkpoint. Source v1.3.1 smoke passed with all 8 pages and 19 design assets.
 - Production recipe catalog remains empty and no real FiveM/RTX 4080 approval is implied. Next: final full suite and exact-commit Windows artifact/screenshot/checksum verification.
+
+## Checkpoint — final Windows build green
+
+- Frozen source: a6b039ff5975325c31d073675c5922550a16ffff. Full local regression: **306 passed, 1 Windows-only skip** (52.26s). Focused diagnostic/integration checks: **21 passed**.
+- Exact-source Windows run https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39652619114 succeeded: **307 Windows tests passed**; Linux CI 306 passed/1 skipped. Source/packaged v1.3.1 smoke, all 8 pages/19 assets, normal packaged GUI lifetime, screenshot generation, ZIP and Inno Setup installer succeeded.
+- Build artifact ID 12370950135; evidence/screenshots artifact ID 12370895288. Download is currently blocked by network policy at the observed productionresultssa6.blob.core.windows.net host (403; signed URL query kept private). Added only that host to the preserved environment draft; saved configuration requires publication and did not change current access. No independent artifact checksum/ZIP inspection is claimed yet.
+- The same-source pull_request run 39652628758 also succeeded. Next: attempt its normal artifact download, independently verify if accessible, document exact checksums and remaining limitations, finish continuation bundle and draft PR.
