@@ -122,13 +122,16 @@ class CommunityRuntimeDialog(QDialog):
     def choose_review(self):
         path, _ = QFileDialog.getOpenFileName(self, t("Load review record"), "", "JSON (*.json)")
         if path:
-            try: self.review = load_review(path); self.invalidate(); self.inspect()
+            self.review = self.evaluation = None
+            self.invalidate()
+            self.category.set(t("Unverified — Import requires further review"), "pending")
+            try: self.review = load_review(path); self.inspect()
             except (OSError, ValueError) as exc: self.message.setText(t(str(exc)))
 
     def select_copy(self, *_):
         data = self.copies.currentData()
         if data:
-            self.path.setText(data['path']); self.review = data.get('review'); self.invalidate(); self.inspect()
+            self.path.setText(data['path']); self.review = data.get('review'); self.evaluation = None; self.invalidate(); self.inspect()
 
     def discover(self):
         def done(reports):

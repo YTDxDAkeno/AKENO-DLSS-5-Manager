@@ -4,6 +4,10 @@ Reviewed 2026-10-20 for v1.1.0. This page is the reasoning behind `akeno/deps/re
 `akeno/backends/runtimes.py`. If a fact here changes (a new official download, a licence change), update
 this page, the catalog and the resolver together.
 
+## v1.3 separate local community workflow
+
+The historic v1.1 signed-only import rules below still apply to the official dependency workflow. v1.3 additionally provides a separately scoped user-reviewed local community cache and offline experiment service; it does not disable the official verifier or execute upstream installers. See [COMMUNITY_RUNTIME_GUIDE.md](COMMUNITY_RUNTIME_GUIDE.md) and [COMMUNITY_RUNTIME_REVIEW.md](COMMUNITY_RUNTIME_REVIEW.md). Modified/unsigned models are never NVIDIA-authenticated, bundled or automatically downloaded; uncertain licensing/provenance keeps them unreviewed. Local review records are explicit user evidence, not automatic maintainer endorsement.
+
 ## Summary
 
 | Dependency | Needed by | Source AKENO uses | Automatic? | Why |

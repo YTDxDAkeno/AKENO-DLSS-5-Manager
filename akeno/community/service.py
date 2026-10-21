@@ -46,6 +46,7 @@ class CommunityService:
         self.s = services
         self.runtimes = manager or RuntimeManager(services.db)
         self.observations = {}
+        self.seen_live = set()
 
     def _game(self, game_id):
         game = self.s.library.reanalyze(game_id)
@@ -212,6 +213,10 @@ class CommunityService:
         observation = self.observations.get(game_id)
         live = [p.path for p in processes.processes_in_dir(game.install_dir) if p.path]
         evidence = neural.inspect(game.target_dir, observation, game.id, live)
+        exact_live = bool(game.exe_path and str(Path(game.exe_path).resolve()) in {str(Path(p).resolve()) for p in live})
+        if exact_live:
+            self.seen_live.add(game.id)
+        stability = "process_observed" if exact_live else ("process_exit_observed" if game.id in self.seen_live else "not_observed")
         sessions = self.s.benchmarks.sessions(game.id)
         tx = self.s.installer.active_install(game.id)
         return {"game": game.to_dict(), "gpu": self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
@@ -219,6 +224,10 @@ class CommunityService:
             "renderer": game.api.value, "transaction": tx, "neural": asdict(evidence),
             "runtime": self.s.db.get_setting("community-runtime:" + tx["params"].get("_community_runtime", "")) if tx else None,
             "observation": asdict(observation) if observation else None, "measured_sessions": sessions,
+            "measurement_attribution": "Historical sessions for this game; not automatically matched to this runtime hash or NR state.",
+            "stability": {"state": stability, "crash_verified": False,
+                "errors": [line for line in evidence.lines if line["stage"] == "failed"],
+                "note": "A process exit alone is not a crash; no stability duration or VRAM measurement is inferred."},
             "limitations": ["User offline attestation is not live session detection.",
                 "Log attribution is not cryptographic GPU execution proof.",
                 "No absence of errors, file install, SR or FG success proves neural evaluation."]}

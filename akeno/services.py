@@ -230,10 +230,12 @@ class AppServices:
         return adapter.plan(game, package, params, ctx)
 
     def install(self, game: Game, plan: InstallPlan, log_cb=None) -> TxResult:
+        if game.launcher == "fivem":
+            raise PermissionError("Use the FiveM prepared transaction workflow")
+        if plan.backend_id.startswith("fivem_legacy:"):
+            raise PermissionError("Use the FiveM prepared transaction workflow")
         if plan.backend_id.startswith("community:") or "_community_runtime" in plan.params:
             raise PermissionError("Use the prepared community experiment workflow")
-        if game.launcher == "fivem" or plan.backend_id.startswith("fivem_legacy:"):
-            raise PermissionError("Use the FiveM prepared transaction workflow")
         adapter = self.registry.get(plan.backend_id)
         result = self.installer.apply(game, plan, log_cb)
         self.installer.prune(game.id, int(self.settings.get("backup_keep_per_game")))
