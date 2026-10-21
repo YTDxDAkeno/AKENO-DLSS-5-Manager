@@ -5,3 +5,5 @@ These are renders of the v1.3 PySide6 dialog in the existing launcher, not mocku
 `runtime-en.png` is the English review tab. `experiment-de-150pct.png` is the German offline tab at 150%, with install disabled. Both were visually inspected. Windows Actions captures all three community tabs at normal and 150% scale alongside all eight original pages and the FiveM wizard. No NVIDIA model is bundled.
 
 `secure-install-de-150pct.png` shows the repaired narrow-window Secure Install layout with explicitly labelled synthetic RTX 5090/617.42 and Offline Graphics TEST FIXTURE data. These numbers are fixture input, not a hardware test. All columns fit; the action card continues below through normal vertical scrolling. Application source: 5dbc03e.
+
+`windows-experiment-150pct.png` and `windows-evidence-en.png` were downloaded from Windows Actions run 39615697165, application commit 5dbc03e. Both were visually inspected. They show labelled synthetic RTX 4080/FiveM data, no reviewed/imported runtime and no invented neural execution.
