@@ -56,6 +56,59 @@ class FiveMService:
         self.services = services
         self.process_reader = process_reader or processes.list_processes
 
+    def diagnose_existing(self, game) -> dict:
+        from dataclasses import asdict
+        from akeno.backends import runtimes
+        from akeno.diagnostics import neural
+        from akeno.games import pe
+        installation = self.services.library.fivem_installations.get(game.id) if game.launcher == "fivem" else None
+        target = installation.plugin_dir if installation else Path(game.target_dir or game.install_dir)
+        mods = installation.inventory if installation else ()
+        paths = {str(f.path) for f in mods}
+        paths.update(m.path for m in game.existing_mods)
+        for name in runtimes.SUPPORTED_RUNTIMES:
+            if (target / name).is_file():
+                paths.add(str(target / name))
+        components = []
+        for path in sorted(paths):
+            p = Path(path)
+            if p.is_symlink() or not p.is_file():
+                continue
+            info = pe.parse(p)
+            record = {"path": str(p), "sha256": sha256_file(p), "version": info.file_version,
+                      "metadata": info.strings, "exports": info.exports[:64], "provenance": "local file; origin not attested"}
+            if p.name.lower() in runtimes.SUPPORTED_RUNTIMES:
+                try:
+                    record["runtime"] = asdict(runtimes.evaluate(str(p)))
+                except (OSError, ValueError) as exc:
+                    record["runtime_error"] = str(exc)
+            components.append(record)
+        gpu = self.services.selected_gpu()
+        return {"schema": 1, "read_only": True, "game_id": game.id, "game": game.name,
+                "gpu": gpu.to_dict() if gpu else None, "target": str(target), "components": components,
+                "neural": asdict(neural.inspect(target)),
+                "note": "Local inventory is not a redistribution license or proof of neural execution. No files were imported or replaced."}
+
+    def policy(self, game_id: str) -> ServerPolicy:
+        value = self.services.db.get_setting("fivem_policy:" + game_id) or {}
+        try:
+            data = dict(value)
+            for key in ("allowed_backends", "known_graphics_hashes"):
+                data[key] = frozenset(data.get(key, []))
+            return ServerPolicy(**data)
+        except (TypeError, ValueError):
+            return ServerPolicy()
+
+    def save_policy(self, game_id: str, policy: ServerPolicy, backend_id: str) -> None:
+        from dataclasses import asdict
+        if backend_id not in ("dlss5_feeder", "optiscaler_nr"):
+            raise ValueError("Unsupported FiveM backend")
+        data = asdict(policy)
+        data["allowed_backends"] = sorted(policy.allowed_backends)
+        data["known_graphics_hashes"] = sorted(policy.known_graphics_hashes)
+        self.services.db.set_setting("fivem_policy:" + game_id, data)
+        self.services.db.set_setting("fivem_backend:" + game_id, backend_id)
+
     def discover(self, extra_roots=()):
         return discover(extra_roots, self.process_reader())
 
@@ -80,8 +133,18 @@ class FiveMService:
             return CompatibilityResult(CompatStatus.BLOCKED, adapter.id,
                 [Finding(Severity.BLOCKER, "fivem_target", str(exc))], confidence="low")
         result = evaluate(self.services.compat_db, adapter.installation.game, adapter, context)
-        result.status = CompatStatus.BLOCKED if result.blockers or result.status in (
-            CompatStatus.BLOCKED, CompatStatus.INCOMPATIBLE) else CompatStatus.EXPERIMENTAL
+        codes = {f.code for f in result.blockers}
+        security = {"anti_cheat", "fivem_protection", "fivem_runtime_integrity", "fivem_existing_runtime",
+                    "fivem_target", "fivem_unreviewed_plugin", "fivem_external_hook", "fivem_identity"}
+        denied = adapter.policy.graphics_plugins_allowed is False or adapter.policy.pure_level == 2
+        if codes & security or denied:
+            result.status = CompatStatus.BLOCKED
+        elif adapter.installation.edition.value == "enhanced":
+            result.status = CompatStatus.INCOMPATIBLE
+        elif result.blockers:
+            result.status = CompatStatus.INSUFFICIENT
+        else:
+            result.status = CompatStatus.EXPERIMENTAL
         result.confidence = "low"
         return result
 

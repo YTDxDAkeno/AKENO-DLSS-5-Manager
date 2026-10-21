@@ -8,7 +8,7 @@ import re
 from pathlib import Path
 from typing import Iterable
 
-from akeno.core.models import Game, GraphicsApi
+from akeno.core.models import Game, GraphicsApi, DetectedFile
 from akeno.games.analyzer import detect_api, detect_anti_cheat, KNOWN_FILES, PROXY_NAMES
 from akeno.games.launchers import RawGame
 from akeno.games import pe
@@ -148,6 +148,9 @@ def inspect_installation(path: str | Path) -> FiveMInstallation | None:
                 anti_cheat=ac, anti_cheat_details=details,
                 notes=["FiveM client only; GTA V and GTA Online files must never be modified.",
                        "SavedBuildNumber is a preference, not evidence of the running build."])
+    game.existing_mods = [DetectedFile(f.path.name, str(f.path), f.kind) for f in inventory]
+    from akeno.paths import resource_dir
+    game.artwork_path = str(Path(resource_dir()) / "assets" / "icons" / "fivem.svg")
     material = [config_hash, sha256_file(launcher), str(gta), edition.value]
     if game_exe and _regular(game_exe):
         material.append(sha256_file(game_exe))

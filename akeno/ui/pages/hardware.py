@@ -271,8 +271,8 @@ class HardwarePage(QWidget):
             hl.setStyleSheet("font-weight: 700;" + (f" color: {theme.CYAN};" if g == generation else ""))
             hl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             self.mx_grid.addWidget(hl, 0, c)
-        nr = {"RTX 50": ("ok", t("Community")), "RTX 40": ("fail", t("Refused*")), "RTX 30": ("fail", t("Refused*")),
-              "RTX 20": ("fail", t("Refused*"))}
+        nr = {"RTX 50": ("ok", t("Community")), "RTX 40": ("warn", t("Experimental")), "RTX 30": ("warn", t("Experimental")),
+              "RTX 20": ("warn", t("Experimental"))}
         for r, (key, name, desc) in enumerate(support.FEATURES, start=1):
             nl = label(t(name))
             nl.setStyleSheet("font-weight: 600;")
@@ -296,8 +296,7 @@ class HardwarePage(QWidget):
                 cl.addStretch(1)
                 cell.setToolTip(t(desc))
                 self.mx_grid.addWidget(cell, r, c)
-        foot = label(t("* NVIDIA's signed runtime 310.8.0 refuses the neural feature on RTX 20/30/40 (DLSS5-Feeder "
-                       "issue #131). Results on older GPUs rely on modified NVIDIA files, which AKENO never installs."),
+        foot = label(t("Older runtime reports are build-specific. New signed runtime versions and user reports require separate neural execution evidence."),
                      "muted", wrap=True)
         self.mx_grid.addWidget(foot, len(support.FEATURES) + 1, 0, 1, len(gens) + 1)
 

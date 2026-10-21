@@ -73,6 +73,8 @@ class AppServices:
         self.benchmarks = BenchmarkService(self.db, PresentMonRunner(pm, self.downloads) if pm else None)
         from akeno.deps.resolver import DependencyResolver
         self.deps = DependencyResolver(self)
+        from akeno.fivem.service import FiveMService
+        self.fivem = FiveMService(self)
         self.system: SystemInfo | None = None
         cached = self.db.get_setting("_last_system")
         if cached:
@@ -110,6 +112,21 @@ class AppServices:
     def backend_for(self, game: Game | None) -> BackendAdapter | None:
         if game is None:
             return None
+        if game.launcher == "fivem":
+            installation = self.library.fivem_installations.get(game.id)
+            if installation is None:
+                from akeno.fivem.discovery import inspect_installation
+                installation = inspect_installation(game.install_dir)
+                if installation:
+                    self.library.fivem_installations[game.id] = installation
+            if installation is None:
+                return None
+            policy = self.fivem.policy(game.id)
+            backend_id = self.db.get_setting("fivem_backend:" + game.id, "dlss5_feeder")
+            from akeno.fivem.compatibility import REVIEWED_BACKENDS
+            review = next((r for r in REVIEWED_BACKENDS if r.backend_id == backend_id
+                           and r.client_fingerprint == installation.fingerprint), None)
+            return self.fivem.adapter(installation, backend_id, policy, review)
         ov = self.db.game_overrides(game.id).get("backend")
         if ov and self.registry.get(ov):
             return self.registry.get(ov)
@@ -133,6 +150,10 @@ class AppServices:
                                      bool(os.environ.get("AKENO_ALLOW_UNVERIFIED_RUNTIME_FOR_TESTS")))
 
     def context(self, game: Game, staging: Path | None = None, allow_disable: list[str] | None = None) -> BackendContext:
+        if game.launcher == "fivem":
+            adapter = self.backend_for(game)
+            if adapter:
+                return self.fivem.context(adapter, staging)
         managed = self.installer.managed_files(game.id, game.target_dir) if game.target_dir else set()
         return BackendContext(system=self.system, gpu=self.selected_gpu(), runtime_lookup=self.runtime_lookup,
                               staging_dir=staging, managed_files=managed, allow_disable=list(allow_disable or []),
@@ -142,6 +163,8 @@ class AppServices:
         adapter = adapter or self.backend_for(game)
         if adapter is None:
             return None
+        if game.launcher == "fivem":
+            return self.fivem.compatibility(adapter)
         return evaluate(self.compat_db, game, adapter, self.context(game))
 
     def recommendation(self, game: Game | None) -> Recommendation:
@@ -167,6 +190,8 @@ class AppServices:
 
     # -- packages ----------------------------------------------------------------------------
     def package_for(self, adapter: BackendAdapter) -> Package | None:
+        if adapter.id.startswith("fivem_legacy:"):
+            return adapter.package
         pid = self.settings.get(f"package.{adapter.id}")
         p = self.catalog.package(pid) if pid else None
         return p or self.catalog.best_package(adapter.id)
@@ -197,10 +222,14 @@ class AppServices:
 
     def plan_install(self, game: Game, adapter: BackendAdapter, package: Package, params: dict[str, Any],
                      staging: Path, allow_disable: list[str] | None = None) -> InstallPlan:
+        if game.launcher == "fivem":
+            raise PermissionError("Use the FiveM setup wizard and its prepared transaction workflow")
         ctx = self.context(game, staging, allow_disable)
         return adapter.plan(game, package, params, ctx)
 
     def install(self, game: Game, plan: InstallPlan, log_cb=None) -> TxResult:
+        if game.launcher == "fivem" or plan.backend_id.startswith("fivem_legacy:"):
+            raise PermissionError("Use the FiveM prepared transaction workflow")
         adapter = self.registry.get(plan.backend_id)
         result = self.installer.apply(game, plan, log_cb)
         self.installer.prune(game.id, int(self.settings.get("backup_keep_per_game")))
@@ -224,6 +253,8 @@ class AppServices:
         return result
 
     def configure(self, game: Game, adapter: BackendAdapter, params: dict[str, Any], profile_name: str) -> TxResult:
+        if game.launcher == "fivem":
+            return TxResult(False, None, "failed", ["FiveM configuration changes require a reviewed installation plan."])
         active = self.installer.active_install(game.id, adapter.id)
         if not active:
             return TxResult(False, None, "failed", [msg("{short} is not installed in this game.", short=adapter.short)])
@@ -241,6 +272,12 @@ class AppServices:
 
     def restore(self, tx_id: int, force: bool = False) -> TxResult:
         tx = self.db.get_transaction(tx_id)
+        if tx and tx["backend_id"].startswith("fivem_legacy:"):
+            from akeno.fivem.discovery import inspect_installation
+            installation = inspect_installation(Path(tx["target_dir"]).parent.parent)
+            if installation is None:
+                raise PermissionError("The FiveM client must be inspected before restore")
+            return self.fivem.restore(installation, tx_id, force)
         res = self.installer.restore(tx_id, force=force)
         if tx:
             self.library.reanalyze(tx["game_id"])
@@ -248,6 +285,10 @@ class AppServices:
 
     def create_snapshot(self, game: Game) -> TxResult:
         """Manual backup of every graphics-mod related file next to the game executable."""
+        if game.launcher == "fivem":
+            adapter = self.backend_for(game)
+            if adapter:
+                return self.fivem.snapshot(adapter.installation)
         if not game.target_dir:
             return TxResult(False, None, "failed", ["The game executable is unknown."])
         from akeno.games.analyzer import KNOWN_FILES, PROXY_NAMES

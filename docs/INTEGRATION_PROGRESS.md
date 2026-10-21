@@ -30,3 +30,13 @@ Commit/push meaningful checkpoints at most five minutes apart during active work
 - Added local Swapper cache roots, alternate NGX model store and bounded nested game search. No proprietary downloads.
 - Father's follow-up: tool described as “DLSS 5 Swapper”, other programs, latest driver; exact game/runtime/driver/log evidence still unavailable. Do not convert that report into a verified NR claim.
 - Next: integrated FiveM service/library/UI, attributed neural diagnostics, compatibility presentation, regression tests and Windows build.
+
+## Checkpoint — integrated wizard and evidence pipeline
+
+- NVIDIA fix tests: 45 targeted runtime/resolver tests passed; 89 FiveM/library/install tests passed before UI wiring.
+- FiveM discovery now persists as a distinct launcher entry, retains its inspection through reanalysis, and uses original GPL artwork. Generic install/configure paths explicitly reject FiveM; reviewed transactions remain routed through FiveMService.
+- Added an integrated four-step FiveM panel in Library/Secure Install, persistent owned-server policy, read-only diagnostic export, observation/log verification, snapshot and reviewed-plan controls. All eight existing pages remain.
+- Added append-aware log observations with artifact hashes, selected-game/target binding, live process-path attribution, rotation/truncation checks and separate installed/loaded/initialized/running/verified states. Known OptiScaler build/failure markers are treated separately from evaluation success. Historical logs do not count as fresh verified execution.
+- Updated compatibility presentation: missing evidence is unknown; denied policies and signature/path failures remain blocked. Some older tests intentionally expect the former blanket blocked/creation-is-verified behavior and are being updated to the stricter/new semantics. Full UI/i18n regression work is still in progress; this is NOT a final validated build.
+- GitHub credential failure: initial branch push succeeded at f470bb3; later Git reads/push and API return authentication errors. User asked to renew the existing connection, not provide a token in chat. Local commits continue; a Git bundle is saved at `/workspace/akeno-v1.2-fivem-integration.bundle` for recovery. Pushes/PR/Windows Actions remain dependent on restored access.
+- Next: finish translations and regression tests, diagnose any actual UI failures, research newer runtime evidence, screenshots and packaging validation.
