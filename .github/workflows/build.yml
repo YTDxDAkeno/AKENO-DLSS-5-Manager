@@ -50,6 +50,17 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           AKENO_HOME: ${{ runner.temp }}\akeno-smoke
+      - name: FiveM RTX 4080 fixture screenshots (not hardware evidence)
+        shell: pwsh
+        run: |
+          python tools/fivem_fixture.py "$env:RUNNER_TEMP/akeno-fivem-fixture" "$env:RUNNER_TEMP/akeno-fivem-games"
+          if ($LASTEXITCODE -ne 0) { throw "FiveM fixture creation failed" }
+          $env:AKENO_HOME = "$env:RUNNER_TEMP/akeno-fivem-fixture"
+          $env:QT_QPA_PLATFORM = "offscreen"
+          python -m akeno --screenshot screenshots/fivem-fixture
+          if ($LASTEXITCODE -ne 0) { throw "FiveM screenshots failed" }
+          python -m akeno --screenshot screenshots/fivem-fixture-150pct --screenshot-size 1280x720 --screenshot-scale 1.5
+          if ($LASTEXITCODE -ne 0) { throw "FiveM scaled screenshots failed" }
       - name: Build icon
         run: python packaging\make_icon.py
       - name: PyInstaller build
@@ -71,6 +82,7 @@ jobs:
         run: |
           $assets = Get-ChildItem -Recurse -File dist\AKENO -Include *.png,*.svg | Where-Object { $_.FullName -match '\\akeno\\data\\assets\\' }
           $assets | ForEach-Object { $_.FullName.Substring((Resolve-Path dist\AKENO).Path.Length) }
+          if (-not ($assets | Where-Object { $_.Name -eq "fivem.svg" })) { throw "FiveM artwork missing from package" }
           if ($assets.Count -lt 19) { throw "expected 19 design assets in the package, found $($assets.Count)" }
       - name: Packaged GUI starts normally and keeps running
         shell: pwsh
@@ -120,6 +132,8 @@ jobs:
             test-results.xml
             screenshots/windows-runner/*.png
             screenshots/windows-runner-150pct/*.png
+            screenshots/fivem-fixture/*.png
+            screenshots/fivem-fixture-150pct/*.png
             ${{ runner.temp }}/akeno-gui/logs/*
             ${{ runner.temp }}/akeno-smoke/logs/*
             ${{ runner.temp }}/akeno-exe/logs/*

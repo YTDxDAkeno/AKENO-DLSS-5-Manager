@@ -184,13 +184,13 @@ def test_feeder_dependencies_are_guided_not_faked(env):
     assert not plan.ready_after_resolve
 
 
-def test_runtime_note_reports_documented_failure_on_older_gpu(env):
+def test_runtime_note_preserves_uncertainty_for_older_gpu(env):
     svc, game, _, driver, _ = env
     svc.system = system_with(rtx())        # RTX 3080
     nv_dll(driver / NR_RUNTIME, version=(310, 8, 0, 0))
     svc.discover_dependencies()
     dep = svc.dependency_plan(game).get("nr_runtime")
-    assert "refuse" in dep.note and "RTX 30" in dep.note
+    assert "exact runtime hash" in dep.note and "RTX 30" in dep.note
 
 
 def test_messages_translate_completely(env):

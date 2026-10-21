@@ -1,7 +1,7 @@
 """Authenticode signature checks for user-supplied NVIDIA runtime files (Windows only).
 
 ``WinVerifyTrust`` answers whether the embedded signature is valid and chains to a trusted root;
-the signer's subject name is read with ``CryptQueryObject``/``CertGetNameStringW``. A file counts as
+the signer's subject name is read from the verified provider state with ``CertGetNameStringW``. A file counts as
 an official NVIDIA binary only when both hold: valid signature *and* signer "NVIDIA Corporation".
 """
 

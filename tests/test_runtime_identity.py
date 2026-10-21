@@ -80,3 +80,24 @@ def test_same_display_version_is_not_a_build_identity(tmp_path):
     b = candidate(tmp_path / "b", original="CL 37460577", version=(310, 6, 0, 0))
     ca, cb = (runtimes.evaluate(str(p), verifier=fake_verifier) for p in (a, b))
     assert ca.version == cb.version and ca.sha256 != cb.sha256 and ca.original_name != cb.original_name
+
+
+def test_file_changed_during_signature_check_is_rejected(tmp_path):
+    p = candidate(tmp_path)
+    def mutate(path):
+        with open(path, "ab") as f:
+            f.write(b"changed during scan")
+        return SignatureInfo(True, True, "NVIDIA Corporation", "fixture")
+    c = runtimes.evaluate(str(p), verifier=mutate)
+    assert c.trust == TrustState.BLOCKED and "changed during" in c.detail
+
+
+@pytest.mark.skipif(__import__("os").name != "nt", reason="Real Windows Authenticode API test")
+def test_windows_verifies_actual_microsoft_signer_not_an_arbitrary_certificate():
+    import os
+    from akeno.security import authenticode
+    path = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    signature = authenticode.verify(str(path))
+    assert signature.checked and signature.valid, signature.detail
+    assert signature.signer and "microsoft" in signature.signer.casefold()
+    assert not signature.is_nvidia

@@ -58,3 +58,13 @@ Commit/push meaningful checkpoints at most five minutes apart during active work
 - Added a clearly labelled RTX 4080/FiveM screenshot fixture to the existing app, preserving the eight pages and all original artwork. Initial screenshot-fixture syntax error corrected before counting any fixture render. First real launcher render generated successfully; analysis display refined to readable component/status controls with optional technical details rather than raw JSON as the primary UI.
 - Snapshot restore now routes through FiveM safety guards from the main Backups page. User-facing FiveM prerequisites are localized; exact original technical details remain available in diagnostic exports.
 - Current next steps: run updated complete suite, inspect final English/German and scaled renders, publish new integration PR and verify Windows workflow/artifacts. Existing PR #1 remains open.
+
+## Checkpoint — Windows evidence and final regression pass
+
+- Restored-auth checkpoint b16c83b passed the full Windows and Linux Actions pipeline: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39521388662 . This validates that earlier integrated snapshot, not every later edit.
+- Added real Windows Authenticode API regression using a Microsoft-signed system executable (no proprietary test DLL committed); Linux correctly skips it. Added file-change-during-signature-check rejection.
+- 42 targeted runtime/resolver/integration/i18n tests passed with 1 Windows-only skip. Full latest suite running. One prior full run was 227 passed / 1 failed because the resolver discarded the new unknown verdict's text; corrected resolver to retain the exact-build uncertainty note and updated its prior blanket-refusal expectation.
+- Existing-setup diagnosis/import dialog is available inside Secure Install for ordinary games too. User permission is required for reuse; import remains signature/identity checked and does not replace game files.
+- Added original FiveM art packaging check and Windows screenshot steps for the clearly labelled RTX 4080/FiveM fixture at normal and 150% scale. Selected actual launcher screenshots saved under docs/screenshots/v1.2-fivem/.
+- Documented source pins, official Swapper behavior, runtime identity repair, 310.9.16 uncertainty, driver 610.88 warning and physical-PC acceptance work in docs/RTX_RUNTIME_REVIEW.md.
+- Next: create integration draft PR, finish current full tests and Windows build, inspect scaled/German renders and publish exact artifact/checksum links. No physical RTX/FiveM compatibility claim is allowed.

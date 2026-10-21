@@ -1,6 +1,6 @@
-# FiveM Legacy integration (experimental, opt-in)
+# FiveM Legacy integration (v1.2 integrated wizard, experimental)
 
-The FiveM-specific development pipeline is implemented under `akeno/fivem`. **No FiveM neural-rendering backend is currently approved for automatic installation. RTX 4080 / 16 GB has not been tested.** This is a deliberate result of the evidence review, not a claim that a generic DLSS package will work in FiveM.
+The FiveM-specific pipeline is implemented under `akeno/fivem` and integrated into the existing Library and Secure Install pages in v1.2. See [RTX_RUNTIME_REVIEW.md](RTX_RUNTIME_REVIEW.md) for current build-specific evidence and read-only diagnosis. **No FiveM neural-rendering backend is currently approved for automatic installation. RTX 4080 / 16 GB has not been tested.** This is a deliberate result of the evidence review, not a claim that a generic DLSS package will work in FiveM.
 
 ## What is implemented
 
@@ -8,7 +8,7 @@ The FiveM-specific development pipeline is implemented under `akeno/fivem`. **No
 - `CitizenFX.ini` / `IVPath` inspection, positive Legacy/Enhanced separation, executable PE architecture/API inspection, and bounded inventories of the application, plugins/mods and base-game graphics files. Ambiguous/missing editions stay unknown. `SavedBuildNumber` is only a configured preference.
 - FiveM process classification independent from GTA V. `GTA5.exe` alone cannot distinguish story mode from GTA Online; the result explicitly says session unknown. Neither session is an installation target.
 - Explicit operator permission, effective server-policy and experimental-consent gates; GPU, driver, artifact and signed-runtime evidence checks. No driver minimum, VRAM fit or performance figure is invented.
-- An opt-in wrapper for the existing `dlss5_feeder` and `optiscaler_nr` BackendAdapters; exact source/output pins and a fixed `FiveM.app/plugins` target. The default registry, shared models, launcher, design and dependency installer are untouched.
+- An opt-in wrapper for the existing `dlss5_feeder` and `optiscaler_nr` BackendAdapters; exact source/output pins and a fixed `FiveM.app/plugins` target. The existing registry, shared models, launcher design and dependency installer are reused; FiveM routing adds its own gates.
 - Plans staged with AKENO's existing downloader/archive verification, then applied by its Transaction Installer. The facade rechecks permissions, processes, client fingerprint, source hashes and plan integrity before applying. It supports rollback, post-copy validation, restore conflicts and snapshots.
 - Symlinks, Windows junctions, unknown plugin binaries, foreign transaction temporary files, edited plans and changed runtime files are refused. Foreign plugins are never automatically disabled or overwritten.
 - A read-only CLI, plus synthetic filesystem/PE/transaction tests. No upstream installers, FiveM binaries or proprietary runtime downloads are executed by this integration.
@@ -58,7 +58,7 @@ There is no automatic fallback from neural rendering to ordinary DLSS SR, frame 
 
 ## Integration contract for the launcher follow-up
 
-Use `FiveMService(app_services)` from `akeno.fivem.service`; it reuses the existing registry, catalog, compatibility database, runtime import and transactional storage. Keep the existing checkout: cloud tasks are already isolated, and no Git worktree is needed. Coordinate UI/service wiring with the current launcher branch before changing shared entry points.
+Use `FiveMService(app_services)` from `akeno.fivem.service`; it reuses the existing registry, catalog, compatibility database, runtime import and transactional storage. Keep the existing checkout: cloud tasks are already isolated, and no Git worktree is needed. The integration branch combines the completed v1.1 launcher and existing FiveM work. All eight pages and the original design assets are preserved.
 
 Read-only integration example:
 
@@ -70,7 +70,7 @@ five_m = FiveMService(app_services)
 for installation in five_m.discover():
     adapter = five_m.adapter(installation, 'dlss5_feeder', ServerPolicy())
     result = five_m.compatibility(adapter)
-    # Default is blocked, with specific missing-permission/evidence findings.
+    # Default has insufficient evidence, with specific missing-permission/evidence findings; deployment stays disabled.
 ```
 
 Future UI work must preserve the `FiveMInstallation` alongside its shared `Game` and keep the FiveM identity out of the generic GTA/manual discovery path. `as_raw_game` is the Game Discovery bridge; generic reanalysis alone loses FiveM-specific evidence and target rules. Do not call the generic UI install path for these plans: use `FiveMService.prepare`, `install(prepared, current_policy)` and `restore`. Do not register a permissive adapter globally or change generic safety defaults to make FiveM pass.
@@ -92,3 +92,5 @@ The only writable application target is `FiveM.app/plugins`. A backend target vi
 5. Close FiveM and mod managers; create a snapshot, inspect the plan, install, and keep transaction logs. Confirm the real FiveM process loads the intended plugin/runtime and that the neural pass actually evaluates. Observe depth/motion quality, HUD/text artifacts, stability, frame times and VRAM under representative scenes. Ordinary SR/FG success is insufficient.
 6. Verify behavior under the permitted server policy, then restore and compare all original file hashes. Confirm GTX/GTA base-game files remained unchanged and test crash recovery/restore conflicts. Never claim guaranteed protection from bans.
 7. Attach logs and measured results, including failures, before considering a supported recipe or final launcher UI integration. There are currently **no real-hardware acceptance results** in this branch.
+
+In v1.2 the owned-server profile is persisted per FiveM client. The wizard separates server rules, hardware capabilities, runtime inventory, neural execution evidence and deployment eligibility. Unknown compatibility is distinct from explicit policy denial/security blocks. Existing PR #1 remains the original isolated backend work; see docs/INTEGRATION_PROGRESS.md for the integrated branch.

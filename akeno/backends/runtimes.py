@@ -21,7 +21,6 @@ from __future__ import annotations
 import glob
 import logging
 import os
-import re
 import shutil
 import subprocess
 import tempfile
@@ -231,6 +230,9 @@ def evaluate(path: str, file_name: str | None = None, source: str = "manual",
         return RuntimeCandidate(path, sha, info.file_version, info.machine, None, TrustState.BLOCKED,
                                 identity_detail, source, want, orig)
     sig = verifier(path)
+    if sha256_file(path) != sha:
+        return RuntimeCandidate(path, sha, info.file_version, info.machine, sig.signer, TrustState.BLOCKED,
+                                "File changed during identity/signature verification.", source, want, orig)
     if not sig.checked:
         trust, detail = TrustState.UNVERIFIED, sig.detail
     elif sig.is_nvidia:

@@ -268,6 +268,7 @@ class InstallPage(QWidget):
         rbr.addWidget(button(t("Find in NVIDIA driver"), "search", on_click=self._find_runtime))
         rbr.addWidget(button(t("Import file…"), "file", on_click=self._import_runtime))
         rbr.addStretch(1)
+        rbr.addWidget(button(t("Inspect existing setup"), "file", on_click=self._inspect_existing))
         rtl.addLayout(rbr)
         self.sec_deps.add_extra(rt_tools)
         self.pkg_info = label("", "muted", wrap=True)
@@ -368,6 +369,13 @@ class InstallPage(QWidget):
             self._update_buttons()
 
     # ------------------------------------------------------------------------------------------
+    def _inspect_existing(self):
+        game = self.s.selected_game()
+        if game:
+            from akeno.ui.runtime_diagnostics import RuntimeDiagnosticsDialog
+            dialog = RuntimeDiagnosticsDialog(self.ctl, game, self)
+            dialog.exec()
+
     def _ctx(self):
         g = self.s.selected_game()
         a = self.s.backend_for(g)
