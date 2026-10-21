@@ -177,7 +177,7 @@ class LibraryPage(QWidget):
         self.detail_id = g.id
         if g.launcher == "fivem":
             from akeno.ui.fivem_panel import FiveMPanel
-            self.detail_body.addWidget(FiveMPanel(self.ctl, g))
+            self.detail_body.addWidget(FiveMPanel(self.ctl, g, compact=True))
             self.detail_body.addWidget(button(t("Open FiveM setup"), "sliders", "primary",
                 on_click=lambda: self.ctl.navigate.emit("install")))
             return

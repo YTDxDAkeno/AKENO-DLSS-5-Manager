@@ -51,7 +51,7 @@ OFFICIAL = {
 
 # Used when the compatibility database carries no "nr_runtimes" section (older or downloaded copies).
 DEFAULT_NR_RUNTIMES: list[dict[str, Any]] = [{
-    "version": "310.8.*",
+    "version": "310.8.0.0",
     "signed": True,
     "works_on": ["RTX 50"],
     "fails_on": ["RTX 20", "RTX 30", "RTX 40"],
@@ -85,7 +85,7 @@ class RuntimeVerdict:
 
 
 def runtime_verdict(version: str | None, generation: str | None, data: list[dict[str, Any]] | None = None,
-                    present: bool = True) -> RuntimeVerdict:
+                    present: bool = True, build_sha256: str | None = None) -> RuntimeVerdict:
     """Documented behaviour of NVIDIA's signed runtime ``version`` on ``generation``."""
     if not present:
         return RuntimeVerdict("none", msg("No NVIDIA Neural Rendering runtime is available yet."))
@@ -95,6 +95,11 @@ def runtime_verdict(version: str | None, generation: str | None, data: list[dict
         if not _version_matches(version, entry.get("version", "")):
             continue
         ev = entry.get("evidence")
+        hashes = entry.get("sha256") or []
+        if isinstance(hashes, str):
+            hashes = [hashes]
+        if not build_sha256 or build_sha256 not in hashes:
+            return RuntimeVerdict("unknown", msg("A version-level community report exists for {v} on {g}; this exact runtime hash has not been verified.", v=version, g=generation), ev)
         if generation in entry.get("works_on", []):
             return RuntimeVerdict("works", msg("Runtime {v} is reported to create the neural feature on {g}.",
                                                v=version, g=generation), ev)
@@ -203,6 +208,13 @@ def gpu_support(gpu: GpuInfo | None, runtime_version: str | None, runtime_presen
         rep.limitations.append(msg("Results depend on the exact signed runtime hash, driver and backend; verify neural creation and evaluation locally."))
     else:
         rep.community = msg("Unknown NVIDIA GPU generation.")
+    if gpu and gpu.driver_version:
+        try:
+            driver = tuple(int(x) for x in gpu.driver_version.split("."))
+        except ValueError:
+            driver = ()
+        if driver and driver < (616, 56):
+            rep.limitations.append(msg("Driver {v} predates the community test matrix starting at 616.56. Check NVIDIA's official update page; no driver is updated automatically.", v=gpu.driver_version))
     if rv.state == "fails":
         rep.community_state = "fail"
         rep.limitations.append(rv.text)

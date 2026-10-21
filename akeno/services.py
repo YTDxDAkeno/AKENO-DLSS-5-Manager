@@ -283,6 +283,17 @@ class AppServices:
             self.library.reanalyze(tx["game_id"])
         return res
 
+    def restore_snapshot(self, tx_id: int, force: bool = False) -> TxResult:
+        tx = self.db.get_transaction(tx_id)
+        game = self.library.get(tx["game_id"]) if tx else None
+        if game and game.launcher == "fivem":
+            from akeno.fivem.discovery import inspect_installation
+            installation = inspect_installation(game.install_dir)
+            if installation is None:
+                raise PermissionError("The FiveM client must be inspected before restore")
+            return self.fivem.restore_snapshot(installation, tx_id, force)
+        return self.installer.restore_snapshot(tx_id, force)
+
     def create_snapshot(self, game: Game) -> TxResult:
         """Manual backup of every graphics-mod related file next to the game executable."""
         if game.launcher == "fivem":

@@ -6,18 +6,19 @@ from dataclasses import asdict
 from pathlib import Path
 
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLineEdit,
-                               QPlainTextEdit, QTabWidget, QVBoxLayout, QWidget)
+                               QPlainTextEdit, QTabWidget, QVBoxLayout, QWidget, QTableWidget, QTableWidgetItem, QHeaderView)
 
 from akeno.fivem.models import ServerPolicy
+from akeno.fivem.messages import describe
 from akeno.diagnostics import neural
 from akeno.hardware.support import OFFICIAL
 from akeno.i18n import t
 from akeno.ui import theme
-from akeno.ui.widgets import Card, button, confirm, info, label
+from akeno.ui.widgets import Card, KeyValueGrid, button, confirm, info, label
 
 
 class FiveMPanel(Card):
-    def __init__(self, ctl, game=None):
+    def __init__(self, ctl, game=None, compact=False):
         super().__init__(t("FiveM Legacy setup"), "gamepad", theme.CYAN)
         self.ctl, self.s, self.game = ctl, ctl.s, game
         self.prepared = self.observation = None
@@ -32,6 +33,20 @@ class FiveMPanel(Card):
         analysis = QWidget()
         analysis_layout = QVBoxLayout(analysis)
         analysis_layout.addWidget(label(t("Existing files are inspected without replacing a working configuration."), "muted", wrap=True))
+        self.overview = KeyValueGrid(145)
+        analysis_layout.addWidget(self.overview)
+        self.plugins = QTableWidget(0, 3)
+        self.plugins.setHorizontalHeaderLabels([t("Component"), t("Role"), t("Verification")])
+        self.plugins.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.plugins.verticalHeader().hide()
+        self.plugins.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.plugins.setMinimumHeight(110)
+        self.plugins.setMaximumHeight(170)
+        analysis_layout.addWidget(self.plugins)
+        self.report.setMaximumHeight(140)
+        self.report.hide()
+        analysis_layout.addWidget(button(t("Technical details"), "file", kind="link",
+            on_click=lambda: self.report.setVisible(not self.report.isVisible())))
         analysis_layout.addWidget(self.report)
         actions = QHBoxLayout()
         actions.addWidget(button(t("Analyze"), "search", "primary", on_click=self.analyze))
@@ -97,6 +112,9 @@ class FiveMPanel(Card):
         self.owned.toggled.connect(self._invalidate)
         self.consent.toggled.connect(self._invalidate)
         self.refresh(game)
+        if compact:
+            self.tabs.hide()
+            self.body.addWidget(label(t("Open Secure Install for the complete server policy, runtime evidence and backup wizard."), "muted", wrap=True))
 
     def _invalidate(self, *args):
         self.prepared = None
@@ -132,13 +150,25 @@ class FiveMPanel(Card):
                    "GPU": gpu.name if gpu else None, "driver": gpu.driver_version if gpu else None,
                    "plugins": [{"name": f.path.name, "kind": f.kind, "sha256": f.sha256} for f in i.inventory],
                    "inspection_errors": i.errors, "backup_transactions": len(self.s.db.transactions(g.id))}
+        self.overview.set_rows([(t("Edition"), i.edition.value), (t("FiveM folder"), str(i.app_dir)),
+            (t("GTA V folder"), str(i.gta_dir)), (t("GPU"), gpu.name if gpu else t("Unknown")),
+            (t("NVIDIA driver"), gpu.driver_version if gpu else t("Unknown")),
+            (t("Backup transactions"), str(len(self.s.db.transactions(g.id))))])
+        items = [f for f in i.inventory if f.path.is_relative_to(i.plugin_dir)]
+        self.plugins.setRowCount(len(items))
+        for row, item in enumerate(items):
+            role = t("Graphics hook") if item.kind == "graphics_hook" else t("Neural consumer") if item.kind == "neural_consumer" else t("Plugin component")
+            for col, value in enumerate((item.path.name, role, t("Not inspected"))):
+                cell = QTableWidgetItem(value)
+                cell.setToolTip(item.sha256)
+                self.plugins.setItem(row, col, cell)
         self.report.setPlainText(json.dumps(summary, indent=2, ensure_ascii=False))
         self.evidence.setPlainText("\n".join(technologies) + "\n\n" + t("Neural Rendering requires separate runtime, creation and evaluation evidence.") +
             "\n" + t("Driver versions below 616.56 are outside the documented community test matrix; newer versions still require verification.") +
             "\nhttps://www.nvidia.com/en-us/drivers/")
         result = self.s.fivem.compatibility(adapter)
         self.findings.setPlainText(t("Technical status") + ": " + t(result.status.value) + "\n\n" +
-                                  "\n".join(t(f.message) for f in result.findings))
+                                  "\n".join(describe(f) for f in result.findings))
         self.plan_button.setEnabled(adapter.review is not None and not result.blockers)
 
     def _done(self, result):
@@ -166,7 +196,18 @@ class FiveMPanel(Card):
 
     def analyze(self):
         if self.game:
-            self.ctl.analyze_game(self.game, lambda g: self.refresh(g))
+            game_id = self.game.id
+            def work():
+                g = self.s.library.reanalyze(game_id)
+                if g is None:
+                    raise ValueError("FiveM installation is unavailable")
+                return g, self.s.fivem.diagnose_existing(g)
+            def done(value):
+                g, report = value
+                if self.game and self.game.id == g.id:
+                    self.refresh(g)
+                    self.report.setPlainText(json.dumps(report, indent=2, ensure_ascii=False, default=str))
+            self.ctl.run("fivem_analyze", work, done, self._error)
 
     def export(self):
         if not self.game:

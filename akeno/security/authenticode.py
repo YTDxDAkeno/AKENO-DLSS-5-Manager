@@ -59,7 +59,7 @@ def verify(path: str) -> SignatureInfo:
     wd.dwUnionChoice = 1         # WTD_CHOICE_FILE
     wd.pFile = ctypes.pointer(fi)
     wd.dwStateAction = 1         # WTD_STATEACTION_VERIFY
-    wd.dwProvFlags = 0x10        # WTD_CACHE_ONLY_URL_RETRIEVAL
+    wd.dwProvFlags = 0x1000        # WTD_CACHE_ONLY_URL_RETRIEVAL
     wintrust = ctypes.WinDLL("wintrust")
     wintrust.WinVerifyTrust.restype = ctypes.c_long
     wintrust.WinVerifyTrust.argtypes = [wintypes.HWND, ctypes.POINTER(GUID), ctypes.POINTER(WINTRUST_DATA)]

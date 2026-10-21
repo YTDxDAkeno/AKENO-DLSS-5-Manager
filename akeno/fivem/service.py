@@ -65,6 +65,10 @@ class FiveMService:
         target = installation.plugin_dir if installation else Path(game.target_dir or game.install_dir)
         mods = installation.inventory if installation else ()
         paths = {str(f.path) for f in mods}
+        if target.is_dir():
+            for p in list(target.iterdir())[:2000]:
+                if p.suffix.lower() in (".dll", ".asi", ".addon64", ".ini"):
+                    paths.add(str(p))
         paths.update(m.path for m in game.existing_mods)
         for name in runtimes.SUPPORTED_RUNTIMES:
             if (target / name).is_file():
@@ -84,7 +88,7 @@ class FiveMService:
                     record["runtime_error"] = str(exc)
             components.append(record)
         gpu = self.services.selected_gpu()
-        return {"schema": 1, "read_only": True, "game_id": game.id, "game": game.name,
+        return {"schema": 1, "read_only": True, "evidence_level": "local_inventory", "game_id": game.id, "game": game.name,
                 "gpu": gpu.to_dict() if gpu else None, "target": str(target), "components": components,
                 "neural": asdict(neural.inspect(target)),
                 "note": "Local inventory is not a redistribution license or proof of neural execution. No files were imported or replaced."}

@@ -36,7 +36,7 @@
   ],
   "nr_runtimes": [
     {
-      "version": "310.8.*",
+      "version": "310.8.0.0",
       "signed": true,
       "works_on": ["RTX 50"],
       "fails_on": ["RTX 20", "RTX 30", "RTX 40"],

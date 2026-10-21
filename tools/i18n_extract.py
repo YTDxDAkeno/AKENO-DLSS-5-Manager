@@ -47,6 +47,8 @@ def data_strings() -> set[str]:
     from akeno.ui.pages import hardware, install
     out |= {x for _, n, d in support.FEATURES for x in (n, d)}
     out |= set(hardware.R_LABEL.values()) | {title for _, title in install.INSTALL_STEPS}
+    from akeno.fivem.messages import LABELS
+    out |= set(LABELS.values())
     out |= {"System", "Game", "Dependencies", "Installation"}
     out |= {"good", "fair", "poor", "Good", "Fair", "Poor", "low", "medium", "high", "bundled", "downloaded",
             "measured", "estimated", "hardware only"}

@@ -49,3 +49,12 @@ Commit/push meaningful checkpoints at most five minutes apart during active work
 - Updated prior tests to expect unknown/missing evidence without enabling installation, and initialized rather than verified for creation-only log markers. No deployment gate was removed.
 - Added German wizard labels/messages and invalidation of prepared plans when policy controls or selection change.
 - Next: full combined suite, remaining dynamic FiveM message translations, compatibility/driver evidence refinement, fixture screenshots, Windows CI and build artifacts.
+
+## Checkpoint — support distinctions and main-launcher screenshots
+
+- Complete merged suite at b16c83b: **226 passed**. Additional exact-runtime-hash and driver-warning tests plus EN/DE checks: **17 targeted tests passed** after subsequent edits.
+- Version-only community reports no longer establish exact-runtime success/failure; hash-specific evidence is required. Driver 610.88 receives an explicit advisory relative to the documented 616.56+ community matrix, with the official NVIDIA link and no automatic update.
+- Official beeradmoore DLSS Swapper source describes replacing existing DLSS/FSR/XeSS libraries, not adding DLSS to unsupported games. Public issue searches returned no relevant exact 310.9.16/RTX 4080 evidence in the queried projects; absence of a result is NOT proof that the configuration cannot work.
+- Added a clearly labelled RTX 4080/FiveM screenshot fixture to the existing app, preserving the eight pages and all original artwork. Initial screenshot-fixture syntax error corrected before counting any fixture render. First real launcher render generated successfully; analysis display refined to readable component/status controls with optional technical details rather than raw JSON as the primary UI.
+- Snapshot restore now routes through FiveM safety guards from the main Backups page. User-facing FiveM prerequisites are localized; exact original technical details remain available in diagnostic exports.
+- Current next steps: run updated complete suite, inspect final English/German and scaled renders, publish new integration PR and verify Windows workflow/artifacts. Existing PR #1 remains open.

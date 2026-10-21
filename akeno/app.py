@@ -195,6 +195,13 @@ def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
         workers.drain(30000)
         app.processEvents()
         win.grab().save(os.path.join(out_dir, f"{key}.png"))
+        if key == "install" and getattr(win.pages[key], "fivem_panel", None) and win.pages[key].fivem_panel.isVisible():
+            panel = win.pages[key].fivem_panel
+            for index in range(panel.tabs.count()):
+                panel.tabs.setCurrentIndex(index)
+                app.processEvents()
+                win.grab().save(os.path.join(out_dir, f"fivem-step-{index + 1}.png"))
+            panel.tabs.setCurrentIndex(0)
     print(f"saved screenshots to {out_dir}")
     return 0
 
