@@ -43,3 +43,10 @@ Use Git checkpoints within five minutes during active work. Continue from git st
 - Version advanced to 1.3.1; screenshot capture now includes the named Bandukids review screen. Saved English and German 150% source renders with explicit fixture provenance.
 - Added BANDUKIDS_REVIEW.md documenting pinned upstream source, signature/test contradictions, unknown patch/security/permission, hardware matrix, local review and FiveM qualification protocol. Existing generic community and FiveM guides explain the separate route.
 - Next: create draft PR against codex/akeno-v1.3-community-runtime, finish exact-source Windows CI/build verification, archive hashes/results. No actual RTX 4080, proprietary DLL, game or FiveM execution has been tested here.
+
+## Checkpoint — exact candidate diagnostic qualification
+
+- Draft PR #4 created against the existing v1.3 branch: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/pull/4 . GitHub authentication and push are working; no credentials were replaced.
+- Final review found that an unrelated signed-runtime FiveM recipe could otherwise populate the Bandukids-specific diagnostic eligibility label. Bound that label to the exact named community policy/candidate/runtime hash; added both signed and named-recipe diagnostic regression cases.
+- Focused FiveM diagnostics/integration tests passed (see current test output); prior e090b09 full suite was 304 passed, 1 Windows-only skip. Final Windows build must use this follow-up source, not an older green checkpoint. Source v1.3.1 smoke passed with all 8 pages and 19 design assets.
+- Production recipe catalog remains empty and no real FiveM/RTX 4080 approval is implied. Next: final full suite and exact-commit Windows artifact/screenshot/checksum verification.

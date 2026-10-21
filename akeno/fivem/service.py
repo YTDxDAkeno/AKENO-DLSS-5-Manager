@@ -102,9 +102,13 @@ class FiveMService:
             for key in ("allowed_backends", "known_graphics_hashes"):
                 policy[key] = sorted(policy[key])
             from akeno.community.candidates import BANDUKIDS
+            named_recipe = bool(adapter and adapter.review
+                and adapter.review.runtime_policy == "reviewed_bandukids"
+                and adapter.review.community_candidate_id == BANDUKIDS.id
+                and dict(adapter.review.runtime_hashes).get(runtimes.NR_RUNTIME) == BANDUKIDS.sha256)
             extra = {"bandukids_qualification": {"candidate": BANDUKIDS.to_dict(),
-                         "deployment_eligible": bool(compatibility and not compatibility.blockers),
-                         "recipe_available": bool(adapter and adapter.review),
+                         "deployment_eligible": bool(named_recipe and compatibility and not compatibility.blockers),
+                         "recipe_available": named_recipe,
                          "note": "Local hash match/ComfyUI processing is not a FiveM recipe. Exact client/plugin loading, protection compatibility, offline and FiveM neural evaluation plus operator permission are required."},
                      "server_policy": policy, "edition": installation.edition.value,
                      "compatibility": asdict(compatibility) if compatibility else None}

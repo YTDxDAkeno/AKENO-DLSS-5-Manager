@@ -67,3 +67,16 @@ def test_community_route_preserves_fivem_security_gates(bandukids_fivem,change):
     if change=='signature_spoof':w.review=replace(w.review,signed_runtime=True)
     assert w.service.compatibility(adapter(w)).blockers
     with pytest.raises(PermissionError):w.service.prepare(adapter(w))
+
+
+@pytest.mark.parametrize('named_recipe',[False,True])
+def test_diagnostics_do_not_mislabel_signed_recipe_as_bandukids(bandukids_fivem,monkeypatch,named_recipe):
+    w,c=bandukids_fivem
+    game=w.svc.library.add_manual(str(w.root))
+    if not named_recipe:
+        w.review=replace(w.review,runtime_policy='nvidia_signed',signed_runtime=True)
+    selected=adapter(w)
+    monkeypatch.setattr(w.svc,'backend_for',lambda _:selected)
+    report=w.service.diagnose_existing(game)
+    assert report['bandukids_qualification']['recipe_available'] is named_recipe
+    assert report['bandukids_qualification']['deployment_eligible'] is named_recipe
