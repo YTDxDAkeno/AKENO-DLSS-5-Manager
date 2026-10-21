@@ -404,7 +404,9 @@ class DashboardPage(QWidget):
         if rec.pre_sr:
             text += " " + t("Runs before upscaling (pre-SR), at the game's render resolution.")
         # Keep the hero compact: first reason visible, everything in the tooltip.
-        visible = text + ("\n• " + t(rec.reasons[0]) if rec.reasons else "")
+        reason = self.hero_text.fontMetrics().elidedText(
+            t(rec.reasons[0]).replace("\n", " "), Qt.TextElideMode.ElideRight, 500) if rec.reasons else ""
+        visible = text + ("\n• " + reason if reason else "")
         self.hero_text.setText(visible)
         self.hero_text.setToolTip("\n".join([text] + ["• " + t(r) for r in rec.reasons]))
         self.rec_badge.set(t("Basis: {b}", b=t({"measured": "measured", "estimated": "estimated",

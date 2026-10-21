@@ -11,7 +11,7 @@ Licensing (reviewed 2026-10-20, see docs/DEPENDENCIES.md):
 
 So AKENO can only *find and import* a copy that is already on this PC. Every candidate, wherever it was
 found, must carry a valid Authenticode signature from NVIDIA and identify itself (PE version resource) as
-the runtime it is imported as. Modified ("patched") NVIDIA DLLs — the community route for RTX 20/30/40 —
+the runtime it is imported as. Some community distributions use modified ("patched") NVIDIA DLLs. Those
 fail the signature check and are refused, because installing them would mean bypassing NVIDIA's code
 signature. A renamed NVIDIA DLL (e.g. ``nvngx_dlssg.dll`` saved as ``nvngx_dlssnr.dll``) is refused too.
 """

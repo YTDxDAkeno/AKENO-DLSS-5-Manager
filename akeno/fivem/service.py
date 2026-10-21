@@ -86,9 +86,22 @@ class FiveMService:
                     record["runtime"] = asdict(runtimes.evaluate(str(p)))
                 except (OSError, ValueError) as exc:
                     record["runtime_error"] = str(exc)
+            record["catalog_matches"] = [{"package": pkg.id, "upstream": pkg.upstream, "member": name,
+                                           "trust": pkg.trust.value}
+                                          for pkg in self.services.catalog.packages
+                                          for name, pin in pkg.files.items() if pin == record["sha256"]]
             components.append(record)
         gpu = self.services.selected_gpu()
-        return {"schema": 1, "read_only": True, "evidence_level": "local_inventory", "game_id": game.id, "game": game.name,
+        extra = {}
+        if installation:
+            adapter = self.services.backend_for(game)
+            compatibility = self.compatibility(adapter) if adapter else None
+            policy = asdict(self.policy(game.id))
+            for key in ("allowed_backends", "known_graphics_hashes"):
+                policy[key] = sorted(policy[key])
+            extra = {"server_policy": policy, "edition": installation.edition.value,
+                     "compatibility": asdict(compatibility) if compatibility else None}
+        return {"schema": 1, "read_only": True, "evidence_level": "local_inventory", **extra, "game_id": game.id, "game": game.name,
                 "gpu": gpu.to_dict() if gpu else None, "target": str(target), "components": components,
                 "neural": asdict(neural.inspect(target)),
                 "note": "Local inventory is not a redistribution license or proof of neural execution. No files were imported or replaced."}

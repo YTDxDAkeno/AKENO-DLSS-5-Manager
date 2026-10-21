@@ -100,3 +100,9 @@ Commit/push meaningful checkpoints at most five minutes apart during active work
 - The earlier assumption that the remaining failure was still the signature fixture was incorrect. Removed the speculative certificate-store fixture from 8e3c7ed and restored the already-passing real signed python.org test. Final application/tests do not install any trust roots or create signing certificates. Superseded speculative CI runs are cancelled.
 - Root cause: the longer honest VRAM note added dashboard wrapping on Windows. Kept detailed guidance on Hardware Scan, shortened the dashboard recommendation note without promising memory fit, and retained the unchanged no-scroll assertion.
 - Next: verify final Windows tests/packaging and refresh artifact/report links. The actual Windows signer selection is now exercised successfully; real NVIDIA signatures/NR execution on the owner's computers remain unverified.
+
+## Checkpoint — provenance report and bounded dashboard summary
+
+- Existing FiveM diagnostic exports now include the stored server policy, compatibility findings, and exact SHA-256 catalog matches with an explicit warning that a match proves neither execution nor licensing. The analysis table displays component role/version/source/verification. Added coverage and German labels.
+- Windows fd890bb still reports 33 px dashboard overflow (232 tests passed). Shortening the VRAM note alone did not resolve it; that earlier diagnosis was incomplete. The changed exact-build uncertainty can lengthen the recommendation reason. The dashboard now elides the visible reason to one line while preserving every reason in its tooltip; the original no-scroll regression remains unchanged.
+- One targeted run caught the new untranslated Version header before commit; translation added. Final Windows packaging remains pending.

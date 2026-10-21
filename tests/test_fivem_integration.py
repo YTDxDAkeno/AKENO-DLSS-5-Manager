@@ -55,6 +55,9 @@ def test_working_setup_diagnostics_are_read_only(workflow):
     report = w.svc.fivem.diagnose_existing(g)
     assert report["read_only"] and report["game_id"] == g.id
     assert report["gpu"]["name"].endswith("4080") and report["components"]
+    assert report["server_policy"]["graphics_plugins_allowed"] is None
+    assert report["compatibility"]["status"] == "insufficient"
+    assert all("catalog_matches" in c for c in report["components"])
     assert {p: p.read_bytes() for p in w.root.rglob("*") if p.is_file()} == before
     assert w.svc.db.transactions(g.id) == []
 

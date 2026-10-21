@@ -37,8 +37,8 @@ class FiveMPanel(Card):
         analysis_layout.addWidget(label(t("Existing files are inspected without replacing a working configuration."), "muted", wrap=True))
         self.overview = KeyValueGrid(145)
         analysis_layout.addWidget(self.overview)
-        self.plugins = QTableWidget(0, 3)
-        self.plugins.setHorizontalHeaderLabels([t("Component"), t("Role"), t("Verification")])
+        self.plugins = QTableWidget(0, 5)
+        self.plugins.setHorizontalHeaderLabels([t("Component"), t("Role"), t("Version"), t("Source"), t("Verification")])
         self.plugins.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.plugins.verticalHeader().hide()
         self.plugins.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -163,7 +163,7 @@ class FiveMPanel(Card):
         self.plugins.setRowCount(len(items))
         for row, item in enumerate(items):
             role = t("Graphics hook") if item.kind == "graphics_hook" else t("Neural consumer") if item.kind == "neural_consumer" else t("Plugin component")
-            for col, value in enumerate((item.path.name, role, t("Not inspected"))):
+            for col, value in enumerate((item.path.name, role, t("Unknown"), t("Not established"), t("Not inspected"))):
                 cell = QTableWidgetItem(value)
                 cell.setToolTip(item.sha256)
                 self.plugins.setItem(row, col, cell)
@@ -237,6 +237,17 @@ class FiveMPanel(Card):
                 if self.game and self.game.id == g.id:
                     self.refresh(g)
                     self.report.setPlainText(json.dumps(report, indent=2, ensure_ascii=False, default=str))
+                    self.report.show()
+                    records = {Path(c["path"]).name: c for c in report["components"]}
+                    for row in range(self.plugins.rowCount()):
+                        component = records.get(self.plugins.item(row, 0).text(), {})
+                        matches = component.get("catalog_matches", [])
+                        source = matches[0]["upstream"] if matches else t("Not established")
+                        trust = component.get("runtime", {}).get("trust")
+                        verification = t(trust) if trust else t("Catalog hash match") if matches else t("Hash recorded; origin unknown")
+                        self.plugins.setItem(row, 2, QTableWidgetItem(component.get("version") or t("Unknown")))
+                        self.plugins.setItem(row, 3, QTableWidgetItem(source))
+                        self.plugins.setItem(row, 4, QTableWidgetItem(verification))
             self.ctl.run("fivem_analyze", work, done, self._error)
 
     def export(self):
