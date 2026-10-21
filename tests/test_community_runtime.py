@@ -238,3 +238,45 @@ def test_community_dialog_preserves_non_success_states(qtbot,experiment):
     dialog.show_evaluation(s.community.runtimes.inspect(c.path,c.review))
     assert dialog.evaluation.category==Category.COMMUNITY
     assert not dialog.install_button.isEnabled()
+
+
+def test_process_exit_is_not_fabricated_crash(experiment,monkeypatch):
+    from akeno.core.processes import ProcessInfo
+    s,g,c,root=experiment
+    monkeypatch.setattr('akeno.community.service.processes.processes_in_dir',lambda _:[ProcessInfo(1,'Game.exe',g.exe_path)])
+    assert s.community.report(g.id)['stability']['state']=='process_observed'
+    monkeypatch.setattr('akeno.community.service.processes.processes_in_dir',lambda _:[])
+    report=s.community.report(g.id)
+    assert report['stability']['state']=='process_exit_observed'
+    assert report['stability']['crash_verified'] is False
+    assert 'not automatically matched' in report['measurement_attribution']
+
+
+def test_signed_runtime_without_version_needs_review(db,tmp_path):
+    exports=['NVSDK_NGX_D3D12_CreateFeature','NVSDK_NGX_D3D12_EvaluateFeature']
+    p=make_pe(tmp_path/runtimes.NR_RUNTIME,dll=True,exports=exports,export_name=runtimes.NR_RUNTIME)
+    m=RuntimeManager(db,lambda _:SignatureInfo(True,True,'NVIDIA Corporation','fixture'))
+    assert m.inspect(str(p)).category==Category.UNKNOWN
+
+
+def test_invalid_review_selection_clears_previous_ui_approval(qtbot,experiment,monkeypatch,tmp_path):
+    from akeno.ui.controller import Controller
+    from akeno.ui.community_runtime import CommunityRuntimeDialog
+    s,g,c,root=experiment;dialog=CommunityRuntimeDialog(Controller(s));qtbot.addWidget(dialog)
+    dialog.review=c.review;dialog.evaluation=c;dialog.prepared=object();dialog.install_button.setEnabled(True)
+    p=tmp_path/'bad.json';p.write_text('{}')
+    monkeypatch.setattr('akeno.ui.community_runtime.QFileDialog.getOpenFileName',lambda *args:(str(p),'JSON'))
+    dialog.choose_review()
+    assert dialog.review is None and dialog.evaluation is None and dialog.prepared is None
+    assert not dialog.install_button.isEnabled()
+
+
+def test_generic_workflow_cannot_modify_active_community_experiment(experiment):
+    from akeno.backends.base import InstallPlan
+    s,g,c,root=experiment;p=prepare(experiment)
+    assert s.community.install(p,True,True).ok
+    fresh=s.library.reanalyze(g.id);a=s.backend_for(fresh)
+    assert not s.readiness(fresh).can_install
+    with pytest.raises(PermissionError):s.plan_install(fresh,a,s.package_for(a),{},Path('.'))
+    with pytest.raises(PermissionError):s.install(fresh,InstallPlan(a.id,None,g.target_dir))
+    assert not s.configure(fresh,a,{},'quality').ok

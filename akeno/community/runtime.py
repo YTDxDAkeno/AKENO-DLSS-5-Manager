@@ -143,7 +143,9 @@ class RuntimeManager:
                 result.review = validate_review(review)
                 if review["sha256"] != result.sha256 or review["version"] != result.version:
                     raise ValueError(msg("The selected DLL does not match the review's exact hash and version."))
-            if sig.is_nvidia:
+            if not result.version:
+                result.category, result.detail = Category.UNKNOWN, msg("Runtime version metadata is missing; further review is required.")
+            elif sig.is_nvidia:
                 result.category, result.detail = Category.OFFICIAL, LABELS[Category.OFFICIAL]
             elif result.review and sig.checked:
                 result.category = Category.COMMUNITY

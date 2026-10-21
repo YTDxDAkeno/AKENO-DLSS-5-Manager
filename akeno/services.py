@@ -222,10 +222,16 @@ class AppServices:
         archive.extract(res.path, staging, wanted, package.root)
         return staging
 
+    def _community_active(self, game: Game) -> bool:
+        active = self.installer.active_install(game.id)
+        return bool(active and active["backend_id"].startswith("community:"))
+
     def plan_install(self, game: Game, adapter: BackendAdapter, package: Package, params: dict[str, Any],
                      staging: Path, allow_disable: list[str] | None = None) -> InstallPlan:
         if game.launcher == "fivem":
             raise PermissionError("Use the FiveM setup wizard and its prepared transaction workflow")
+        if self._community_active(game):
+            raise PermissionError(msg("Use Community Runtime Manager or restore the active experiment first."))
         ctx = self.context(game, staging, allow_disable)
         return adapter.plan(game, package, params, ctx)
 
@@ -236,6 +242,8 @@ class AppServices:
             raise PermissionError("Use the FiveM prepared transaction workflow")
         if plan.backend_id.startswith("community:") or "_community_runtime" in plan.params:
             raise PermissionError("Use the prepared community experiment workflow")
+        if self._community_active(game):
+            raise PermissionError(msg("Use Community Runtime Manager or restore the active experiment first."))
         adapter = self.registry.get(plan.backend_id)
         result = self.installer.apply(game, plan, log_cb)
         self.installer.prune(game.id, int(self.settings.get("backup_keep_per_game")))
@@ -261,6 +269,8 @@ class AppServices:
     def configure(self, game: Game, adapter: BackendAdapter, params: dict[str, Any], profile_name: str) -> TxResult:
         if game.launcher == "fivem":
             return TxResult(False, None, "failed", ["FiveM configuration changes require a reviewed installation plan."])
+        if self._community_active(game):
+            return TxResult(False, None, "failed", [msg("Use Community Runtime Manager or restore the active experiment first.")])
         active = self.installer.active_install(game.id, adapter.id)
         if not active:
             return TxResult(False, None, "failed", [msg("{short} is not installed in this game.", short=adapter.short)])
@@ -332,6 +342,11 @@ class AppServices:
         if game is None:
             r.items.append(CheckItem("game", "pending", "No game selected", "Select a game to check readiness."))
             r.reasons.append("No game selected.")
+            return r
+        if self._community_active(game):
+            reason = msg("Use Community Runtime Manager or restore the active experiment first.")
+            r.items.append(CheckItem("community", "warn", "Community Runtime Manager", reason))
+            r.reasons.append(reason)
             return r
         adapter = self.backend_for(game)
         if adapter is None:

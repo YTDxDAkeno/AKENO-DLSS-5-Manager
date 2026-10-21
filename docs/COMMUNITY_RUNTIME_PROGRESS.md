@@ -42,3 +42,11 @@ No new runtime, real installation, GPU execution or performance success has been
 - Full regression at bac6ae6 found **one guard-order failure, 270 passed, 1 skipped**: generic FiveM rejection must happen before accessing a missing plan. Fixed ordering without changing the existing test. Final full suite rerunning (/tmp/akeno-v13-full2.txt); targeted final guards/runtime/i18n in /tmp/akeno-v13-final-targeted.txt.
 - Actual EN manager screenshots rendered and inspected. Added all community tabs to CI screenshot capture. Invalid review/copy selection now clears stale UI approvals. Reports include explicit historical-benchmark attribution limits and read-only process-exit/error observations; exit alone never claims a crash.
 - Previously pushed bac6ae6 (initial push 503 retried successfully). Next: verify full suite, inspect DE150 renders, draft PR and final Windows CI/artifact hashes/screenshots. Preserve v1.2/Claude; no hardware-success claim.
+
+## Checkpoint — final scope isolation and review edge cases
+
+- Draft PR #3 targets v1.2: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/pull/3 (attached). Main/Claude/v1.2 unchanged.
+- Full local suite after version/review-UI/process evidence changes: **274 passed, 1 Windows-only skip**. Added regression that even a signed NR file without version metadata remains unreviewed. Invalid review selection clears stale UI approval; process exits do not fabricate crashes.
+- Found a cross-workflow edge during review: generic Secure Install could otherwise reconfigure/reinstall files belonging to an active community transaction. Generic plan/apply/configure/readiness now require using the community manager or restoring that experiment first. Added end-to-end guard coverage; existing official/FiveM tests stay unchanged.
+- EN normal/German 150% manager images visually inspected and saved under docs/screenshots/v1.3-community/. No runtime binary/hardware success is pictured.
+- Previously pushed e0333cd. Latest scope test result: /tmp/akeno-v13-scoping.txt. Next: final full run with the scope guard, exact Windows CI, artifact/hash verification and Windows image inspection, then final docs/PR. No further feature expansion unless a real failure is diagnosed.
