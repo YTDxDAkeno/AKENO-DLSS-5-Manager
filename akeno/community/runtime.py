@@ -39,12 +39,26 @@ LABELS = {
 }
 
 
-def regular(path: Path) -> None:
+# Game binaries can be much larger than bounded NVIDIA runtimes.
+MAX_GAME_FILE = 16 * 1024 * 1024 * 1024
+
+
+def _regular_bounded(path: Path, maximum: int, error: str) -> None:
     for p in (path, *path.parents):
         if p.is_symlink() or (hasattr(p, "is_junction") and p.is_junction()):
             raise ValueError(msg("Linked paths are not permitted."))
-    if not path.is_file() or not 0 < path.stat().st_size <= runtimes.MAX_FILE:
-        raise ValueError(msg("A bounded regular runtime file is required."))
+    if not path.is_file() or not 0 < path.stat().st_size <= maximum:
+        raise ValueError(msg(error))
+
+
+def regular(path: Path) -> None:
+    """Validate runtime/package files with the original 512-MiB limit."""
+    _regular_bounded(path, runtimes.MAX_FILE, "A bounded regular runtime file is required.")
+
+
+def regular_game_file(path: Path) -> None:
+    """Validate game executables/assets without applying the DLL size limit."""
+    _regular_bounded(path, MAX_GAME_FILE, "A bounded regular game file is required.")
 
 
 def validate_review(data: dict) -> dict:
