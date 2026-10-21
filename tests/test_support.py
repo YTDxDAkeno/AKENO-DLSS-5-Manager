@@ -53,7 +53,7 @@ def test_verification_requires_explicit_success_lines(tmp_path):
     _write(tmp_path / "dlss5-feed.log", "NGX calls are routed through OptiScaler DLSS-NR (winmm.dll)\n"
                                          "neural model (feature 18) loaded\n")
     v = support.verify_from_logs(str(tmp_path))
-    assert v.state == "verified" and v.file == "dlss5-feed.log" and "feature 18" in v.line
+    assert v.state == "initialized" and v.file == "dlss5-feed.log" and "feature 18" in v.line
 
 
 def test_verification_reports_failure_and_latest_file_wins(tmp_path):

@@ -81,12 +81,12 @@ def adapter(w, **kwargs):
                              kwargs.get("review", w.review))
 
 
-def test_no_backend_approved_and_rtx4080_stays_blocked_by_default(workflow):
+def test_no_backend_approved_and_rtx4080_stays_unknown_without_evidence(workflow):
     w = workflow
     assert REVIEWED_BACKENDS == ()
     a = adapter(w, review=None)
     result = w.service.compatibility(a)
-    assert result.status == CompatStatus.BLOCKED
+    assert result.status == CompatStatus.INSUFFICIENT
     assert "fivem_no_review" in {f.code for f in result.blockers}
     with pytest.raises(PermissionError):
         w.service.prepare(a)
@@ -155,7 +155,9 @@ def test_scripthook_is_not_automatically_enabled(workflow):
 def test_evidence_matrix_is_not_a_gpu_marketing_claim(workflow, change, code):
     w = workflow
     result = w.service.compatibility(adapter(w, review=replace(w.review, **change)))
-    assert result.status == CompatStatus.BLOCKED and code in {f.code for f in result.blockers}
+    assert result.status in (CompatStatus.INSUFFICIENT, CompatStatus.BLOCKED) and code in {f.code for f in result.blockers}
+    with pytest.raises(PermissionError):
+        w.service.prepare(adapter(w, review=replace(w.review, **change)))
 
 
 def test_runtime_signature_and_hash_are_rechecked(workflow, monkeypatch):

@@ -40,3 +40,12 @@ Commit/push meaningful checkpoints at most five minutes apart during active work
 - Updated compatibility presentation: missing evidence is unknown; denied policies and signature/path failures remain blocked. Some older tests intentionally expect the former blanket blocked/creation-is-verified behavior and are being updated to the stricter/new semantics. Full UI/i18n regression work is still in progress; this is NOT a final validated build.
 - GitHub credential failure: initial branch push succeeded at f470bb3; later Git reads/push and API return authentication errors. User asked to renew the existing connection, not provide a token in chat. Local commits continue; a Git bundle is saved at `/workspace/akeno-v1.2-fivem-integration.bundle` for recovery. Pushes/PR/Windows Actions remain dependent on restored access.
 - Next: finish translations and regression tests, diagnose any actual UI failures, research newer runtime evidence, screenshots and packaging validation.
+
+## Checkpoint — authentication restored and UI regressions
+
+- User renewed the existing GitHub connection. `gh auth status` and `gh api user --jq .login` now confirm YTDxDAkeno; Git read/push retried after that meaningful state change. No credentials were overwritten and no new token created.
+- Fixed UI test setup to use the real cache interface rather than an incomplete download stand-in. EN/DE integrated eight-page UI + policy persistence and translation coverage: **9 tests passed**.
+- New neural evidence suite: **7 tests passed**, including old-log retouch, rotation, changed artifacts, cross-game binding and separate log streams.
+- Updated prior tests to expect unknown/missing evidence without enabling installation, and initialized rather than verified for creation-only log markers. No deployment gate was removed.
+- Added German wizard labels/messages and invalidation of prepared plans when policy controls or selection change.
+- Next: full combined suite, remaining dynamic FiveM message translations, compatibility/driver evidence refinement, fixture screenshots, Windows CI and build artifacts.

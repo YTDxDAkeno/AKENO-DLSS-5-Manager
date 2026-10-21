@@ -56,10 +56,10 @@ class FiveMPanel(Card):
         self.backend = QComboBox()
         self.backend.addItem("DLSS5-Feeder", "dlss5_feeder")
         self.backend.addItem("OptiScaler NR", "optiscaler_nr")
-        for title, widget in (("Server identifier", self.server), ("Permission reference", self.reference),
-                              ("Operator", self.owned), ("Graphics plugins", self.permission),
-                              ("Pure Mode", self.pure), ("Script Hook permission", self.hook),
-                              ("Backend", self.backend), ("Experimental consent", self.consent)):
+        for title, widget in ((t("Server identifier"), self.server), (t("Permission reference"), self.reference),
+                              (t("Operator"), self.owned), (t("Graphics plugins"), self.permission),
+                              (t("Pure Mode"), self.pure), (t("Script Hook permission"), self.hook),
+                              ("Backend", self.backend), (t("Experimental consent"), self.consent)):
             form.addRow(t(title), widget)
         form.addRow(label(t("Ownership does not bypass client protection. AKENO never changes server security settings."), "muted", wrap=True))
         form.addRow(button(t("Save server profile"), "check", "primary", on_click=self.save))
@@ -90,7 +90,17 @@ class FiveMPanel(Card):
         ir.addWidget(self.install_button)
         il.addLayout(ir)
         self.tabs.addTab(installation, t("4. Installation"))
+        for control in (self.server, self.reference):
+            control.textChanged.connect(self._invalidate)
+        for control in (self.permission, self.pure, self.hook, self.backend):
+            control.currentIndexChanged.connect(self._invalidate)
+        self.owned.toggled.connect(self._invalidate)
+        self.consent.toggled.connect(self._invalidate)
         self.refresh(game)
+
+    def _invalidate(self, *args):
+        self.prepared = None
+        self.install_button.setEnabled(False)
 
     def refresh(self, game=None):
         self.game = game or self.s.selected_game()
@@ -105,6 +115,8 @@ class FiveMPanel(Card):
         self.context.setText(f"{g.name} · {gpu.name if gpu else t('Unknown')} · {gpu.driver_version if gpu else '—'}\n{i.app_dir}")
         if self._loaded_game_id != g.id:
             self._loaded_game_id = g.id
+            self._invalidate()
+            self.observation = None
             p = self.s.fivem.policy(g.id)
             self.server.setText(p.server_id)
             self.reference.setText(p.permission_reference)
@@ -205,6 +217,8 @@ class FiveMPanel(Card):
         if not a:
             return
         def done(prepared):
+            if not self.game or prepared.installation.game.id != self.game.id or self.s.fivem.policy(self.game.id) != prepared.adapter.policy:
+                return
             self.prepared = prepared
             self.findings.setPlainText("\n".join(prepared.plan.summary) + "\n\n" +
                                       "\n".join(op.rel_path for op in prepared.plan.ops))
