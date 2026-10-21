@@ -50,3 +50,10 @@ No new runtime, real installation, GPU execution or performance success has been
 - Found a cross-workflow edge during review: generic Secure Install could otherwise reconfigure/reinstall files belonging to an active community transaction. Generic plan/apply/configure/readiness now require using the community manager or restoring that experiment first. Added end-to-end guard coverage; existing official/FiveM tests stay unchanged.
 - EN normal/German 150% manager images visually inspected and saved under docs/screenshots/v1.3-community/. No runtime binary/hardware success is pictured.
 - Previously pushed e0333cd. Latest scope test result: /tmp/akeno-v13-scoping.txt. Next: final full run with the scope guard, exact Windows CI, artifact/hash verification and Windows image inspection, then final docs/PR. No further feature expansion unless a real failure is diagnosed.
+
+## Build preparation checkpoint
+
+- Pushed application scope guard at 1bc1433; targeted community/FiveM/legacy-installer/i18n suite **64 passed**. Full latest suite running in /tmp/akeno-v13-final-suite.txt.
+- Earlier e0333cd Windows/Linux workflow passed, but does not validate the later scope/version/review-UI edge cases. Current 1bc1433 Windows CI must pass before final release evidence.
+- Updated README to the actual v1.3 separate-trust behavior and manual Inno Setup fallback to 1.3.0. The automatic workflow already derives the version from the app. No proprietary model is packaged.
+- Draft PR #3 remains mergeable and targets v1.2. Next: final Windows workflow, artifact hashes and actual Windows screenshots. No additional source feature work planned unless a diagnosed failure requires it.
