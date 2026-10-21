@@ -1,5 +1,6 @@
 """Local-only runtime classification. Reviews are user-selected evidence, not signatures."""
 from __future__ import annotations
+from akeno.i18n import msg
 
 from dataclasses import asdict, dataclass
 from datetime import date
@@ -38,41 +39,41 @@ LABELS = {
 def regular(path: Path) -> None:
     for p in (path, *path.parents):
         if p.is_symlink() or (hasattr(p, "is_junction") and p.is_junction()):
-            raise ValueError("Linked paths are not permitted.")
+            raise ValueError(msg("Linked paths are not permitted."))
     if not path.is_file() or not 0 < path.stat().st_size <= runtimes.MAX_FILE:
-        raise ValueError("A bounded regular runtime file is required.")
+        raise ValueError(msg("A bounded regular runtime file is required."))
 
 
 def validate_review(data: dict) -> dict:
     if not isinstance(data, dict) or data.get("schema") != 1:
-        raise ValueError("Unsupported community review schema.")
+        raise ValueError(msg("Unsupported community review schema."))
     required = ("sha256", "version", "repository", "release", "upstream_commit", "reviewer", "reviewed_at",
                 "modifications", "build_instructions", "security_review", "license_review")
     if any(not isinstance(data.get(k), str) or not data[k].strip() for k in required):
-        raise ValueError("The review needs complete source, build, security and licensing evidence.")
+        raise ValueError(msg("The review needs complete source, build, security and licensing evidence."))
     if not re.fullmatch(r"[a-f0-9]{64}", data["sha256"]) or not re.fullmatch(r"[a-f0-9]{40}", data["upstream_commit"]):
-        raise ValueError("The review needs exact SHA-256 and upstream commit pins.")
+        raise ValueError(msg("The review needs exact SHA-256 and upstream commit pins."))
     repo = urlsplit(data["repository"])
     release = urlsplit(data["release"])
     if (repo.scheme != "https" or repo.netloc != "github.com" or repo.query or repo.fragment
             or not re.fullmatch(r"/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo.path)
             or release.scheme != "https" or release.netloc != "github.com" or release.query or release.fragment
             or not release.path.startswith(repo.path + "/releases/tag/") or ".." in release.path):
-        raise ValueError("Repository and release must identify the same explicit GitHub source.")
+        raise ValueError(msg("Repository and release must identify the same explicit GitHub source."))
     if date.fromisoformat(data["reviewed_at"]) > date.today() or data.get("local_use_permitted") is not True:
-        raise ValueError("A dated local-use licensing review is required.")
+        raise ValueError(msg("A dated local-use licensing review is required."))
     if not isinstance(data.get("limitations"), list) or not data["limitations"] or any(not isinstance(x, str) or not x.strip() for x in data["limitations"]):
-        raise ValueError("Known limitations must be recorded.")
+        raise ValueError(msg("Known limitations must be recorded."))
     targets = data.get("targets")
     if not isinstance(targets, list) or not targets:
-        raise ValueError("The review must declare exact experimental hardware/driver/backend/API targets.")
+        raise ValueError(msg("The review must declare exact experimental hardware/driver/backend/API targets."))
     for t in targets:
         if (not isinstance(t, dict) or t.get("generation") not in ("RTX 20", "RTX 30", "RTX 40", "RTX 50")
                 or not re.fullmatch(r"\d+\.\d+", str(t.get("driver", "")))
                 or t.get("backend") not in ("optiscaler_nr", "dlss5_feeder")
                 or t.get("api") not in ("d3d11", "d3d12", "vulkan")
                 or t.get("status") not in ("experimental", "incompatible") or not t.get("evidence")):
-            raise ValueError("Invalid exact compatibility target; review claims cannot certify execution.")
+            raise ValueError(msg("Invalid exact compatibility target; review claims cannot certify execution."))
     return json.loads(json.dumps(data))
 
 
@@ -80,7 +81,7 @@ def load_review(path: str | Path) -> dict:
     p = Path(path)
     regular(p)
     if p.stat().st_size > 128 * 1024 or p.suffix.lower() != ".json":
-        raise ValueError("Select a bounded JSON review record, not an installer or archive.")
+        raise ValueError(msg("Select a bounded JSON review record, not an installer or archive."))
     return validate_review(json.loads(p.read_text(encoding="utf-8-sig")))
 
 
@@ -120,10 +121,10 @@ class RuntimeManager:
         try:
             regular(p)
             if p.suffix.lower() not in (".dll", ".bin"):
-                raise ValueError("Select a runtime DLL/model; archives, scripts and installers are not accepted.")
+                raise ValueError(msg("Select a runtime DLL/model; archives, scripts and installers are not accepted."))
             result.sha256 = sha256_file(p)
             if result.sha256 in self.denied_hashes:
-                raise ValueError("This exact file hash is denied by the security policy.")
+                raise ValueError(msg("This exact file hash is denied by the security policy."))
             info = pe.parse(str(p))
             result.version, result.architecture = info.file_version, info.machine
             result.original_filename = next((v for k, v in info.strings.items() if k.lower() == "originalfilename"), None)
@@ -132,16 +133,16 @@ class RuntimeManager:
             if not ok:
                 raise ValueError(detail)
             if set(info.exports) & {"DllInstall", "DllRegisterServer", "ServiceMain"}:
-                raise ValueError("Unexpected installer/service exports require separate review.")
+                raise ValueError(msg("Unexpected installer/service exports require separate review."))
             result.family = runtimes.NR_RUNTIME
             sig = self.verifier(str(p))
             result.signature = asdict(sig)
             if sha256_file(p) != result.sha256:
-                raise ValueError("File changed during inspection.")
+                raise ValueError(msg("File changed during inspection."))
             if review is not None:
                 result.review = validate_review(review)
                 if review["sha256"] != result.sha256 or review["version"] != result.version:
-                    raise ValueError("The selected DLL does not match the review's exact hash and version.")
+                    raise ValueError(msg("The selected DLL does not match the review's exact hash and version."))
             if sig.is_nvidia:
                 result.category, result.detail = Category.OFFICIAL, LABELS[Category.OFFICIAL]
             elif result.review and sig.checked:
@@ -156,7 +157,7 @@ class RuntimeManager:
 
     def import_local(self, path: str, review: dict | None, consent: bool) -> Evaluation:
         if consent is not True:
-            raise PermissionError("Explicit permission for local reuse and experimental import is required.")
+            raise PermissionError(msg("Explicit permission for local reuse and experimental import is required."))
         result = self.inspect(path, review)
         if result.category not in (Category.OFFICIAL, Category.COMMUNITY):
             raise PermissionError(result.detail)
@@ -165,7 +166,7 @@ class RuntimeManager:
         regular(Path(path))
         for p in (folder, *folder.parents):
             if p.is_symlink() or (hasattr(p, "is_junction") and p.is_junction()):
-                raise PermissionError("Linked runtime stores are not permitted.")
+                raise PermissionError(msg("Linked runtime stores are not permitted."))
         dest = folder / runtimes.NR_RUNTIME
         fd, temp = tempfile.mkstemp(dir=folder, suffix=".dll")
         os.close(fd)
@@ -173,7 +174,7 @@ class RuntimeManager:
             shutil.copyfile(path, temp)
             copied = self.inspect(temp, review)
             if copied.sha256 != result.sha256 or copied.category != result.category:
-                raise PermissionError("Runtime changed while importing.")
+                raise PermissionError(msg("Runtime changed while importing."))
             os.replace(temp, dest)
         finally:
             Path(temp).unlink(missing_ok=True)

@@ -49,6 +49,8 @@ def data_strings() -> set[str]:
     out |= set(hardware.R_LABEL.values()) | {title for _, title in install.INSTALL_STEPS}
     from akeno.fivem.messages import LABELS
     out |= set(LABELS.values())
+    from akeno.community.runtime import LABELS as COMMUNITY_LABELS
+    out |= set(COMMUNITY_LABELS.values())
     out |= {"System", "Game", "Dependencies", "Installation"}
     out |= {"good", "fair", "poor", "Good", "Fair", "Poor", "low", "medium", "high", "bundled", "downloaded",
             "measured", "estimated", "hardware only"}

@@ -202,6 +202,16 @@ def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
                 app.processEvents()
                 win.grab().save(os.path.join(out_dir, f"fivem-step-{index + 1}.png"))
             panel.tabs.setCurrentIndex(0)
+    from akeno.ui.community_runtime import CommunityRuntimeDialog
+    dialog = CommunityRuntimeDialog(ctl, win)
+    dialog.resize(max(1000, min(w, 1100)), max(600, min(h, 760)))
+    dialog.show()
+    app.processEvents()
+    for index in range(dialog.tabs.count()):
+        dialog.tabs.setCurrentIndex(index)
+        app.processEvents()
+        dialog.grab().save(os.path.join(out_dir, f"community-step-{index + 1}.png"))
+    dialog.close()
     print(f"saved screenshots to {out_dir}")
     return 0
 

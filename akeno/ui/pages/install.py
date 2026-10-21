@@ -237,6 +237,7 @@ class InstallPage(QWidget):
         self.head = ElidedLabel("", "dim")
         tcol.addWidget(self.head)
         top.addLayout(tcol, 1)
+        top.addWidget(button(t("Community Runtime Manager"), "layers", on_click=self._community_manager))
         self.chips = [StepChip(i + 1, t(n)) for i, n in enumerate(("System", "Game", "Dependencies", "Installation"))]
         for c in self.chips:
             top.addWidget(c, 0, Qt.AlignmentFlag.AlignBottom)
@@ -369,6 +370,11 @@ class InstallPage(QWidget):
             self._update_buttons()
 
     # ------------------------------------------------------------------------------------------
+    def _community_manager(self):
+        from akeno.ui.community_runtime import CommunityRuntimeDialog
+        dialog = CommunityRuntimeDialog(self.ctl, self)
+        dialog.exec()
+
     def _inspect_existing(self):
         game = self.s.selected_game()
         if game:

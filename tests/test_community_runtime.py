@@ -174,3 +174,67 @@ def test_failed_transaction_rolls_back_and_preserves_game(experiment,monkeypatch
     result=s.community.install(prepared,True,True)
     assert not result.ok and result.state=='rolled_back'
     assert sorted(p.name for p in root.iterdir())==['Game.exe','nvngx_dlss.dll']
+
+
+def test_symlinked_runtime_and_review_are_rejected(db,nr,tmp_path):
+    link=tmp_path/'linked.dll'
+    try: link.symlink_to(nr)
+    except OSError: pytest.skip('Creating symlinks requires privilege on this runner')
+    assert RuntimeManager(db,unsigned).inspect(str(link),reviewed(nr)).category==Category.REJECTED
+
+
+def test_changed_copy_during_import_is_not_registered(db,nr,monkeypatch):
+    import akeno.community.runtime as runtime
+    original=runtime.shutil.copyfile
+    def bad_copy(src,dest):
+        original(src,dest)
+        with open(dest,'ab') as f:f.write(b'changed')
+    monkeypatch.setattr(runtime.shutil,'copyfile',bad_copy)
+    with pytest.raises(PermissionError): RuntimeManager(db,unsigned).import_local(str(nr),reviewed(nr),True)
+    assert RuntimeManager(db,unsigned).imported()==[]
+
+
+@pytest.mark.parametrize('url',['https://evil.example/x','https://github.com@example.com/a/b','https://github.com/a/b/../x'])
+def test_review_source_rejects_credential_and_path_tricks(nr,url):
+    data=reviewed(nr);data['repository']=url
+    with pytest.raises(ValueError):validate_review(data)
+
+
+def test_foreign_runtime_and_graphics_hooks_block_deployment(experiment):
+    s,g,c,root=experiment
+    make_pe(root/runtimes.NR_RUNTIME,[],dll=True)
+    with pytest.raises(PermissionError):prepare(experiment)
+
+
+def test_dry_run_does_not_overwrite_foreign_config(experiment):
+    s,g,c,root=experiment;(root/'OptiScaler.ini').write_text('user-owned')
+    with pytest.raises(PermissionError):prepare(experiment)
+    assert (root/'OptiScaler.ini').read_text()=='user-owned'
+
+
+def test_explicit_reconsent_required_after_plan(experiment):
+    s,g,c,root=experiment;p=prepare(experiment)
+    with pytest.raises(PermissionError):s.community.install(p,True,False)
+
+
+def test_post_copy_hash_failure_restores_original_game(experiment,monkeypatch):
+    import akeno.install.transaction as tx
+    s,g,c,root=experiment;p=prepare(experiment);original=tx._atomic_write
+    def corrupt(target,source,content):
+        original(target,source,content)
+        if target.name==runtimes.NR_RUNTIME:target.write_bytes(b'changed after copy')
+    monkeypatch.setattr(tx,'_atomic_write',corrupt)
+    result=s.community.install(p,True,True)
+    assert not result.ok and result.state=='rolled_back'
+    assert sorted(x.name for x in root.iterdir())==['Game.exe','nvngx_dlss.dll']
+
+
+def test_community_dialog_preserves_non_success_states(qtbot,experiment):
+    from akeno.ui.controller import Controller
+    from akeno.ui.community_runtime import CommunityRuntimeDialog
+    s,g,c,root=experiment;dialog=CommunityRuntimeDialog(Controller(s));qtbot.addWidget(dialog)
+    assert dialog.tabs.count()==3
+    assert not dialog.install_button.isEnabled()
+    dialog.show_evaluation(s.community.runtimes.inspect(c.path,c.review))
+    assert dialog.evaluation.category==Category.COMMUNITY
+    assert not dialog.install_button.isEnabled()
