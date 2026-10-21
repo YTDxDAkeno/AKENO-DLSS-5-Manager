@@ -18,3 +18,12 @@ Branch: `codex/akeno-v1.3-bandukids-runtime`, based on current v1.3 `672cd25`. P
 4. Preserve tests, add focused regression coverage, full Windows build/artifacts/screenshots, draft PR targeting v1.3.
 
 Use Git checkpoints within five minutes during active work. Continue from git status and this file; all hardware/installation success remains unverified.
+
+## Checkpoint — named candidate/import policy
+
+- Added named Bandukids candidate, exact supplied DLL hash, pinned source-code commit, guided static source pages and unverified RTX 4080 PCI profile (0x2704). RTX 20/30/50 remain unverified; candidate metadata is not an approved review.
+- Separate schema-2 local reviews bind this exact candidate/hash/GitHub source/Hugging Face provenance. No fictitious GitHub release is required, but security/build/licensing evidence and explicit local-use permission remain mandatory. Old schema-1 generic reviews remain supported for unrelated files and cannot relabel this known modified hash.
+- Selected named candidate rejects a different file; exact match without review cannot import. Even a contradictory apparent valid-NVIDIA result cannot mark the known modified hash official. Existing PE/architecture/export/version/signature-inspection and copy rehash checks remain.
+- UI offers Bandukids selection/source pages and an intentionally incomplete review template. No worker, shim, model or upstream script downloaded/executed. **57 focused candidate+existing community tests passed** (synthetic registry pins only; not the real DLL).
+- Hugging Face metadata-only API request was denied by environment networking (403); no binary request was made. Continue source/license investigation through supported networking if available.
+- Previously pushed 39343e0. Next: narrowly scoped maintainer-reviewed FiveM community recipe gate, focused/offline/FiveM tests, full suite, documentation, Windows build and draft PR.

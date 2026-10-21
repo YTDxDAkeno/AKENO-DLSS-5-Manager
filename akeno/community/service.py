@@ -83,9 +83,15 @@ class CommunityService:
         if candidate.category not in (Category.COMMUNITY, Category.OFFICIAL):
             raise PermissionError(candidate.detail)
         if candidate.category == Category.COMMUNITY:
+            from akeno.community import candidates
+            named = candidates.by_hash(candidate.sha256)
+            if named and gpu.device_id not in named.experimental_device_ids:
+                raise PermissionError(msg("The detected GPU is outside the named candidate's unverified RTX 4080 profile."))
             targets = candidate.review["targets"]
             match = [t for t in targets if (t["generation"], t["driver"], t["backend"], t["api"]) ==
                      (gpu.generation, gpu.driver_version, backend_id, game.api.value)]
+            if named:
+                match = [t for t in match if t.get("gpu_device_id") == gpu.device_id]
             if not match or any(t["status"] == "incompatible" for t in match):
                 raise PermissionError(msg("No eligible exact runtime/GPU/driver/backend/renderer review target."))
         rt = {"stored_path": candidate.path, "sha256": candidate.sha256, "version": candidate.version}
