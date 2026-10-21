@@ -5,6 +5,7 @@ from akeno.i18n import msg
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from akeno.backends import runtimes
@@ -75,8 +76,10 @@ class CommunityService:
         adapter = self.s.registry.get(backend_id)
         if adapter is None or backend_id not in ("optiscaler_nr", "dlss5_feeder"):
             raise PermissionError(msg("A supported neural backend is required."))
+        if not self.s.system or not (self.s.system.os_name or '').lower().startswith('windows') or self.s.system.is_64bit is not True:
+            raise PermissionError('Experimental deployment requires a detected 64-bit Windows environment.')
         gpu = self.s.selected_gpu()
-        if not gpu or gpu.vendor != Vendor.NVIDIA or gpu.has_tensor_cores is not True or not gpu.driver_version:
+        if not gpu or gpu.vendor != Vendor.NVIDIA or gpu.has_tensor_cores is not True or gpu.is_software or not re.fullmatch(r"\d{3}\.\d{2}", gpu.driver_version or ""):
             raise PermissionError(msg("A detected RTX GPU and driver are required."))
         if game.api not in adapter.supported_apis or game.api == GraphicsApi.UNKNOWN:
             raise PermissionError(msg("The selected renderer is not supported by this backend."))
@@ -97,6 +100,11 @@ class CommunityService:
                 match = [t for t in match if t.get("gpu_device_id") == gpu.device_id]
             if not match or any(t["status"] == "incompatible" for t in match):
                 raise PermissionError(msg("No eligible exact runtime/GPU/driver/backend/renderer review target."))
+        from akeno.hardware.support import runtime_verdict
+        verdict = runtime_verdict(candidate.version, gpu.generation, self.s.compat_db.nr_runtimes(),
+            build_sha256=candidate.sha256)
+        if verdict.state == 'fails':
+            raise PermissionError(verdict.text)
         rt = {"stored_path": candidate.path, "sha256": candidate.sha256, "version": candidate.version}
         lookup = lambda name: rt if name == runtimes.NR_RUNTIME else self.s.runtime_lookup(name)
         managed = self.s.installer.managed_files(game.id, game.target_dir)

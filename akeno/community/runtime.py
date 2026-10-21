@@ -33,7 +33,7 @@ class Category(str, Enum):
 LABELS = {
     Category.OFFICIAL: "Official NVIDIA runtime — Signature verified",
     Category.COMMUNITY: "Experimental community runtime — Not NVIDIA-signed",
-    Category.UNKNOWN: "Unverified — Import requires further review",
+    Category.UNKNOWN: "Unverified — Source and consent required",
     Category.ADVANCED: "Advanced local experiment — Unverified",
     Category.REJECTED: "Rejected runtime",
 }
@@ -174,13 +174,13 @@ class RuntimeManager:
             elif result.review and result.review.get("schema") == 3 and sig.checked:
                 result.category = Category.COMMUNITY if named else Category.ADVANCED
                 result.source = result.review["runtime_source"]
-                result.detail = "Experimental local use only. Signature is not NVIDIA-authenticated; safety and execution remain unverified."
+                result.detail = msg("Experimental local use only. Signature is not NVIDIA-authenticated; safety and execution remain unverified.")
             elif result.review and sig.checked:
                 result.category = Category.COMMUNITY
                 result.detail = "Local review and exact pin accepted. Signature is not NVIDIA-authenticated; safety and execution remain unproven."
             else:
                 result.category = Category.UNKNOWN
-                result.detail = "A complete local review and a Windows signature inspection are required; unsigned does not mean malicious."
+                result.detail = msg("Record the runtime source and confirm local-use permission to prepare an unverified experiment. A Windows signature inspection is required; unsigned does not mean malicious.")
         except (OSError, ValueError, TypeError, KeyError) as exc:
             result.category, result.detail = Category.REJECTED, str(exc)
         return result

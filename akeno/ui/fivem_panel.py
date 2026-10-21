@@ -296,7 +296,7 @@ class FiveMPanel(Card):
         path, _ = QFileDialog.getSaveFileName(self, t("Export diagnostics"), "akeno-fivem-diagnostics.json", "JSON (*.json)")
         if path:
             def done(report):
-                Path(path).write_text(json.dumps(report, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+                Path(path).write_text(json.dumps(redact(report), indent=2, ensure_ascii=False, default=str), encoding="utf-8")
                 info(self, t("Export diagnostics"), t("Read-only diagnostics exported. Review local paths before sharing."))
             self.ctl.run("fivem_diagnostics", lambda: self.s.fivem.diagnose_existing(self.game), done, self._error)
 

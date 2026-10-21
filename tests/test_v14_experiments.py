@@ -191,3 +191,33 @@ def test_v14_dialog_and_benchmark_conditions_remain_accessible(qtbot, experiment
         if capture: page.grab().save(str(target / f'benchmark-{language}-fixture.png'))
     finally:
         dialog.close(); i18n.set_language('en')
+
+
+def test_private_bundle_missing_backend_never_falls_back_to_network(experiment, monkeypatch, tmp_path):
+    s, game, imported, root = experiment
+    folder = tmp_path / 'incomplete'; folder.mkdir()
+    (folder / 'manifest.json').write_text(json.dumps({'schema': 1, 'distribution': 'private-local-use', 'components': []}))
+    s.offline_bundle = OfflineBundle(folder)
+    monkeypatch.setattr(s.downloads, 'fetch', lambda *a, **k: pytest.fail('unexpected network fallback'))
+    with pytest.raises(PermissionError, match='missing the selected pinned backend'):
+        s.community.prepare(game.id, imported.sha256, 'optiscaler_nr', {}, True, True)
+
+
+def test_normal_install_button_converts_legacy_review_without_expert_json(qtbot, experiment, monkeypatch):
+    from akeno.ui import community_runtime
+    from akeno.ui.controller import Controller
+    s, game, imported, root = experiment
+    controller = Controller(s)
+    dialog = community_runtime.CommunityRuntimeDialog(controller); qtbot.addWidget(dialog)
+    qtbot.waitUntil(lambda: dialog.evaluation is not None)
+    dialog.permission.setChecked(True); dialog.offline.setChecked(True); dialog.consent.setChecked(True)
+    monkeypatch.setattr(community_runtime, 'confirm', lambda *a, **k: True)
+    before = {f.name: f.read_bytes() for f in root.iterdir()}
+    dialog.install()  # One normal action prepares, previews, confirms, imports and applies the transaction.
+    qtbot.waitUntil(lambda: s.installer.active_install(game.id) is not None, timeout=10000)
+    qtbot.waitUntil(lambda: not controller.busy, timeout=10000)
+    tx = s.installer.active_install(game.id)
+    assert s.db.get_setting('community-runtime:' + imported.sha256)['review']['schema'] == 3
+    assert s.restore(tx['id']).ok
+    assert before == {f.name: f.read_bytes() for f in root.iterdir()}
+    dialog.close()

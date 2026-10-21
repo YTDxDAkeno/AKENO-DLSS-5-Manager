@@ -1,5 +1,6 @@
 """Read-only working-setup diagnosis and explicit local runtime import in the same launcher."""
 import json
+from akeno.diagnostics.privacy import redact
 from pathlib import Path
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit, QCheckBox, QFileDialog
 from akeno.backends import runtimes
@@ -43,7 +44,7 @@ class RuntimeDiagnosticsDialog(QDialog):
             return
         path, _ = QFileDialog.getSaveFileName(self, t("Export diagnostics"), "akeno-existing-setup.json", "JSON (*.json)")
         if path:
-            Path(path).write_text(json.dumps(self.report, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+            Path(path).write_text(json.dumps(redact(self.report), indent=2, ensure_ascii=False, default=str), encoding="utf-8")
 
     def import_local(self):
         if not self.permission.isChecked():

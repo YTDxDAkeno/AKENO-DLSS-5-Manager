@@ -102,6 +102,8 @@ def compute(frametimes_ms: list[float], drop_first_s: float = 0.0) -> FrameStats
         p95_frametime_ms=round(percentile(s, 95), 3), p99_frametime_ms=round(percentile(s, 99), 3),
         low_1pct_fps=round(low1, 2), low_01pct_fps=round(low01, 2) if low01 else None,
         stdev_frametime_ms=round(statistics.pstdev(ft), 3), stutter_ratio=round(stutters / n, 4),
+        median_fps=round(statistics.median(1000.0 / v for v in ft), 2),
+        stutter_events_per_minute=round(stutters * 60000.0 / total_ms, 2), frame_spikes=stutters,
     )
 
 

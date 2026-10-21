@@ -23,3 +23,18 @@ The OptiScaler Borderlands 4 wiki was read on 2026-10-21: version 0.9, Windows 1
 Windows builds require the existing GitHub Actions Windows runner or a local Windows toolchain. This Linux environment cannot execute NVIDIA/Windows/FiveM hardware tests. No RTX 5090/4080 success, malware audit, proprietary binary inclusion or permitted FiveM plugin contract has been established here.
 
 FiveM: production deployment still requires an actual permitted exact client/plugin/protection configuration. The development kit exports inventory, policy blockers and a first-test plan, and the existing observation workflow can gather fresh evidence independently of a production recipe. It does not inject files or evade Pure Mode. No genuinely supported new loading contract has been found, so v1.4 does not claim a working FiveM NR deployment.
+
+## Checkpoint validation
+
+- Local full suite after the implementation refinements: **338 passed, 1 skipped**, Linux/offscreen Qt; the skipped test requires a Windows facility. These are synthetic/integration/UI checks, not RTX execution.
+- Linux source GUI smoke: **AKENO 1.4.0 smoke test OK**, all eight application pages constructed, 19/19 design assets present; no Windows hardware detection claimed.
+- First pushed checkpoint `90150d8`: GitHub Actions [run 39676367733](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39676367733) succeeded, including Windows tests, packaged EXE smoke, portable ZIP and Inno installer. GitHub displayed two public artifacts. Public Windows package artifact digest: `07d83f2fad09648b557d44bbf73eddb8295f31c786f966b85b9c7d9dbdd16bfd`. This is the outer artifact digest, not an individual EXE/ZIP checksum. Later refinements require their own Windows run.
+- The GitHub API is currently blocked with `Forbidden`; Git fetch/push and public workflow pages work. A narrow environment draft adding `api.github.com` was saved but is not active until the user reviews/saves/publishes it. Draft-PR creation and authenticated artifact download remain pending API access; no merge or force-push occurred.
+
+## Practical limitations
+
+Automatic monitoring runs while the community dialog/application remains open, starts only after opt-in, uses the selected live PID, and stops on disable, dialog close or an observed game exit. Sensor series are optional device-level NVIDIA readings, not per-process VRAM attribution. A missing/ambiguous sensor remains unavailable. Reports retain the newest bounded automatic captures and one current diagnostic snapshot per game. Backend-owned logs are bounded when read; AKENO does not rotate or rewrite a running game's foreign log files.
+
+Baseline/experimental captures use a guided repeatable-scene workflow and user-entered game version, scene, resolution and settings. Missing or differing conditions are flagged uncontrolled. Game launch and visual-quality assessment remain user actions. The application does not presently correlate Windows crash events; ordinary exits and NR errors are reported without inventing a verified crash.
+
+The proprietary Bandukids binary was not supplied. Personal packaging was tested with inert PE/archive fixtures and fake signature providers; the complete private PowerShell build with your real DLL still needs local Windows validation. Public Windows EXE/installer smoke tests do not establish real Neural Rendering or FiveM compatibility.

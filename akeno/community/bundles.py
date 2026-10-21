@@ -15,6 +15,7 @@ class OfflineBundle:
     def __init__(self, root=None):
         self.root = Path(root) if root is not None else distribution_root() / 'runtimes'
         self.errors = []
+        self.distribution = "public"
         self.entries = []
         manifest = self.root / 'manifest.json'
         if manifest.exists():
@@ -26,6 +27,7 @@ class OfflineBundle:
                 raise ValueError('Unsupported offline manifest.')
             if len(data['components']) > 256:
                 raise ValueError('Offline inventory has too many components.')
+            self.distribution = data.get("distribution", "public")
             ids = set()
             for item in data['components']:
                 if not isinstance(item, dict) or not item.get('id') or item['id'] in ids:
@@ -52,7 +54,7 @@ class OfflineBundle:
                 result = manager.inspect(str(self.path(item)), item.get('profile'))
                 if result.sha256 != item['sha256'] or result.category.value == 'rejected':
                     raise ValueError(result.detail)
-                records.append(result.to_dict())
+                records.append(dict(result.to_dict(), origin="bundle"))
             except (OSError, ValueError, KeyError) as exc:
                 self.errors.append(str(exc))
         return records

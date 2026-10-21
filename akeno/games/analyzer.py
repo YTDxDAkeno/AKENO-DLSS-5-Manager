@@ -127,6 +127,8 @@ def scan_dir_mods(directory: str) -> list[DetectedFile]:
         elif low in KNOWN_FILES:
             ver = pe.parse(p).file_version if low.endswith(".dll") else None
             found.append(DetectedFile(name=fn, path=p, kind=KNOWN_FILES[low], version=ver))
+        elif low.startswith('sl.') and low.endswith('.dll'):
+            found.append(DetectedFile(name=fn, path=p, kind='streamline', version=pe.parse(p).file_version))
         elif NEURAL_CONSUMER_RX.match(fn):
             found.append(DetectedFile(name=fn, path=p, kind="neural_consumer", detail=fn))
         elif low.endswith(".asi"):
@@ -279,7 +281,10 @@ def analyze(raw: RawGame, exe_override: str | None = None, api_override: str | N
     game.architecture = info.machine if info.valid else None
     api, apis, source = detect_api(exe)
     # Only this exact game identity and executable layout carry the DX12 profile.
-    rel_exe = Path(exe).relative_to(Path(raw.install_dir)).as_posix().lower()
+    try:
+        rel_exe = Path(exe).relative_to(Path(raw.install_dir)).as_posix().lower()
+    except ValueError:
+        rel_exe = ''
     if (raw.launcher == 'steam' and str(raw.launcher_id) == '1285190'
             and rel_exe == 'oakgame/binaries/win64/borderlands4.exe' and info.valid):
         api, source = GraphicsApi.D3D12, 'Borderlands 4 Steam 1285190 DX12 game profile; not NR execution evidence'

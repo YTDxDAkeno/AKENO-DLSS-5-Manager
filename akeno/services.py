@@ -220,6 +220,8 @@ class AppServices:
                                   f"({package.trust.value}); automatic installation is disabled.")
         bundled = self.offline_bundle.backend_archive(package)
         if bundled is None:
+            if self.offline_bundle.distribution == 'private-local-use':
+                raise PermissionError('The private offline bundle is missing the selected pinned backend archive: ' + package.id)
             res = self.downloads.fetch(package.url, package.sha256, os.path.basename(package.url), package.size,
                                        progress, token)
             source = res.path
