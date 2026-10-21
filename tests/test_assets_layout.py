@@ -158,7 +158,9 @@ def test_install_wizard_groups_checks_and_explains_blocks(window, qtbot):
     win = window
     _settle(qtbot, win, 1920, 1009)
     win.go("install")
-    qtbot.wait(100)
+    # opening the wizard starts the read-only runtime search; buttons wait for it (slow on Windows runners)
+    qtbot.waitUntil(lambda: not win.ctl.is_busy("deps"), timeout=30000)
+    qtbot.wait(50)
     page = win.pages["install"]
     titles = [s.title.text() for s in (page.sec_system, page.sec_game, page.sec_deps, page.sec_install)]
     assert titles == ["System", "Game", "Dependencies", "Installation"]
@@ -172,6 +174,13 @@ def test_install_wizard_groups_checks_and_explains_blocks(window, qtbot):
     assert win.hosts["install"].scroll.verticalScrollBar().maximum() == 0, "wizard fits at 1920x1080"
     page.sec_deps.toggle()
     assert page.sec_deps.expanded
+    # while a runtime search runs, neither Resolve nor Install may start a second one silently
+    win.ctl.busy.add("deps")
+    page._update_buttons()
+    assert not page.btn_resolve.isEnabled() and not page.btn_install.isEnabled()
+    win.ctl.busy.discard("deps")
+    page._update_buttons()
+    assert page.btn_resolve.isEnabled()
 
 
 def test_hardware_page_shows_matrix_and_honest_verification(window, qtbot):

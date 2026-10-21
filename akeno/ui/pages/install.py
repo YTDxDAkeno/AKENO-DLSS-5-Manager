@@ -353,11 +353,11 @@ class InstallPage(QWidget):
     def _busy(self, key: str, on: bool) -> None:
         if key in ("deps", "resolve"):
             (self.spinner.start if on else self.spinner.stop)()
-            self.btn_resolve.setEnabled(not on and not self.ctl.is_busy("install"))
             if on and key == "deps":
                 self.dl_status.setText(t("Searching your NVIDIA driver, NGX store and games…"))
             elif not on and key == "deps":
                 self.dl_status.setText("")
+            self._update_buttons()
 
     # ------------------------------------------------------------------------------------------
     def _ctx(self):
@@ -603,14 +603,15 @@ class InstallPage(QWidget):
 
     def _update_buttons(self) -> None:
         g, a, pkg = self._ctx()
-        busy = self.ctl.is_busy("install") or self.ctl.is_busy("resolve")
+        # While a runtime search runs, Resolve/Install would start a second one: wait for it.
+        busy = self.ctl.is_busy("install") or self.ctl.is_busy("resolve") or self.ctl.is_busy("deps")
         active = self.s.installer.active_install(g.id, a.id) if g and a else None
         ok = bool(g and a and pkg and pkg.installable and not getattr(self, "_blocked", True) and
                   (self.ack.isChecked() or not self._needs_ack))
         self.btn_install.setEnabled(ok and not busy)
         self.btn_install.setText(t("Update") if active else t("Install / Update"))
         self.btn_restore.setEnabled(bool(active) and not busy)
-        self.btn_resolve.setEnabled(bool(g and a) and not busy and not self.ctl.is_busy("deps"))
+        self.btn_resolve.setEnabled(bool(g and a) and not busy)
         rows = getattr(self, "_blocking_rows", [])
         if rows:
             items = "".join(f"<li><b>{r.title}</b>: {r.detail}</li>" for r in rows[:4])
@@ -672,7 +673,8 @@ class InstallPage(QWidget):
                 return
             self._run_resolve(g, then)
 
-        self.ctl.discover_dependencies(on_done=searched)
+        if not self.ctl.discover_dependencies(on_done=searched):
+            self.dl_status.setText(t("A search is already running. Try again when it has finished."))
 
     def _run_resolve(self, g, then=None) -> None:
         self.token = CancelToken()
