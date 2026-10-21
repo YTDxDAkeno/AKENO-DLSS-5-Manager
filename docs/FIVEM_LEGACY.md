@@ -94,3 +94,7 @@ The only writable application target is `FiveM.app/plugins`. A backend target vi
 7. Attach logs and measured results, including failures, before considering a supported production recipe. There are currently **no real-hardware acceptance results** in this branch.
 
 In v1.2 the owned-server profile is persisted per FiveM client. The wizard separates server rules, hardware capabilities, runtime inventory, neural execution evidence and deployment eligibility. Unknown compatibility is distinct from explicit policy denial/security blocks. Existing PR #1 remains the original isolated backend work; see docs/INTEGRATION_PROGRESS.md for the integrated branch.
+
+## Bandukids separate community policy (1.3.1)
+
+The default signed-runtime route above is unchanged. A separately qualified `reviewed_bandukids` recipe can bind the exact modified NR hash plus completed local schema-2 review, offline/client neural evaluation and permitted loading/protection evidence. SR remains signature-verified. No such production recipe is approved. The existing FiveM panel provides the named review entry; see [BANDUKIDS_REVIEW.md](BANDUKIDS_REVIEW.md). This adds an evidence-bound route without making generic multiplayer installation available or bypassing client protection.

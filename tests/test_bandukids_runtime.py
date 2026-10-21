@@ -79,3 +79,36 @@ def test_review_template_stays_incomplete(db,nr,named):
     assert template['schema']==2 and not template['local_use_permitted']
     assert template['reviewer']==template['security_review']==''
     with pytest.raises(ValueError):validate_review(template)
+
+
+def test_named_offline_experiment_reuses_existing_adapter(experiment,monkeypatch):
+    from pathlib import Path
+    from akeno.security.downloads import sha256_file
+    s,g,c,root=experiment
+    named=replace(candidates.BANDUKIDS,sha256=sha256_file(c.path));monkeypatch.setattr(candidates,'BANDUKIDS',named)
+    data=complete_review(named,Path(c.path))
+    imported=s.community.runtimes.import_local(c.path,data,True,named.id)
+    plan=s.community.prepare(g.id,imported.sha256,'optiscaler_nr',{},True,True)
+    result=s.community.install(plan,True,True)
+    assert result.ok,result.messages
+    assert s.community.report(g.id)['runtime']['named_candidate']['profile']['status']=='unverified'
+    assert s.restore(result.tx_id).ok
+
+
+def test_comfyui_video_evaluation_is_not_a_game_success_marker():
+    from akeno.diagnostics.neural import classify
+    assert classify('nvngx_dlssnr.dll Feature 18 Evaluate succeeded') is None
+    assert classify('[dlss5] runtime signatures and versions valid') is None
+
+
+def test_named_source_links_are_guided_pages_only(qtbot,experiment,monkeypatch):
+    from akeno.ui.community_runtime import CommunityRuntimeDialog
+    from akeno.ui.controller import Controller
+    from PySide6.QtGui import QDesktopServices
+    s,g,c,root=experiment;dialog=CommunityRuntimeDialog(Controller(s));qtbot.addWidget(dialog)
+    opened=[];monkeypatch.setattr(QDesktopServices,'openUrl',lambda u:opened.append(u.toString()))
+    dialog.candidate_choice.setCurrentIndex(dialog.candidate_choice.findData(candidates.BANDUKIDS.id))
+    assert opened==[] and not dialog.install_button.isEnabled()
+    dialog.open_candidate_source(False);dialog.open_candidate_source(True)
+    assert opened==[candidates.BANDUKIDS.repository+'/tree/'+candidates.BANDUKIDS.source_commit,candidates.BANDUKIDS.runtime_source]
+    assert '/blob/' in opened[1] and '/resolve/' not in opened[1]

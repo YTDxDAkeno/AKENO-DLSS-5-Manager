@@ -36,3 +36,10 @@ Use Git checkpoints within five minutes during active work. Continue from git st
 - **60 existing FiveM tests passed** after the scoped change. **31 focused Bandukids/FiveM/integration tests passed**, including synthetic fully qualified Feeder install/restore and denial for each missing evidence, changed runtime/review, restricted Pure Mode, denied permission, detected protection and fake signed flag. No real runtime/game/server success is claimed.
 - Hugging Face metadata remains blocked (403) after a saved draft addition for huggingface.co; saving is not runtime application/publication. No binary request/download was made. Continue with this documented research limitation rather than bypass networking.
 - Previously pushed 96daea7. Next: full regression, source/permission documentation, actual EN/DE renders, final Windows build/artifact hashes and draft PR targeting v1.3.
+
+## Checkpoint — v1.3.1 source validation
+
+- Full Linux regression: **304 passed, 1 Windows-only skipped** in 51.17s. Added offline OptiScaler install/restore, ComfyUI video-log non-evidence and explicit source-link UI coverage. Synthetic fixture pins do not validate the supplied proprietary DLL.
+- Version advanced to 1.3.1; screenshot capture now includes the named Bandukids review screen. Saved English and German 150% source renders with explicit fixture provenance.
+- Added BANDUKIDS_REVIEW.md documenting pinned upstream source, signature/test contradictions, unknown patch/security/permission, hardware matrix, local review and FiveM qualification protocol. Existing generic community and FiveM guides explain the separate route.
+- Next: create draft PR against codex/akeno-v1.3-community-runtime, finish exact-source Windows CI/build verification, archive hashes/results. No actual RTX 4080, proprietary DLL, game or FiveM execution has been tested here.
