@@ -429,6 +429,7 @@
  "Install Experimental DLSS 5": "Experimentelles DLSS 5 installieren",
  "Install ReShade \"with full add-on support\" for this game from reshade.me. AKENO downloads only reviewed, hash-pinned builds and has none for ReShade yet.": "Installiere ReShade „with full add-on support“ für dieses Spiel von reshade.me. AKENO lädt nur geprüfte Builds mit festgelegtem Hash herunter und hat für ReShade noch keinen.",
  "Install an experimental plan before starting its observation.": "Installiere einen experimentellen Plan, bevor du seine Beobachtung startest.",
+ "Install an experimental runtime before enabling automatic monitoring.": "Vor der automatischen Überwachung eine experimentelle Laufzeit installieren.",
  "Install folder": "Installationsordner",
  "Install reviewed plan": "Geprüften Plan installieren",
  "Install unavailable: ": "Installation nicht möglich: ",

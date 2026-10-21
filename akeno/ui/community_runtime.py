@@ -153,7 +153,7 @@ class CommunityRuntimeDialog(QDialog):
 
     def monitor_tick(self):
         self.verify()
-        if not self.performance.isChecked() or self.capture_busy or not self.game:
+        if not self.performance.isChecked() or self.capture_busy or not self.game or self.ctl.is_busy("benchmark"):
             return
         from akeno.core import processes
         from akeno.security.downloads import CancelToken
@@ -189,6 +189,11 @@ class CommunityRuntimeDialog(QDialog):
 
     def toggle_monitor(self, enabled):
         if enabled:
+            tx = self.ctl.s.installer.active_install(self.game.id) if self.game else None
+            if not tx or not tx['backend_id'].startswith('community:'):
+                self.monitor.setChecked(False)
+                self.message.setText(t('Install an experimental runtime before enabling automatic monitoring.'))
+                return
             self.observe()
             self.monitor_timer.start()
         else:

@@ -105,7 +105,7 @@ jobs:
       - name: Public offline inventory (no proprietary binaries)
         shell: pwsh
         run: |
-          if (Get-ChildItem runtimes -Recurse -File -Include *.dll,*.bin,*.zip) { throw "Proprietary/runtime inputs are forbidden in public CI" }
+          if (Get-ChildItem runtimes -Recurse -File -Include *.dll,*.bin,*.zip,*.exe) { throw "Proprietary/runtime inputs are forbidden in public CI" }
           Copy-Item runtimes dist\AKENO\runtimes -Recurse
       - name: Portable ZIP
         shell: pwsh

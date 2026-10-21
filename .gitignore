@@ -17,5 +17,6 @@ packaging/akeno-256.png
 runtimes/**/*.dll
 runtimes/**/*.bin
 runtimes/**/*.zip
+runtimes/**/*.exe
 dist-private/
 private-inputs/

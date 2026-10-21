@@ -222,6 +222,7 @@ class CommunityService:
         if not tx or not tx["backend_id"].startswith("community:"):
             raise PermissionError(msg("Install an experimental plan before starting its observation."))
         names = [f["rel_path"] for f in self.s.db.tx_files(tx["id"]) if f["action"] != "rename_away"]
+        self.seen_live.discard(game_id)
         self.observations[game_id] = neural.begin(game.id, game.target_dir, game.exe_path, names)
         return self.report(game_id)
 

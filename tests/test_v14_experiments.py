@@ -186,6 +186,7 @@ def test_v14_dialog_and_benchmark_conditions_remain_accessible(qtbot, experiment
             dialog.grab().save(str(target / f'experiment-{language}-fixture.png'))
         page = BenchmarkPage(controller, None); qtbot.addWidget(page)
         page.resize(1000, 760); page.show(); qtbot.wait(50)
+        assert page.width() == 1000  # German export actions must fit the content area.
         assert set(page.conditions) == {'game_version', 'workload', 'resolution', 'settings'}
         assert page._meta(game)['resolution'] is None
         if capture: page.grab().save(str(target / f'benchmark-{language}-fixture.png'))
@@ -221,3 +222,13 @@ def test_normal_install_button_converts_legacy_review_without_expert_json(qtbot,
     assert s.restore(tx['id']).ok
     assert before == {f.name: f.read_bytes() for f in root.iterdir()}
     dialog.close()
+
+
+def test_fresh_observation_does_not_inherit_previous_process_exit(experiment):
+    s, game, imported, root = experiment
+    prepared = s.community.prepare(game.id, imported.sha256, 'optiscaler_nr', {}, True, True)
+    assert s.community.install(prepared, True, True).ok
+    s.community.seen_live.add(game.id)
+    report = s.community.observe(game.id)
+    assert report['stability']['state'] == 'not_observed'
+    assert not report['stability']['crash_verified']

@@ -89,10 +89,12 @@ class BenchmarkPage(QWidget):
         acts.addWidget(button(t("Export JSON"), "export", on_click=lambda: self._export("json")))
         acts.addWidget(button(t("Export HTML"), "export", on_click=lambda: self._export("html")))
         acts.addWidget(button(t("Export frame samples"), "export", on_click=self._export_frames))
-        acts.addWidget(button(t("Delete selected"), "trash", "danger", on_click=self._delete))
         acts.addStretch(1)
-        acts.addWidget(label(t("Select two sessions to compare them."), "muted"))
         self.sessions_card.body.addLayout(acts)
+        session_actions = QHBoxLayout()
+        session_actions.addWidget(button(t("Delete selected"), "trash", "danger", on_click=self._delete))
+        session_actions.addWidget(label(t("Select two sessions to compare them."), "muted", wrap=True), 1)
+        self.sessions_card.body.addLayout(session_actions)
         self.empty = EmptyState("chart", t("No benchmarks yet"),
                                 t("Not measured yet — run a benchmark to see performance results."),
                                 button(t("Start Benchmark"), "play", "primary", on_click=self._start))
