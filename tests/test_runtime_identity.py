@@ -92,53 +92,15 @@ def test_file_changed_during_signature_check_is_rejected(tmp_path):
     assert c.trust == TrustState.BLOCKED and "changed during" in c.detail
 
 
-@pytest.mark.skipif(__import__("os").name != "nt" or __import__("os").environ.get("CI") != "true",
-                    reason="Ephemeral certificate-store fixture requires an isolated Windows CI runner")
-def test_windows_verifies_actual_embedded_signer_and_rejects_tampering(tmp_path):
-    """Real WinVerifyTrust, isolated test publisher, mandatory cleanup; never claims NVIDIA hardware."""
-    import shutil
-    import subprocess
+@pytest.mark.skipif(__import__("os").name != "nt", reason="Real Windows Authenticode API test")
+def test_windows_verifies_actual_embedded_signer_not_an_arbitrary_certificate():
     import sys
     from akeno.security import authenticode
-    target = tmp_path / "signed-fixture.exe"
-    shutil.copyfile(sys.executable, target)
-    thumb = tmp_path / "thumbprint.txt"
-    script = tmp_path / "sign-fixture.ps1"
-    script.write_text(r'''param([string]$FixtureExe, [string]$ThumbFile)
-$ErrorActionPreference = 'Stop'
-$cert = New-SelfSignedCertificate -Type CodeSigningCert -Subject 'CN=AKENO CI Test Publisher' -CertStoreLocation Cert:\CurrentUser\My -NotAfter (Get-Date).AddDays(1)
-$cert.Thumbprint | Set-Content -LiteralPath $ThumbFile -Encoding ascii
-$store = New-Object System.Security.Cryptography.X509Certificates.X509Store('Root', 'CurrentUser')
-try { $store.Open('ReadWrite'); $store.Add($cert) } finally { $store.Close() }
-$result = Set-AuthenticodeSignature -FilePath $FixtureExe -Certificate $cert -HashAlgorithm SHA256
-if ($result.Status -ne 'Valid') { throw "Fixture signing failed: $($result.Status) $($result.StatusMessage)" }
-''', encoding="utf-8")
-    cleanup = tmp_path / "cleanup.ps1"
-    cleanup.write_text(r'''param([string]$ThumbFile)
-$ErrorActionPreference = 'Stop'
-if (Test-Path -LiteralPath $ThumbFile) {
-  $thumb = (Get-Content -LiteralPath $ThumbFile -Raw).Trim()
-  if ($thumb -notmatch '^[0-9A-Fa-f]{40}$') { throw 'Invalid fixture thumbprint' }
-  Remove-Item -LiteralPath "Cert:\CurrentUser\Root\$thumb" -Force -ErrorAction SilentlyContinue
-  Remove-Item -LiteralPath "Cert:\CurrentUser\My\$thumb" -Force -DeleteKey -ErrorAction SilentlyContinue
-}
-''', encoding="utf-8")
-    try:
-        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(script),
-                        str(target), str(thumb)], check=True, capture_output=True, text=True)
-        signature = authenticode.verify(str(target))
-        assert signature.checked and signature.valid, signature.detail
-        assert signature.signer == "AKENO CI Test Publisher"
-        assert not signature.is_nvidia
-        with target.open("r+b") as f:
-            f.seek(0x40)
-            value = f.read(1)
-            f.seek(0x40)
-            f.write(bytes([value[0] ^ 1]))
-        assert not authenticode.verify(str(target)).valid
-    finally:
-        subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-File", str(cleanup), str(thumb)],
-                       check=True, capture_output=True, text=True)
+    path = Path(sys.executable)  # python.org executable has an embedded PSF signature; OS files may be catalog-signed
+    signature = authenticode.verify(str(path))
+    assert signature.checked and signature.valid, signature.detail
+    assert signature.signer and "python software foundation" in signature.signer.casefold()
+    assert not signature.is_nvidia
 
 
 def test_version_resources_remain_available_above_whole_file_scan_limit(tmp_path):

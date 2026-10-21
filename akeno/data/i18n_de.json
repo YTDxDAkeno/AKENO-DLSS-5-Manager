@@ -893,6 +893,7 @@
  "{name} is another DLSS 5 neural add-on. Two neural consumers must never run together. AKENO can rename it to disable it (restored on uninstall).": "{name} ist ein weiteres DLSS-5-Neural-Add-on. Zwei Neural-Consumer dürfen nie gleichzeitig laufen. AKENO kann es zum Deaktivieren umbenennen (beim Deinstallieren wiederhergestellt).",
  "{name} {version} from {upstream} (reviewed {reviewed}).": "{name} {version} von {upstream} (geprüft am {reviewed}).",
  "{n} GB VRAM detected. Memory fit depends on resolution, game and model; measure before increasing quality.": "{n} GB VRAM erkannt. Der Speicherbedarf hängt von Auflösung, Spiel und Modell ab; vor höherer Qualität messen.",
+ "{n} GB VRAM detected; memory fit must be measured.": "{n} GB VRAM erkannt; Speicherbedarf durch Messung prüfen.",
  "{n} GB VRAM: enough for one model pass at any working resolution.": "{n} GB VRAM: genug für einen Modelldurchlauf bei jeder Arbeitsauflösung.",
  "{n} GB VRAM: keep one model pass and a working resolution of 67% or lower.": "{n} GB VRAM: bleib bei einem Modelldurchlauf und einer Arbeitsauflösung von höchstens 67 %.",
  "{n} can be resolved automatically": "{n} automatisch lösbar",

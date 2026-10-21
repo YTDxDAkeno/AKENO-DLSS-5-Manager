@@ -125,7 +125,7 @@ def recommend(game: Game | None, system: SystemInfo | None, gpu: GpuInfo | None,
             rec.vram_note = (msg("{vram:.0f} GB VRAM: keep a single model pass and a working resolution of 67% or "
                                  "lower; extra passes each need their own video memory.", vram=vram))
         else:
-            rec.vram_note = msg("{n} GB VRAM detected. Memory fit depends on resolution, game and model; measure before increasing quality.", n=f"{vram:.0f}")
+            rec.vram_note = msg("{n} GB VRAM detected; memory fit must be measured.", n=f"{vram:.0f}")
     else:
         rec.vram_note = "VRAM size unknown."
 
