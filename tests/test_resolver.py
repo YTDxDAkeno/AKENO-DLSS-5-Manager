@@ -1,8 +1,5 @@
 """Dependency resolver: discovery-driven plans, lawful acquisition, failure modes and honest states."""
 
-import hashlib
-from pathlib import Path
-
 import pytest
 
 from akeno.backends import runtimes

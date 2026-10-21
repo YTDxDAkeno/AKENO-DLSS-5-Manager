@@ -37,7 +37,8 @@ add regression tests, build Windows artifacts. Preserve all v1.0 features.
 | Windows CI teardown race fixed (`workers.drain`) | Done (81b47e6) |
 | v1.1.0; CI checks packaged assets, real GUI start, 150 % screenshots | Done (fad222e) |
 | Docs: README, STATUS, DEPENDENCIES, THIRD_PARTY_NOTICES, ARCHITECTURE, screenshots | Done (this commit) |
-| Verify the CI run of the final commit; record artifact link here | In progress |
+| Install/Resolve wait for a running runtime search (0ecc1f2); CI job summary with smoke report + SHA-256 (fc63d98) | Done |
+| CI verified: run 28 (0ecc1f2) full Windows pipeline green; artifact recorded below | Done |
 
 ## Research results (2026-10-20) — keep, they drive the design
 
@@ -89,6 +90,17 @@ add regression tests, build Windows artifacts. Preserve all v1.0 features.
 | 2026-10-20 | same, after redesign + runtime discovery (103e9f9) | 87 passed |
 | 2026-10-20 | same, after wizard/resolver/support/tests (fad222e) | 121 passed |
 | 2026-10-20 | GitHub Actions run 23 (4a9f171): Windows tests + smoke + PyInstaller + ZIP + Inno Setup + checksums, Linux tests | success |
+| 2026-10-21 | GitHub Actions run 28 (0ecc1f2): Windows 121 tests, smoke (source + packaged), 19 assets in package, packaged GUI kept running 20 s, 100 %/150 % screenshots, ZIP, installer, checksums; Linux tests | success |
+
+## Latest verified Windows build (v1.1.0)
+
+* Run: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39518701416
+* Artifact `AKENO-DLSS5-Manager-windows-x64`: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39518701416/artifacts/12309801763
+* SHA-256 (from the run's Checksums step):
+  * `c047c2a9f147b06fbc0aa065945219f4725a643ecc230cf99cde0d955f05e9f1  AKENO-DLSS5-Manager-1.1.0-portable-x64.zip`
+  * `4e36742f313fb13b005d79d7454a1eb832040b3b04edf7b7d565cc8db5f6d6f8  AKENO-DLSS5-Manager-1.1.0-Setup-x64.exe`
+* Later commits (fc63d98 and after) change only the CI job summary, docs and test imports; their runs rebuild
+  the same app. Use the newest green run on the branch if one exists.
 
 ## Files currently being modified
 
