@@ -18,3 +18,11 @@ Active branch: `codex/akeno-v1.3-community-runtime`, based on fetched v1.2 `43fd
 4. Full Linux/Windows tests, actual screenshot inspection, EXE/ZIP/installer/checksum artifacts and draft PR targeting v1.2.
 
 No new runtime, real installation, GPU execution or performance success has been established. Commit and push coherent checkpoints within five minutes of active work. Read this file and `git status` before continuing.
+
+## Checkpoint — independent community policy and transaction service
+
+- Added four runtime categories with x64/PE/NGX identity checks, full hash/version pins, exact source/release/commit metadata, explicit security/licensing/build review and known limitations. Missing/invalid NVIDIA signatures never enter the official runtime table; unknown files cannot deploy. A local review is user evidence, not AKENO endorsement or malware certification.
+- Added separate import cache with before/after-copy checks and explicit consent. Review targets pin generation, driver, renderer and backend; an experimental entry does not certify execution.
+- Offline experiment service reuses existing adapters, pinned package staging and Installer backup/rollback. It reanalyzes the game, blocks FiveM/GTA/anti-cheat/unknown sessions, validates dependencies/conflicts, seals plans and file/hardware state, rechecks before apply and verifies post-copy hashes. Reports reuse fresh neural observations and benchmark sessions. Generic install rejects this plan type.
+- **29 synthetic tests passed**, including trust categories, pins, identity, changed input invalidation, RTX 4080 offline eligibility, multiplayer/FiveM restrictions, dry run, install/observe/restore and failed-install rollback. No real binaries executed or hardware success claimed.
+- Next: integrated manager dialog and complete EN/DE, source review documentation, stronger edge-case tests, full suite and Windows build. Latest previously pushed commit: 73cc585; this checkpoint's exact hash is `git log -1` after push.

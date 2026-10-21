@@ -75,6 +75,8 @@ class AppServices:
         self.deps = DependencyResolver(self)
         from akeno.fivem.service import FiveMService
         self.fivem = FiveMService(self)
+        from akeno.community.service import CommunityService
+        self.community = CommunityService(self)
         self.system: SystemInfo | None = None
         cached = self.db.get_setting("_last_system")
         if cached:
@@ -228,6 +230,8 @@ class AppServices:
         return adapter.plan(game, package, params, ctx)
 
     def install(self, game: Game, plan: InstallPlan, log_cb=None) -> TxResult:
+        if plan.backend_id.startswith("community:") or "_community_runtime" in plan.params:
+            raise PermissionError("Use the prepared community experiment workflow")
         if game.launcher == "fivem" or plan.backend_id.startswith("fivem_legacy:"):
             raise PermissionError("Use the FiveM prepared transaction workflow")
         adapter = self.registry.get(plan.backend_id)
