@@ -106,3 +106,10 @@ Commit/push meaningful checkpoints at most five minutes apart during active work
 - Existing FiveM diagnostic exports now include the stored server policy, compatibility findings, and exact SHA-256 catalog matches with an explicit warning that a match proves neither execution nor licensing. The analysis table displays component role/version/source/verification. Added coverage and German labels.
 - Windows fd890bb still reports 33 px dashboard overflow (232 tests passed). Shortening the VRAM note alone did not resolve it; that earlier diagnosis was incomplete. The changed exact-build uncertainty can lengthen the recommendation reason. The dashboard now elides the visible reason to one line while preserving every reason in its tooltip; the original no-scroll regression remains unchanged.
 - One targeted run caught the new untranslated Version header before commit; translation added. Final Windows packaging remains pending.
+
+## Checkpoint — final source validation and refreshed screenshots
+
+- Application commit `210d6fb203ef3258e18ea7b9f3aa59124b0add31` is pushed. Full local suite: **232 passed, 1 skipped in 48.74s**; the skip is the real Windows-only Authenticode API test. Targeted integration/layout/runtime/i18n suite: **47 passed, 1 skipped**. `git diff --check` passes.
+- Source smoke: **AKENO 1.2.0 smoke test OK**, all eight pages, 19/19 original design assets. Linux hardware scanning correctly reports Windows APIs unavailable and does not invent GPU/runtime results.
+- Refreshed English wizard/Library and German 150% screenshots from this application commit; visually inspected both languages. Fixtures remain labelled and installation remains gated.
+- Current source Windows/Linux pipeline: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39523697460 . Pending its final tests/build, download the Windows artifact, independently verify SHA256SUMS, update PR #2 and final handover. Do not count old successful builds as validation of this snapshot.

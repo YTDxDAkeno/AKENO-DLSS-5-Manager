@@ -55,3 +55,7 @@
 - Final validation: 146/146 local tests passed (72 FiveM cases); repeat source smoke test passed. Remote Actions are separate from these local results; do not infer Windows/hardware success from the local run.
 - Ready for code review of the modular backend integration. Final UI wiring, real Windows/RTX 4080/FiveM-server validation and any production recipe approval remain future coordinated work. No automatic NR compatibility claim is made.
 - Continue from this branch, read the integration/research documents above, and keep five-minute commit/push checkpoints while actively working. Never reuse the synthetic test recipe as production evidence.
+
+## v1.2 integrated launcher follow-up
+
+The original isolated branch and PR #1 are preserved. Active combined work is on `codex/akeno-v1.2-fivem-integration`, draft PR #2: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/pull/2 . It combines Claude's v1.1 launcher with these modules and an embedded FiveM wizard. Latest pushed application checkpoint: `210d6fb`; 232 local tests passed, one Windows-only test skipped. See [INTEGRATION_PROGRESS.md](INTEGRATION_PROGRESS.md) for current checkpoints, exact CI results and remaining physical-machine acceptance work. No real FiveM/RTX 4080 NR execution has been established.

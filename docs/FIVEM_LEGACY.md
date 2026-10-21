@@ -56,7 +56,7 @@ See [FIVEM_RESEARCH.md](FIVEM_RESEARCH.md) for pinned source links and limitatio
 
 There is no automatic fallback from neural rendering to ordinary DLSS SR, frame generation, ReShade sharpening or a patched model with a "supported" label. The RTX 4080 has relevant hardware capabilities, but that is separate from this runtime/model and FiveM route being supported. The retrieved NVIDIA developer DLSS page describes DLSS 4/4.5 features; it does not establish official FiveM DLSS 5 support.
 
-## Integration contract for the launcher follow-up
+## Integrated launcher contract
 
 Use `FiveMService(app_services)` from `akeno.fivem.service`; it reuses the existing registry, catalog, compatibility database, runtime import and transactional storage. Keep the existing checkout: cloud tasks are already isolated, and no Git worktree is needed. The integration branch combines the completed v1.1 launcher and existing FiveM work. All eight pages and the original design assets are preserved.
 
@@ -73,7 +73,7 @@ for installation in five_m.discover():
     # Default has insufficient evidence, with specific missing-permission/evidence findings; deployment stays disabled.
 ```
 
-Future UI work must preserve the `FiveMInstallation` alongside its shared `Game` and keep the FiveM identity out of the generic GTA/manual discovery path. `as_raw_game` is the Game Discovery bridge; generic reanalysis alone loses FiveM-specific evidence and target rules. Do not call the generic UI install path for these plans: use `FiveMService.prepare`, `install(prepared, current_policy)` and `restore`. Do not register a permissive adapter globally or change generic safety defaults to make FiveM pass.
+All UI changes must preserve the `FiveMInstallation` alongside its shared `Game` and keep the FiveM identity out of the generic GTA/manual discovery path. `as_raw_game` is the Game Discovery bridge; generic reanalysis alone loses FiveM-specific evidence and target rules. Do not call the generic UI install path for these plans: use `FiveMService.prepare`, `install(prepared, current_policy)` and `restore`. Do not register a permissive adapter globally or change generic safety defaults to make FiveM pass.
 
 `BackendReview` is **maintainer-reviewed local evidence**, not a user-supplied JSON preference or an upstream claim. It pins the backend package, client/configuration/inventory fingerprint, relevant upstream commit, API, exact PCI GPU identity/generation, tested dedicated VRAM, tested driver versions, signed-runtime hashes, exact pre-existing plugin hashes and exact output file layout. It requires successful creation **and evaluation** of the neural feature with an unmodified NVIDIA-signed runtime. This version deliberately ships `REVIEWED_BACKENDS = ()`. Do not populate it from the synthetic test fixture.
 
@@ -91,6 +91,6 @@ The only writable application target is `FiveM.app/plugins`. A backend target vi
 4. Only after that evidence is independently reviewed, pin a backend recipe and exact plugin-loading layout. Verify licensing/provenance of ReShade, consumer, shader/input provider and every executable artifact. Keep upstream installers and broad overwrite instructions out of the AKENO transaction.
 5. Close FiveM and mod managers; create a snapshot, inspect the plan, install, and keep transaction logs. Confirm the real FiveM process loads the intended plugin/runtime and that the neural pass actually evaluates. Observe depth/motion quality, HUD/text artifacts, stability, frame times and VRAM under representative scenes. Ordinary SR/FG success is insufficient.
 6. Verify behavior under the permitted server policy, then restore and compare all original file hashes. Confirm GTX/GTA base-game files remained unchanged and test crash recovery/restore conflicts. Never claim guaranteed protection from bans.
-7. Attach logs and measured results, including failures, before considering a supported recipe or final launcher UI integration. There are currently **no real-hardware acceptance results** in this branch.
+7. Attach logs and measured results, including failures, before considering a supported production recipe. There are currently **no real-hardware acceptance results** in this branch.
 
 In v1.2 the owned-server profile is persisted per FiveM client. The wizard separates server rules, hardware capabilities, runtime inventory, neural execution evidence and deployment eligibility. Unknown compatibility is distinct from explicit policy denial/security blocks. Existing PR #1 remains the original isolated backend work; see docs/INTEGRATION_PROGRESS.md for the integrated branch.
