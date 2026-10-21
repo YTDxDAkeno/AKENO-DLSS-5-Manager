@@ -93,11 +93,20 @@ def test_file_changed_during_signature_check_is_rejected(tmp_path):
 
 
 @pytest.mark.skipif(__import__("os").name != "nt", reason="Real Windows Authenticode API test")
-def test_windows_verifies_actual_microsoft_signer_not_an_arbitrary_certificate():
-    import os
+def test_windows_verifies_actual_embedded_signer_not_an_arbitrary_certificate():
+    import sys
     from akeno.security import authenticode
-    path = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    path = Path(sys.executable)  # python.org executable has an embedded PSF signature; OS files may be catalog-signed
     signature = authenticode.verify(str(path))
     assert signature.checked and signature.valid, signature.detail
-    assert signature.signer and "microsoft" in signature.signer.casefold()
+    assert signature.signer and "python software foundation" in signature.signer.casefold()
     assert not signature.is_nvidia
+
+
+def test_version_resources_remain_available_above_whole_file_scan_limit(tmp_path):
+    p = candidate(tmp_path, runtime="nvngx_dlssnr.dll", product="NVIDIA DLSSNR - DVS PRODUCTION",
+                  original="CL 38718415", version=(310, 9, 16, 0))
+    parsed = pe.parse(p, version_scan_limit=1)
+    assert parsed.file_version == "310.9.16.0"
+    assert parsed.strings["OriginalFilename"] == "CL 38718415"
+    assert "NVSDK_NGX_D3D12_EvaluateFeature" in parsed.exports

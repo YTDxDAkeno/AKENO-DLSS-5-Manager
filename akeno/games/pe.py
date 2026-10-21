@@ -128,14 +128,16 @@ def parse(path: str | Path, with_version: bool = True, version_scan_limit: int =
                         name = _read_cstr(f, name_off).lower()
                         if name and name not in info.imports:
                             info.imports.append(name)
-            if with_version and size <= version_scan_limit:
+            if with_version:
                 rsrc = _resource_section(sections, opt, dd_off)
                 if rsrc is not None:
                     f.seek(rsrc[0])
                     blob = f.read(min(rsrc[1], 8 * 1024 * 1024))
-                else:
+                elif size <= version_scan_limit:
                     f.seek(max(0, size - 4 * 1024 * 1024))
-                    blob = f.read()
+                    blob = f.read(4 * 1024 * 1024)
+                else:
+                    blob = b""
                 info.file_version, info.strings = parse_version_blob(blob)
             return info
     except OSError as exc:
@@ -152,7 +154,10 @@ def _resource_section(sections, opt: bytes, dd_off: int) -> tuple[int, int] | No
         return None
     for va, vsize, raw_ptr, raw_size in sections:
         if va <= rva < va + max(vsize, raw_size):
-            return raw_ptr + (rva - va), min(raw_size - (rva - va), max(rsize, 0) or raw_size)
+            delta = rva - va
+            if delta >= raw_size:
+                return None
+            return raw_ptr + delta, min(raw_size - delta, max(rsize, 0) or raw_size)
     return None
 
 
