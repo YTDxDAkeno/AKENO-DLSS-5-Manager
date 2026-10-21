@@ -190,3 +190,5 @@ docs/                 STATUS.md, ARCHITECTURE.md, DEPENDENCIES.md, DEVELOPMENT_P
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Validated v1.2 integration build, downloads, checksums and real-PC limits: [docs/BUILD_V1_2.md](docs/BUILD_V1_2.md).

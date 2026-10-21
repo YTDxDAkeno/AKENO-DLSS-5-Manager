@@ -59,3 +59,5 @@
 ## v1.2 integrated launcher follow-up
 
 The original isolated branch and PR #1 are preserved. Active combined work is on `codex/akeno-v1.2-fivem-integration`, draft PR #2: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/pull/2 . It combines Claude's v1.1 launcher with these modules and an embedded FiveM wizard. Latest pushed application checkpoint: `210d6fb`; 232 local tests passed, one Windows-only test skipped. See [INTEGRATION_PROGRESS.md](INTEGRATION_PROGRESS.md) for current checkpoints, exact CI results and remaining physical-machine acceptance work. No real FiveM/RTX 4080 NR execution has been established.
+
+Final integrated build: Windows 233/233 tests, Linux 232 passed / 1 Windows-only skip; see [BUILD_V1_2.md](BUILD_V1_2.md) for independently checked final artifacts, actual Windows screenshots and remaining physical-PC work.
