@@ -48,7 +48,7 @@ class PreparedFiveMPlan:
 class FiveMService:
     """Uses AppServices' registry, catalog, staging, compatibility DB and Installer.
 
-    It is opt-in: no edits to default discovery, backend registration or launcher UI.
+    The v1.2 launcher routes FiveM discovery and its embedded wizard here.
     Do not submit FiveM plans to the generic UI install path; use this facade so the
     identity, current server permission, process and fresh-file checks also execute.
     """

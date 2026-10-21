@@ -85,6 +85,9 @@ def test_all_eight_pages_and_embedded_fivem_wizard(workflow, qtbot, language):
         page = win.pages["install"]
         assert page.fivem_panel.isVisible() and not page.generic_panel.isVisible()
         assert page.fivem_panel.tabs.count() == 4
+        if language == "de":
+            assert "insufficient" not in page.fivem_panel.findings.toPlainText()
+            assert "Kompatibilität" in page.fivem_panel.findings.toPlainText()
         assert not page.fivem_panel.plan_button.isEnabled()
         assert not page.fivem_panel.install_button.isEnabled()
         panel = page.fivem_panel

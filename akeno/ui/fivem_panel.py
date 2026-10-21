@@ -14,6 +14,7 @@ from akeno.diagnostics import neural
 from akeno.hardware.support import OFFICIAL
 from akeno.i18n import t
 from akeno.ui import theme
+from akeno.ui.pages.dashboard import COMPAT_TEXT
 from akeno.ui.widgets import Card, KeyValueGrid, StatusPill, button, confirm, info, label
 
 
@@ -171,7 +172,7 @@ class FiveMPanel(Card):
             "\n" + t("Driver versions below 616.56 are outside the documented community test matrix; newer versions still require verification.") +
             "\nhttps://www.nvidia.com/en-us/drivers/")
         result = self.s.fivem.compatibility(adapter)
-        self.findings.setPlainText(t("Technical status") + ": " + t(result.status.value) + "\n\n" +
+        self.findings.setPlainText(t("Technical status") + ": " + t(COMPAT_TEXT[result.status][0]) + "\n\n" +
                                   "\n".join(describe(f) for f in result.findings))
         allowed = adapter.review is not None and not result.blockers
         self.plan_button.setEnabled(allowed)
@@ -196,7 +197,7 @@ class FiveMPanel(Card):
                 (t("Neural feature creation"), StatusPill(t("Reported successful") if initialized else t("Not verified"), "info" if initialized else "pending")),
                 (t("Neural frame evaluation"), StatusPill(t("Reported successful") if evaluated else t("Not verified"), "info" if evaluated else "pending")),
                 (t("Current installation attribution"), StatusPill(t("verified") if state == "verified" else t("Not verified"), "ok" if state == "verified" else "pending")),
-                (t("Game compatibility"), t(self.s.fivem.compatibility(adapter).status.value)),
+                (t("Game compatibility"), t(COMPAT_TEXT[self.s.fivem.compatibility(adapter).status][0])),
                 (t("Server permission"), policy_text)]
         self.execution_grid.set_rows(rows)
 
