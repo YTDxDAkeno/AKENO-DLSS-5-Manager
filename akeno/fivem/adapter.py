@@ -31,10 +31,11 @@ class FiveMLegacyAdapter(BackendAdapter):
 
     def __init__(self, delegate: BackendAdapter, installation: FiveMInstallation,
                  policy: ServerPolicy, package: Package | None = None,
-                 review: BackendReview | None = None, database: CompatDatabase | None = None):
+                 review: BackendReview | None = None, database: CompatDatabase | None = None, community_inspector=None):
         if delegate.id not in ("dlss5_feeder", "optiscaler_nr"):
             raise ValueError("Unsupported FiveM backend candidate")
         self.delegate, self.installation, self.policy = delegate, installation, policy
+        self.community_inspector = community_inspector
         self.package, self.review = package, review
         self.database = database or CompatDatabase.load()
         self.id = "fivem_legacy:" + delegate.id
@@ -72,7 +73,7 @@ class FiveMLegacyAdapter(BackendAdapter):
         if self.review and self.review.backend_id != self.delegate.id:
             findings.append(Finding(Severity.BLOCKER, "fivem_review_backend", "The recipe names a different backend."))
         findings += policy_findings(self.policy, self.review, self.package)
-        findings += evidence_findings(self.installation, ctx, self.review, self.package)
+        findings += evidence_findings(self.installation, ctx, self.review, self.package, self.community_inspector)
         findings.append(Finding(Severity.WARNING, "fivem_experimental",
             "Experimental FiveM integration: no RTX 4080 performance, VRAM-fit or ban-safety guarantee."))
         if self.installation.errors:

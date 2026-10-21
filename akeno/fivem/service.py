@@ -84,6 +84,8 @@ class FiveMService:
             if p.name.lower() in runtimes.SUPPORTED_RUNTIMES:
                 try:
                     record["runtime"] = asdict(runtimes.evaluate(str(p)))
+                    if p.name.lower() == runtimes.NR_RUNTIME:
+                        record["community_inspection"] = self.services.community.runtimes.inspect(str(p)).to_dict()
                 except (OSError, ValueError) as exc:
                     record["runtime_error"] = str(exc)
             record["catalog_matches"] = [{"package": pkg.id, "upstream": pkg.upstream, "member": name,
@@ -99,7 +101,12 @@ class FiveMService:
             policy = asdict(self.policy(game.id))
             for key in ("allowed_backends", "known_graphics_hashes"):
                 policy[key] = sorted(policy[key])
-            extra = {"server_policy": policy, "edition": installation.edition.value,
+            from akeno.community.candidates import BANDUKIDS
+            extra = {"bandukids_qualification": {"candidate": BANDUKIDS.to_dict(),
+                         "deployment_eligible": bool(compatibility and not compatibility.blockers),
+                         "recipe_available": bool(adapter and adapter.review),
+                         "note": "Local hash match/ComfyUI processing is not a FiveM recipe. Exact client/plugin loading, protection compatibility, offline and FiveM neural evaluation plus operator permission are required."},
+                     "server_policy": policy, "edition": installation.edition.value,
                      "compatibility": asdict(compatibility) if compatibility else None}
         return {"schema": 1, "read_only": True, "evidence_level": "local_inventory", **extra, "game_id": game.id, "game": game.name,
                 "gpu": gpu.to_dict() if gpu else None, "target": str(target), "components": components,
@@ -135,11 +142,23 @@ class FiveMService:
         if delegate is None:
             raise ValueError("Unknown backend")
         package = package or self.services.package_for(delegate)
-        return FiveMLegacyAdapter(delegate, installation, policy, package, review, self.services.compat_db)
+        return FiveMLegacyAdapter(delegate, installation, policy, package, review, self.services.compat_db,
+                                  self.services.community.runtimes.inspect)
 
     def context(self, adapter: FiveMLegacyAdapter, staging: Path | None = None) -> BackendContext:
+        lookup = self.services.runtime_lookup
+        if adapter.review and adapter.review.runtime_policy == "reviewed_bandukids":
+            def lookup(name):
+                if name != "nvngx_dlssnr.dll":
+                    return self.services.runtime_lookup(name)
+                pin = dict(adapter.review.runtime_hashes).get(name)
+                data = self.services.db.get_setting("community-runtime:" + (pin or ""))
+                if not data:
+                    return None
+                return {"stored_path": data.get("path"), "sha256": data.get("sha256"),
+                    "trust": data.get("category"), "review": data.get("review"), "version": data.get("version")}
         return BackendContext(system=self.services.system, gpu=self.services.selected_gpu(),
-            runtime_lookup=self.services.runtime_lookup, staging_dir=staging,
+            runtime_lookup=lookup, staging_dir=staging,
             managed_files=self.services.installer.managed_files(adapter.installation.game.id, str(adapter.target)),
             strict_conflicts=True)
 
