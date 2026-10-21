@@ -5,6 +5,7 @@ from akeno.i18n import msg
 from dataclasses import asdict, dataclass
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from akeno.backends import runtimes
@@ -75,14 +76,19 @@ class CommunityService:
         adapter = self.s.registry.get(backend_id)
         if adapter is None or backend_id not in ("optiscaler_nr", "dlss5_feeder"):
             raise PermissionError(msg("A supported neural backend is required."))
+        if not self.s.system or not (self.s.system.os_name or '').lower().startswith('windows') or self.s.system.is_64bit is not True:
+            raise PermissionError('Experimental deployment requires a detected 64-bit Windows environment.')
         gpu = self.s.selected_gpu()
-        if not gpu or gpu.vendor != Vendor.NVIDIA or gpu.has_tensor_cores is not True or not gpu.driver_version:
+        if not gpu or gpu.vendor != Vendor.NVIDIA or gpu.has_tensor_cores is not True or gpu.is_software or not re.fullmatch(r"\d{3}\.\d{2}", gpu.driver_version or ""):
             raise PermissionError(msg("A detected RTX GPU and driver are required."))
         if game.api not in adapter.supported_apis or game.api == GraphicsApi.UNKNOWN:
             raise PermissionError(msg("The selected renderer is not supported by this backend."))
-        if candidate.category not in (Category.COMMUNITY, Category.OFFICIAL):
+        if candidate.category not in (Category.COMMUNITY, Category.OFFICIAL, Category.ADVANCED):
             raise PermissionError(candidate.detail)
-        if candidate.category == Category.COMMUNITY:
+        if candidate.review and candidate.review.get("schema") == 3:
+            from akeno.community.profiles import eligibility
+            eligibility(candidate.review, gpu, backend_id, game.api.value)
+        elif candidate.category == Category.COMMUNITY:
             from akeno.community import candidates
             named = candidates.by_hash(candidate.sha256)
             if named and gpu.device_id not in named.experimental_device_ids:
@@ -94,6 +100,11 @@ class CommunityService:
                 match = [t for t in match if t.get("gpu_device_id") == gpu.device_id]
             if not match or any(t["status"] == "incompatible" for t in match):
                 raise PermissionError(msg("No eligible exact runtime/GPU/driver/backend/renderer review target."))
+        from akeno.hardware.support import runtime_verdict
+        verdict = runtime_verdict(candidate.version, gpu.generation, self.s.compat_db.nr_runtimes(),
+            build_sha256=candidate.sha256)
+        if verdict.state == 'fails':
+            raise PermissionError(verdict.text)
         rt = {"stored_path": candidate.path, "sha256": candidate.sha256, "version": candidate.version}
         lookup = lambda name: rt if name == runtimes.NR_RUNTIME else self.s.runtime_lookup(name)
         managed = self.s.installer.managed_files(game.id, game.target_dir)
@@ -211,6 +222,7 @@ class CommunityService:
         if not tx or not tx["backend_id"].startswith("community:"):
             raise PermissionError(msg("Install an experimental plan before starting its observation."))
         names = [f["rel_path"] for f in self.s.db.tx_files(tx["id"]) if f["action"] != "rename_away"]
+        self.seen_live.discard(game_id)
         self.observations[game_id] = neural.begin(game.id, game.target_dir, game.exe_path, names)
         return self.report(game_id)
 
@@ -225,7 +237,7 @@ class CommunityService:
         stability = "process_observed" if exact_live else ("process_exit_observed" if game.id in self.seen_live else "not_observed")
         sessions = self.s.benchmarks.sessions(game.id)
         tx = self.s.installer.active_install(game.id)
-        return {"game": game.to_dict(), "gpu": self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
+        report = {"game": game.to_dict(), "gpu": self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
             "driver": self.s.selected_gpu().driver_version if self.s.selected_gpu() else None,
             "renderer": game.api.value, "transaction": tx, "neural": asdict(evidence),
             "runtime": self.s.db.get_setting("community-runtime:" + tx["params"].get("_community_runtime", "")) if tx else None,
@@ -237,3 +249,14 @@ class CommunityService:
             "limitations": ["User offline attestation is not live session detection.",
                 "Log attribution is not cryptographic GPU execution proof.",
                 "No absence of errors, file install, SR or FG success proves neural evaluation."]}
+
+        if observation:
+            from akeno.diagnostics.privacy import redact
+            from akeno.paths import sub
+            folder = sub('reports')
+            destination = folder / ('experiment-' + digest(game.id)[:16] + '.json')
+            public = redact(dict(report, measured_sessions=report['measured_sessions'][:100]))
+            temporary = destination.with_suffix('.tmp')
+            temporary.write_text(json.dumps(public, indent=2, default=str), encoding='utf-8')
+            temporary.replace(destination)
+        return report

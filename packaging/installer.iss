@@ -4,7 +4,14 @@
 ; can still be restored with a later AKENO installation.
 
 #ifndef AppVersion
-  #define AppVersion "1.3.1"
+  #define AppVersion "1.4.0"
+#endif
+
+#ifndef SourceDir
+  #define SourceDir "..\dist\AKENO"
+#endif
+#ifndef ArtifactDir
+  #define ArtifactDir "out"
 #endif
 
 [Setup]
@@ -20,7 +27,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
-OutputDir=out
+OutputDir={#ArtifactDir}
 OutputBaseFilename=AKENO-DLSS5-Manager-{#AppVersion}-Setup-x64
 SetupIconFile=akeno.ico
 UninstallDisplayIcon={app}\AKENO.exe
@@ -37,7 +44,7 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "..\dist\AKENO\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion

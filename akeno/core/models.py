@@ -237,6 +237,9 @@ class FrameStats:
     low_01pct_fps: float | None
     stdev_frametime_ms: float
     stutter_ratio: float   # share of frames > 2x median frame time
+    median_fps: float | None = None
+    stutter_events_per_minute: float | None = None
+    frame_spikes: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

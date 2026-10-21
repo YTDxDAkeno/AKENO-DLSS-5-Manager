@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QSpinBox, QTableWidget,
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QSpinBox, QTableWidget, QLineEdit,
                                QTableWidgetItem, QVBoxLayout, QWidget, QAbstractItemView)
 
 from akeno.benchmark.stats import consistency_label
@@ -52,6 +52,13 @@ class BenchmarkPage(QWidget):
         row.addWidget(label(t("Duration"), "dim"))
         row.addWidget(self.duration)
         run.body.addLayout(row)
+        conditions = QHBoxLayout()
+        self.conditions = {}
+        for key, title in [('game_version', 'Game version'), ('workload', 'Scene / workload'),
+                           ('resolution', 'Game resolution'), ('settings', 'Graphics settings')]:
+            edit = QLineEdit(); edit.setPlaceholderText(t(title))
+            edit.setAccessibleName(t(title)); self.conditions[key] = edit; conditions.addWidget(edit)
+        run.body.addLayout(conditions)
         row2 = QHBoxLayout()
         self.btn_start = button(t("Start Benchmark"), "play", "primary", on_click=self._start)
         self.btn_stop = button(t("Stop"), "stop", on_click=self._stop)
@@ -63,6 +70,7 @@ class BenchmarkPage(QWidget):
             row2.addWidget(w)
         row2.addWidget(self.status, 1)
         run.body.addLayout(row2)
+        run.body.addWidget(label(t("Baseline: restore original files and capture a repeatable scene. Experimental: install the selected runtime and repeat the same scene and settings. Select both measured sessions below to compare performance; assess visual quality separately."), "muted", wrap=True))
         lay.addWidget(run)
         self.sessions_card = Card(t("Sessions"), "chart", theme.BLUE)
         self.table = QTableWidget(0, 9)
@@ -79,10 +87,14 @@ class BenchmarkPage(QWidget):
         acts = QHBoxLayout()
         acts.addWidget(button(t("Export CSV"), "export", on_click=lambda: self._export("csv")))
         acts.addWidget(button(t("Export JSON"), "export", on_click=lambda: self._export("json")))
-        acts.addWidget(button(t("Delete selected"), "trash", "danger", on_click=self._delete))
+        acts.addWidget(button(t("Export HTML"), "export", on_click=lambda: self._export("html")))
+        acts.addWidget(button(t("Export frame samples"), "export", on_click=self._export_frames))
         acts.addStretch(1)
-        acts.addWidget(label(t("Select two sessions to compare them."), "muted"))
         self.sessions_card.body.addLayout(acts)
+        session_actions = QHBoxLayout()
+        session_actions.addWidget(button(t("Delete selected"), "trash", "danger", on_click=self._delete))
+        session_actions.addWidget(label(t("Select two sessions to compare them."), "muted", wrap=True), 1)
+        self.sessions_card.body.addLayout(session_actions)
         self.empty = EmptyState("chart", t("No benchmarks yet"),
                                 t("Not measured yet — run a benchmark to see performance results."),
                                 button(t("Start Benchmark"), "play", "primary", on_click=self._start))
@@ -165,8 +177,14 @@ class BenchmarkPage(QWidget):
                                                          if x) or t("Unknown")))
         if len(sel) == 2:
             a, b = sel
+            if b.get('label') == 'baseline' and a.get('label') != 'baseline': a, b = b, a
             diff = (b["stats"]["avg_fps"] / a["stats"]["avg_fps"] - 1) * 100 if a["stats"]["avg_fps"] else 0
             rows.append((t("Difference"), f"{diff:+.1f}% ({b['label']} vs {a['label']})"))
+            for metric in self.s.benchmarks.comparison_rows(a, b):
+                if metric['difference'] is not None:
+                    rows.append((metric['metric'], f"{metric['native']:.2f} → {metric['experimental']:.2f} ({metric['difference']:+.2f})"))
+                else:
+                    rows.append((metric['metric'], t('Not measured')))
             warn = self.s.benchmarks.comparable(a, b)
             if warn:
                 rows.append((t("Comparison warning"), t("Measured under different conditions: ") + ", ".join(warn)))
@@ -174,13 +192,12 @@ class BenchmarkPage(QWidget):
 
     def _meta(self, game) -> dict:
         gpu = self.s.selected_gpu()
-        disp = self.s.system.primary_display if self.s.system else None
-        a = self.s.backend_for(game)
-        active = self.s.db.active_profile(game.id, a.id) if a else None
+        active = self.s.installer.active_install(game.id)
         return {"gpu": gpu.name if gpu else None, "driver": gpu.driver_version if gpu else None,
-                "resolution": f"{disp.width}x{disp.height}" if disp and disp.width else None,
-                "backend_id": a.id if a and self.s.installer.active_install(game.id, a.id) else None,
-                "neural_config": active["params"] if active else {}}
+                "resolution": self.conditions["resolution"].text().strip() or None,
+                "backend_id": active["backend_id"] if active else None,
+                "neural_config": dict(active["params"] if active else {},
+                    capture_conditions={k: v.text().strip() for k, v in self.conditions.items()})}
 
     def _start(self) -> None:
         gid = self.game_combo.currentData()
@@ -198,7 +215,7 @@ class BenchmarkPage(QWidget):
             return
         lbl = self.label_combo.currentData() or "custom"
         a = self.s.backend_for(game)
-        installed = a and self.s.installer.active_install(game.id, a.id)
+        installed = self.s.installer.active_install(game.id)
         if lbl == "baseline" and installed:
             if not confirm(self, t("Benchmark"), t("{b} is installed in this game. For a true baseline, set the "
                                                    "Disabled profile (or turn Neural Rendering off in its overlay) "
@@ -217,11 +234,14 @@ class BenchmarkPage(QWidget):
         self.spinner.start()
         self.status.setText(t("Preparing PresentMon…"))
         meta = self._meta(game)
+        meta['neural_config']['baseline_user_attested_off'] = bool(lbl == 'baseline' and installed)
         proc = os.path.basename(game.exe_path)
 
+        gpu = self.s.selected_gpu()
         def work(emit):
+            from akeno.hardware.sensors import sample
             self.s.benchmarks.runner.ensure(token=self.token)
-            return self.s.benchmarks.run(game.id, proc, lbl, meta, dur, delay, on_status=emit, token=self.token)
+            return self.s.benchmarks.run(game.id, proc, lbl, meta, dur, delay, on_status=emit, token=self.token, process_id=running[0].pid if len(running) == 1 else None, sensor_sampler=lambda: sample(gpu))
 
         def done(sess):
             self._finish()
@@ -264,6 +284,12 @@ class BenchmarkPage(QWidget):
         self.status.setText(t("Imported {n} frames.", n=sess.stats.frames))
         self.ctl.benchmarks_changed.emit()
 
+    def _export_frames(self):
+        sessions = self._selected()
+        if not sessions: return
+        path, _ = QFileDialog.getSaveFileName(self, t('Export frame samples'), 'akeno-frames.csv', 'CSV (*.csv)')
+        if path: self.s.benchmarks.export_frame_csv(sessions, path)
+
     def _export(self, kind: str) -> None:
         sessions = self._selected() or self._sessions
         if not sessions:
@@ -271,7 +297,7 @@ class BenchmarkPage(QWidget):
         path, _ = QFileDialog.getSaveFileName(self, t("Export"), f"akeno-benchmarks.{kind}", f"{kind.upper()} (*.{kind})")
         if not path:
             return
-        (self.s.benchmarks.export_csv if kind == "csv" else self.s.benchmarks.export_json)(sessions, path)
+        getattr(self.s.benchmarks, "export_" + kind)(sessions, path)
         self.status.setText(t("Exported {n} session(s).", n=len(sessions)))
 
     def _delete(self) -> None:

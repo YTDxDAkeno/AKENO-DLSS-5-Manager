@@ -12,3 +12,11 @@ packaging/akeno.ico
 screenshots/raw/
 packaging/version_info.txt
 packaging/akeno-256.png
+
+# User-supplied proprietary runtimes and private build outputs must never enter Git.
+runtimes/**/*.dll
+runtimes/**/*.bin
+runtimes/**/*.zip
+runtimes/**/*.exe
+dist-private/
+private-inputs/

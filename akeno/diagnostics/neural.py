@@ -35,6 +35,7 @@ class NeuralEvidence:
     state: str = "none"  # none, installed, loaded, initialized, running, verified, failed, stale
     lines: list[dict] = field(default_factory=list)
     detail: str = ""
+    stages: dict[str, bool] = field(default_factory=dict)
 
 
 def _prefix(path: Path, size: int) -> str:
@@ -79,6 +80,8 @@ def classify(line: str) -> str | None:
     if any(marker in low for marker in ("feature 18 create failed", "neural model not created", "0xbad00001",
                                          "dlss-nr evaluate returned 0x", "dlss-nr (proxy): evaluate returned 0x")):
         return "failed"
+    if re.search(r'dlss-nr(?: \(proxy\))?[:\] ]+ngx initialized(?: successfully)?', low):
+        return 'ngx_initialized'
     if "inline feature 18 evaluation succeeded" in low:
         return "running"
     # Real OptiScaler error logs are recognized; vague "loaded" or SR/FG messages are not NR success.
@@ -150,6 +153,15 @@ def inspect(target: str | Path, observation: Observation | None = None, game_id:
             live = observation and observation.executable in {str(Path(p).resolve()) for p in process_paths if p}
             if observation and observation.artifacts and initialized and running and live:
                 result.state = "verified"
+    stages = {line['stage'] for line in result.lines}
+    result.stages = {'runtime_present': 'nvngx_dlssnr.dll' in names,
+        'runtime_loaded': 'loaded' in stages,
+        'ngx_initialized': 'ngx_initialized' in stages,
+        'feature_18_created': 'initialized' in stages,
+        'feature_evaluated': 'running' in stages,
+        'evaluations_attributed_to_game': result.state == 'verified'}
+    # Keep evidence bounded even if a backend writes thousands of repeated evaluations.
+    result.lines = result.lines[-500:]
     result.detail = "Backend log evidence; installed, initialized and evaluated are separate states."
     if result.state == "running" and not observation:
         result.detail = "Unattributed historical evaluation report; start observation for the selected installation."

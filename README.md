@@ -196,3 +196,8 @@ Validated v1.2 integration build, downloads, checksums and real-PC limits: [docs
 Validated v1.3 source/build evidence, downloads and exact hashes: [docs/BUILD_V1_3.md](docs/BUILD_V1_3.md).
 
 Bandukids-focused 1.3.1: named exact-hash local runtime review, unverified RTX 4080 profile and separately qualified FiveM recipe plumbing. ComfyUI video claims do not establish game support; no production FiveM recipe or binary-safety approval is shipped. [Review and guide](docs/BANDUKIDS_REVIEW.md) · [Progress](docs/BANDUKIDS_PROGRESS.md).
+
+
+## v1.4 experimental installer branch
+
+The v1.4 branch adds local offline bundles, controlled RTX 40/50 first tests without mandatory expert-review JSON, automatic opt-in diagnostics/PresentMon measurement, and an isolated FiveM development-validation workflow. Official NVIDIA verification remains separate. No proprietary NVIDIA DLL is included in public packages. See [private offline packaging](docs/OFFLINE_BUNDLES.md) and [implementation and validation status](docs/AKENO_V1_4_PROGRESS.md). Hardware execution and FiveM plugin support require real evidence; fixture tests do not establish them.

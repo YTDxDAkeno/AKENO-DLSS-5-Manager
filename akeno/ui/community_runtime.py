@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
     QLineEdit, QPlainTextEdit, QTabWidget, QVBoxLayout, QWidget, QScrollArea)
 from akeno.backends import runtimes
@@ -11,7 +11,7 @@ from akeno.community.runtime import Category, LABELS, load_review
 from akeno.community import candidates
 from akeno.i18n import t
 from akeno.ui import theme
-from akeno.ui.widgets import Card, StatusPill, KeyValueGrid, button, label
+from akeno.ui.widgets import Card, StatusPill, KeyValueGrid, button, label, confirm
 
 
 class CommunityRuntimeDialog(QDialog):
@@ -30,7 +30,7 @@ class CommunityRuntimeDialog(QDialog):
             game=self.game.name if self.game else t("No game selected")), "dim", wrap=True))
         cards = QHBoxLayout()
         for title, text, state in [(t("Official NVIDIA support"), t("Signature and game support are separate"), "pending"),
-            (t("Community review"), t("Exact file and source review required"), "warn"),
+            (t("Community review"), t("Exact file identity and source required"), "warn"),
             (t("Experimental testing"), t("Offline / single-player only"), "warn")]:
             card = Card(title, "shield", theme.VIOLET)
             card.body.addWidget(label(text, "dim", wrap=True))
@@ -45,7 +45,7 @@ class CommunityRuntimeDialog(QDialog):
             self.tabs.addTab(scroll, name); pages.append(lay)
         inventory, experiment, evidence = pages
         self.candidate_choice = QComboBox()
-        self.candidate_choice.addItem(t("Generic local runtime — explicit review required"), None)
+        self.candidate_choice.addItem(t("Advanced local experiment — source required"), None)
         for candidate in candidates.all_candidates():
             self.candidate_choice.addItem(t("Bandukids Ada NR — RTX 4080 experimental, unverified"), candidate.id)
         inventory.addWidget(self.candidate_choice)
@@ -59,20 +59,32 @@ class CommunityRuntimeDialog(QDialog):
         inventory.addLayout(source_links)
         self.path = QLineEdit(); self.path.setReadOnly(True)
         inventory.addWidget(self.path)
+        self.source = QLineEdit()
+        self.source.setPlaceholderText(t("HTTPS source page for an advanced local experiment"))
+        inventory.addWidget(self.source)
         files = QHBoxLayout()
         files.addWidget(button(t("Select local runtime"), "folder", on_click=self.choose_runtime))
         files.addWidget(button(t("Find local runtimes"), "search", on_click=self.discover))
-        files.addWidget(button(t("Load review record"), "file", on_click=self.choose_review))
-        files.addWidget(button(t("Save review template"), "file", on_click=self.review_template))
         inventory.addLayout(files)
+        advanced = QWidget(); advanced_row = QHBoxLayout(advanced)
+        advanced_row.addWidget(button(t("Load review record"), "file", on_click=self.choose_review))
+        advanced_row.addWidget(button(t("Save review template"), "file", on_click=self.review_template))
+        advanced.hide()
+        inventory.addWidget(button(t("Advanced review tools"), "file", on_click=lambda: advanced.setVisible(not advanced.isVisible())))
+        inventory.addWidget(advanced)
         self.copies = QComboBox(); self.copies.addItem(t("Select an imported or discovered copy"), None)
-        for record in self.service.runtimes.imported():
-            self.copies.addItem(record['version'] + ' · ' + record['sha256'][:12], record)
+        records = self.service.runtimes.imported() + ctl.s.offline_bundle.candidates(self.service.runtimes)
+        for record in sorted(records, key=lambda r: r['category'] != Category.OFFICIAL.value):
+            origin = t('bundled') if record.get('origin') == 'bundle' else t('Imported')
+            self.copies.addItem(origin + ' · ' + (record['version'] or t('Unknown')) + ' · ' + record['sha256'][:12], record)
         self.copies.currentIndexChanged.connect(self.select_copy)
         inventory.addWidget(self.copies)
-        self.category = StatusPill(t("Unverified — Import requires further review"), "pending")
+        self.category = StatusPill(t("Unverified — Source and consent required"), "pending")
         inventory.addWidget(self.category)
-        self.inventory = QPlainTextEdit(); self.inventory.setReadOnly(True); inventory.addWidget(self.inventory, 1)
+        self.identity = label('', 'dim', wrap=True); inventory.addWidget(self.identity)
+        self.inventory = QPlainTextEdit(); self.inventory.setReadOnly(True); self.inventory.hide()
+        inventory.addWidget(button(t("Technical details"), 'file', on_click=lambda: self.inventory.setVisible(not self.inventory.isVisible())))
+        inventory.addWidget(self.inventory, 1)
         self.permission = QCheckBox(t("I have permission for local reuse and accept the recorded experimental risks"))
         inventory.addWidget(self.permission)
         row = QHBoxLayout()
@@ -86,14 +98,15 @@ class CommunityRuntimeDialog(QDialog):
         self.profile = QComboBox()
         form.addRow(t("Backend"), self.backend); form.addRow(t("Profile"), self.profile)
         experiment.addLayout(form)
+        self.runtime_preview = label("", "dim", wrap=True); experiment.addWidget(self.runtime_preview)
         self.offline = QCheckBox(t("This is an offline single-player session without multiplayer protections"))
         self.consent = QCheckBox(t("I accept an experimental install with verified backup and rollback"))
         experiment.addWidget(self.offline); experiment.addWidget(self.consent)
         experiment.addWidget(label(t("FiveM, GTA Online, ambiguous GTA sessions and protected multiplayer games remain blocked. Offline confirmation is your attestation, not live session detection."), "muted", wrap=True))
         self.plan_output = QPlainTextEdit(); self.plan_output.setReadOnly(True); experiment.addWidget(self.plan_output, 1)
         actions = QHBoxLayout()
-        self.dry_button = button(t("Review dry-run and dependencies"), "search", on_click=self.prepare)
-        self.install_button = button(t("Backup and install experiment"), "download", "primary", on_click=self.install)
+        self.dry_button = button(t("Test Compatibility"), "search", on_click=self.prepare)
+        self.install_button = button(t("Install Experimental DLSS 5"), "download", "primary", on_click=self.install)
         self.install_button.setEnabled(False)
         actions.addWidget(self.dry_button); actions.addWidget(self.install_button); experiment.addLayout(actions)
         self.evidence_grid = KeyValueGrid()
@@ -113,17 +126,86 @@ class CommunityRuntimeDialog(QDialog):
         for control in (self.profile,): control.currentIndexChanged.connect(self.invalidate)
         self.offline.toggled.connect(self.invalidate); self.consent.toggled.connect(self.invalidate)
         self.permission.toggled.connect(self.invalidate)
+        self.source.textChanged.connect(self.invalidate)
         self.candidate_choice.currentIndexChanged.connect(self.candidate_changed)
         self.candidate_changed()
         self.profiles()
+        self.monitor_timer = QTimer(self)
+        self.monitor_timer.setInterval(3000)
+        self.monitor_timer.timeout.connect(self.monitor_tick)
+        self.monitor = QCheckBox(t("Collect local diagnostics automatically while the game runs"))
+        evidence.addWidget(self.monitor)
+        self.monitor.toggled.connect(self.toggle_monitor)
+        self.performance = QCheckBox(t("Start automatic performance monitoring (local PresentMon required)"))
+        experiment.addWidget(self.performance)
+        self.capture_busy = False
+        self.capture_token = None
+        self.finished.connect(lambda _: self.stop_monitor())
+        if self.copies.count() == 2:
+            self.copies.setCurrentIndex(1)
+        if ctl.s.offline_bundle.errors:
+            self.message.setText('\n'.join(ctl.s.offline_bundle.errors))
+
+    def stop_monitor(self):
+        self.monitor_timer.stop()
+        if self.capture_token:
+            self.capture_token.cancel()
+
+    def monitor_tick(self):
+        self.verify()
+        if not self.performance.isChecked() or self.capture_busy or not self.game or self.ctl.is_busy("benchmark"):
+            return
+        from akeno.core import processes
+        from akeno.security.downloads import CancelToken
+        running = processes.find_by_exe(self.game.exe_path)
+        if len(running) != 1:
+            return
+        runner = self.ctl.s.benchmarks.runner
+        if not runner or not runner.available():
+            self.message.setText(t("Automatic FPS monitoring needs a locally verified PresentMon executable."))
+            return
+        self.capture_busy = True
+        self.capture_token = CancelToken()
+        game, gpu, token = self.game, self.ctl.s.selected_gpu(), self.capture_token
+        tx = self.ctl.s.installer.active_install(game.id)
+        def work():
+            from akeno.hardware.sensors import sample
+            meta = {'gpu': gpu.name if gpu else None, 'driver': gpu.driver_version if gpu else None,
+                'backend_id': tx['backend_id'] if tx else None,
+                'neural_config': {'runtime_sha256': tx['params'].get('_community_runtime') if tx else None,
+                    'backend_configuration': tx['params'] if tx else {},
+                    'sensors_at_capture_start': sample(gpu),
+                    'capture_conditions': {}, 'automatic_monitoring': True}}
+            session = self.ctl.s.benchmarks.run(game.id, Path(game.exe_path).name, 'automatic', meta, 30, 0, token=token, process_id=running[0].pid, sensor_sampler=lambda: sample(gpu))
+            self.ctl.s.benchmarks.rotate_automatic()
+            return session
+        def done(_):
+            self.capture_busy = False
+            self.ctl.benchmarks_changed.emit()
+        def failed(error):
+            self.capture_busy = False
+            self.message.setText(str(error))
+        self.ctl.run('community_performance', work, done, failed)
+
+    def toggle_monitor(self, enabled):
+        if enabled:
+            tx = self.ctl.s.installer.active_install(self.game.id) if self.game else None
+            if not tx or not tx['backend_id'].startswith('community:'):
+                self.monitor.setChecked(False)
+                self.message.setText(t('Install an experimental runtime before enabling automatic monitoring.'))
+                return
+            self.observe()
+            self.monitor_timer.start()
+        else:
+            self.stop_monitor()
 
     def candidate_changed(self, *_):
         candidate = candidates.by_id(self.candidate_choice.currentData())
         self.review = self.evaluation = None
         self.invalidate()
-        self.category.set(t("Unverified — Import requires further review"), "pending")
+        self.category.set(t("Unverified — Source and consent required"), "pending")
         self.code_link.setEnabled(candidate is not None); self.runtime_link.setEnabled(candidate is not None)
-        self.candidate_info.setText(t("Bandukids candidate: {sha}. Modified runtime; Windows HashMismatch was reported. ComfyUI video claims are not game evidence. RTX 4080 is experimental/unverified; RTX 20/30 remain unverified. Source, security and local-use reviews are still required.", sha=candidate.sha256) if candidate else "")
+        self.candidate_info.setText(t("Bandukids candidate: {sha}. Modified runtime; Windows HashMismatch was reported. ComfyUI video claims are not game evidence. RTX 4080 is experimental/unverified; RTX 20/30 remain unverified. Local reuse permission is required. RTX 40/50 offline tests remain unverified until execution succeeds.", sha=candidate.sha256) if candidate else "")
         if self.path.text(): self.inspect()
 
     def open_candidate_source(self, runtime):
@@ -136,7 +218,9 @@ class CommunityRuntimeDialog(QDialog):
                 candidate.repository + "/tree/" + candidate.source_commit))
 
     def invalidate(self, *_):
-        self.revision += 1; self.prepared = None; self.install_button.setEnabled(False)
+        self.revision += 1; self.prepared = None
+        self.install_button.setEnabled(bool(self.evaluation and self.evaluation.category != Category.REJECTED
+            and self.permission.isChecked() and self.offline.isChecked() and self.consent.isChecked()))
 
     def profiles(self, *_):
         self.profile.clear()
@@ -159,14 +243,18 @@ class CommunityRuntimeDialog(QDialog):
         if path:
             self.review = self.evaluation = None
             self.invalidate()
-            self.category.set(t("Unverified — Import requires further review"), "pending")
+            self.category.set(t("Unverified — Source and consent required"), "pending")
             try: self.review = load_review(path); self.inspect()
             except (OSError, ValueError) as exc: self.message.setText(t(str(exc)))
 
     def select_copy(self, *_):
         data = self.copies.currentData()
         if data:
-            self.path.setText(data['path']); self.review = data.get('review'); self.evaluation = None; self.invalidate(); self.inspect()
+            self.path.setText(data['path'])
+            review = data.get('review') or {}
+            self.review = review if review.get('schema') == 3 else None
+            self.source.setText(review.get('runtime_source') or review.get('release') or review.get('repository') or '')
+            self.evaluation = None; self.invalidate(); self.inspect()
 
     def discover(self):
         def done(reports):
@@ -179,10 +267,15 @@ class CommunityRuntimeDialog(QDialog):
 
     def show_evaluation(self, result):
         self.evaluation = result
-        self.category.set(t(LABELS[result.category]), 'warn' if result.category == Category.COMMUNITY else
+        self.category.set(t(LABELS[result.category]), 'warn' if result.category in (Category.COMMUNITY, Category.ADVANCED) else
                           ('ok' if result.category == Category.OFFICIAL else ('fail' if result.category == Category.REJECTED else 'pending')))
         self.inventory.setPlainText(json.dumps(result.to_dict(), indent=2, ensure_ascii=False))
+        identity = t("Runtime: {version} · SHA-256: {sha} · Source: {source}", version=result.version or t('Unknown'), sha=result.sha256, source=result.source)
+        self.identity.setText(identity)
+        self.runtime_preview.setText(identity + '\n' + t(LABELS[result.category]) + '\n' +
+            t("Signature result: {detail}. This does not certify runtime safety.", detail=result.signature.get('detail', t('Unknown'))))
         self.message.setText(t(result.detail))
+        self.invalidate()
 
     def inspect(self):
         if not self.path.text(): return
@@ -196,9 +289,15 @@ class CommunityRuntimeDialog(QDialog):
             self.message.setText(t("Explicit local reuse permission is required.")); return
         path, review, revision = self.path.text(), self.review, self.revision
         candidate_id = self.candidate_choice.currentData()
+        if review is None and self.evaluation and self.evaluation.category != Category.OFFICIAL:
+            from akeno.community.profiles import local_profile
+            try:
+                review = local_profile(self.evaluation, self.source.text(), True)
+            except ValueError as exc:
+                self.message.setText(str(exc)); return
         def done(result):
             if revision == self.revision:
-                self.path.setText(result.path); self.show_evaluation(result)
+                self.path.setText(result.path); self.review = result.review; self.show_evaluation(result)
                 self.message.setText(t("Imported into the separate runtime cache. Game files are unchanged."))
         self.run('import', lambda: self.service.runtimes.import_local(path, review, True, candidate_id), done)
 
@@ -224,7 +323,7 @@ class CommunityRuntimeDialog(QDialog):
         Path(path).write_text(json.dumps(template, indent=2), encoding='utf-8')
         self.message.setText(t("Complete the source, security, license and target review before loading this template. Empty evidence cannot authorize import."))
 
-    def prepare(self):
+    def prepare(self, install_after=False):
         if not self.game or not self.evaluation: return
         sha, backend, params = self.evaluation.sha256, self.backend.currentData(), self.profile.currentData()
         offline, consent, revision = self.offline.isChecked(), self.consent.isChecked(), self.revision
@@ -235,27 +334,48 @@ class CommunityRuntimeDialog(QDialog):
                 f'{op.rel_path} · {op.expected_sha256 or t("Generated configuration")}' for op in prepared.plan.ops))
             self.install_button.setEnabled(True)
             self.message.setText(t("Dry-run ready. No game files changed; backup occurs only when you install."))
-        self.run('prepare', lambda: self.service.prepare(self.game.id, sha, backend, params, offline, consent), done)
+            if install_after and confirm(self, t("Install Experimental DLSS 5"),
+                    t("This runtime is experimental. Keep Windows protections enabled. AKENO will back up files before installing. Execution is not yet verified."),
+                    ok_text=t("Install Experimental DLSS 5")):
+                self.install()
+        path, review = self.evaluation.path, self.review
+        permission = self.permission.isChecked()
+        source = self.source.text()
+        evaluation = self.evaluation
+        def work():
+            from akeno.community.profiles import local_profile
+            existing = self.ctl.s.db.get_setting('community-runtime:' + sha)
+            if not existing or ((existing.get('review') or {}).get('schema') != 3 and evaluation.category != Category.OFFICIAL):
+                profile = review or (None if evaluation.category == Category.OFFICIAL else local_profile(evaluation, source, permission))
+                self.service.runtimes.import_local(path, profile, permission)
+            return self.service.prepare(self.game.id, sha, backend, params, offline, consent)
+        self.run('prepare', work, done)
 
     def install(self):
-        if not self.prepared: return
+        if not self.prepared:
+            self.prepare(install_after=True); return
         prepared, offline, consent = self.prepared, self.offline.isChecked(), self.consent.isChecked()
         self.invalidate()
         def done(result):
             self.message.setText('\n'.join(t(x) for x in result.messages)); self.ctl.installs_changed.emit(); self.verify()
+            if result.ok and self.performance.isChecked(): self.monitor.setChecked(True)
         self.run('install', lambda: self.service.install(prepared, offline, consent), done)
 
     def report_done(self, report):
         self.last_report = report
         state = report['neural']['state']
-        self.evidence_grid.set_rows([(t("Runtime detected"), t("Yes") if report.get('runtime') else t("Not found")),
-            (t("Installed"), t("Yes") if report.get('transaction') else t("Not verified")),
-            (t("Backend loaded"), t("Yes") if state in ('loaded','initialized','running','verified') else t("Not verified")),
-            (t("Neural feature creation"), t("Yes") if state in ('initialized','verified') else t("Not verified")),
-            (t("Neural feature evaluation"), t("Yes") if state in ('running','verified') else t("Not verified")),
-            (t("Current installation attribution"), t("Verified") if state == 'verified' else t("Not verified"))])
         self.evidence_output.setPlainText(json.dumps(report, indent=2, ensure_ascii=False, default=str))
-        self.message.setText(t("Evidence updated. File installation is separate from neural execution."))
+        stages = report['neural'].get('stages', {})
+        self.evidence_grid.set_rows([(t('Runtime present'), t('Yes') if stages.get('runtime_present') else t('Not verified')),
+            (t('Runtime loaded'), t('Yes') if stages.get('runtime_loaded') else t('Not verified')),
+            (t('NGX initialized'), t('Yes') if stages.get('ngx_initialized') else t('Not verified')),
+            (t('Feature 18 created'), t('Yes') if stages.get('feature_18_created') else t('Not verified')),
+            (t('Neural feature evaluation'), t('Yes') if stages.get('feature_evaluated') else t('Not verified')),
+            (t('Current installation attribution'), t('Verified') if stages.get('evaluations_attributed_to_game') else t('Not verified'))])
+        self.message.setText(t("Neural Rendering active — evaluation evidence detected") if state == 'verified' else
+            t("Runtime installed — execution not yet verified"))
+        if report.get('stability', {}).get('state') == 'process_exit_observed':
+            self.monitor.setChecked(False)
 
     def observe(self):
         if self.game: self.run('observe', lambda: self.service.observe(self.game.id), self.report_done)
@@ -273,4 +393,6 @@ class CommunityRuntimeDialog(QDialog):
     def export(self):
         if not self.last_report: return
         path, _ = QFileDialog.getSaveFileName(self, t("Export experiment report"), 'akeno-community-report.json', 'JSON (*.json)')
-        if path: Path(path).write_text(json.dumps(self.last_report, indent=2, ensure_ascii=False, default=str), encoding='utf-8')
+        if path:
+            from akeno.diagnostics.privacy import redact
+            Path(path).write_text(json.dumps(redact(self.last_report), indent=2, ensure_ascii=False, default=str), encoding='utf-8')
