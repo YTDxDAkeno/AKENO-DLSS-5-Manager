@@ -1,0 +1,83 @@
+# v1.3 community runtime progress
+
+Active branch: `codex/akeno-v1.3-community-runtime`, based on fetched v1.2 `43fd104`. Claude/v1.2/PR #2 are preserved. No force push or main merge.
+
+## Initial inspection — 2026-10-21
+
+- Read v1.2 build, integration progress, runtime review, FiveM, dependencies and status documentation. Existing baseline: 233 Windows tests, 232 Linux + one Windows-only skip.
+- Fetched all remote branch refs explicitly (the checkout initially had a single-branch fetch refspec). New v1.3 branch uses the current v1.2 head.
+- GitHub auth works through the existing connection. Runtime skill/network readiness inspected; no credentials changed.
+- Upstream heads unchanged: Dagherbou 9737616, Skynizz fc702f8, Feeder 16cb194.
+- RHI release API has the requested 310.8.0, SF-v2 and Lecram tags, but their bodies merely repeat version labels. Published digests pin ZIPs, not extracted DLLs or malware-free status. No proprietary archive downloaded or approved yet.
+
+## Implementation next
+
+1. Add independent official/reviewed-community/unreviewed/rejected classification, explicit local review records, per-file pins and separate cache. Keep official verifier unchanged.
+2. Integrate a community manager with provenance, offline-only deployment checks, dry-run and the existing transaction/restore pipeline; no multiplayer/FiveM override.
+3. Extend diagnostics/export/EN-DE UI and regression tests; research pinned source and document absent evidence.
+4. Full Linux/Windows tests, actual screenshot inspection, EXE/ZIP/installer/checksum artifacts and draft PR targeting v1.2.
+
+No new runtime, real installation, GPU execution or performance success has been established. Commit and push coherent checkpoints within five minutes of active work. Read this file and `git status` before continuing.
+
+## Checkpoint — independent community policy and transaction service
+
+- Added four runtime categories with x64/PE/NGX identity checks, full hash/version pins, exact source/release/commit metadata, explicit security/licensing/build review and known limitations. Missing/invalid NVIDIA signatures never enter the official runtime table; unknown files cannot deploy. A local review is user evidence, not AKENO endorsement or malware certification.
+- Added separate import cache with before/after-copy checks and explicit consent. Review targets pin generation, driver, renderer and backend; an experimental entry does not certify execution.
+- Offline experiment service reuses existing adapters, pinned package staging and Installer backup/rollback. It reanalyzes the game, blocks FiveM/GTA/anti-cheat/unknown sessions, validates dependencies/conflicts, seals plans and file/hardware state, rechecks before apply and verifies post-copy hashes. Reports reuse fresh neural observations and benchmark sessions. Generic install rejects this plan type.
+- **29 synthetic tests passed**, including trust categories, pins, identity, changed input invalidation, RTX 4080 offline eligibility, multiplayer/FiveM restrictions, dry run, install/observe/restore and failed-install rollback. No real binaries executed or hardware success claimed.
+- Next: integrated manager dialog and complete EN/DE, source review documentation, stronger edge-case tests, full suite and Windows build. Latest previously pushed commit: 73cc585; this checkpoint's exact hash is `git log -1` after push.
+
+## Checkpoint — integrated manager and UI verification
+
+- Integrated the three-tab Community Runtime Manager into the existing Secure Install header. It supports local discovery/selection, explicit review JSON loading, incomplete review-template export, separate import, backend/profile selection, dry-run/dependency preview, explicit offline/install consent, transaction restore and diagnostic export. Eight main pages/artwork are preserved.
+- Runtime review, offline experiment and execution evidence remain separate; the UI cannot enable install simply because a file was found. Prepared UI results are invalidated when consent/profile/source changes. Evidence displays installation, loading, neural creation/evaluation and attribution separately.
+- Added English/German controls, category labels and policy errors; translation coverage includes the runtime categories. Added actual manager-tab screenshots to the existing screenshot command/CI output.
+- Expanded edge-case coverage: linked paths, modified copy during import, forged provenance URLs, unmanaged files, reconsent and post-copy corruption rollback. Targeted UI/runtime/i18n/layout suite: **57 passed** before subsequent translation-only additions; latest translation/runtime result in /tmp/akeno-v13-checkpoint-tests.txt.
+- Previously pushed: 3675632. Next: documentation/source matrix, full tests, visual EN/DE/Windows inspection, package artifacts and draft PR. No real GPU tests or community binary safety endorsement.
+
+## Checkpoint — source review, guard-order regression and acceptance guide
+
+- Source review pinned RHI 3e80cabe5041071832ceea92c8803b5fdcc517ae and release archive digests; inspected complete tree (no model source/license/build instructions). SF-v2 cross-generation claim remains unverified. Feeder source reports Lecram/310.8.0 older-GPU failure, not a blanket rule for every community runtime. No proprietary archive downloaded or redistributed.
+- Added COMMUNITY_RUNTIME_REVIEW.md and COMMUNITY_RUNTIME_GUIDE.md: exact trust boundaries, user expert review/attestation versus maintainer endorsement, API/input/bridge matrix, offline restrictions, local-only acquisition and physical-PC protocol. Existing dependency/status history is explicitly superseded only for the separate community route.
+- Full regression at bac6ae6 found **one guard-order failure, 270 passed, 1 skipped**: generic FiveM rejection must happen before accessing a missing plan. Fixed ordering without changing the existing test. Final full suite rerunning (/tmp/akeno-v13-full2.txt); targeted final guards/runtime/i18n in /tmp/akeno-v13-final-targeted.txt.
+- Actual EN manager screenshots rendered and inspected. Added all community tabs to CI screenshot capture. Invalid review/copy selection now clears stale UI approvals. Reports include explicit historical-benchmark attribution limits and read-only process-exit/error observations; exit alone never claims a crash.
+- Previously pushed bac6ae6 (initial push 503 retried successfully). Next: verify full suite, inspect DE150 renders, draft PR and final Windows CI/artifact hashes/screenshots. Preserve v1.2/Claude; no hardware-success claim.
+
+## Checkpoint — final scope isolation and review edge cases
+
+- Draft PR #3 targets v1.2: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/pull/3 (attached). Main/Claude/v1.2 unchanged.
+- Full local suite after version/review-UI/process evidence changes: **274 passed, 1 Windows-only skip**. Added regression that even a signed NR file without version metadata remains unreviewed. Invalid review selection clears stale UI approval; process exits do not fabricate crashes.
+- Found a cross-workflow edge during review: generic Secure Install could otherwise reconfigure/reinstall files belonging to an active community transaction. Generic plan/apply/configure/readiness now require using the community manager or restoring that experiment first. Added end-to-end guard coverage; existing official/FiveM tests stay unchanged.
+- EN normal/German 150% manager images visually inspected and saved under docs/screenshots/v1.3-community/. No runtime binary/hardware success is pictured.
+- Previously pushed e0333cd. Latest scope test result: /tmp/akeno-v13-scoping.txt. Next: final full run with the scope guard, exact Windows CI, artifact/hash verification and Windows image inspection, then final docs/PR. No further feature expansion unless a real failure is diagnosed.
+
+## Build preparation checkpoint
+
+- Pushed application scope guard at 1bc1433; targeted community/FiveM/legacy-installer/i18n suite **64 passed**. Full latest suite running in /tmp/akeno-v13-final-suite.txt.
+- Earlier e0333cd Windows/Linux workflow passed, but does not validate the later scope/version/review-UI edge cases. Current 1bc1433 Windows CI must pass before final release evidence.
+- Updated README to the actual v1.3 separate-trust behavior and manual Inno Setup fallback to 1.3.0. The automatic workflow already derives the version from the app. No proprietary model is packaged.
+- Draft PR #3 remains mergeable and targets v1.2. Next: final Windows workflow, artifact hashes and actual Windows screenshots. No additional source feature work planned unless a diagnosed failure requires it.
+
+## Checkpoint — scaled Secure Install clipping fixed
+
+- Actual German 150% render of an ordinary game exposed horizontal clipping on Secure Install. Existing three-column content plus header controls exceeded the viewport; the shared PageHost intentionally disables horizontal scrolling. New manager dialog itself was already readable.
+- Secure Install now retains its original wide-screen arrangement and stacks the existing action card/community button below the other controls on narrow/short windows. No new page, artwork replacement or global launcher layout change.
+- Added EN/DE 1280x720 regression asserting zero hidden horizontal overflow, visible manager entry and action-card width within the host. Both pass. Initial test setup used a minimal download stub without SettingsPage.cache_size; corrected the test fixture to use its real cache implementation, not production code.
+- Last full suite before this layout-only fix: **275 passed, 1 Windows-only skip**. Next: full suite plus actual DE150 render of the fix, current Windows pipeline (old green builds do not include it), artifact/download/hash inspection and final PR evidence. Previously pushed c706803; continue on this branch only.
+
+## Checkpoint — source validation complete, current Windows packaging
+
+- Exact application source `5dbc03e56b3d8a899bf51ad8fc6ee2993203014f`: **277 local tests passed, 1 Windows-only Authenticode skip**, 52.15s. Original tests preserved. EN/DE narrow-layout assertions pass. Source smoke is AKENO 1.3.0, eight pages, 19/19 original assets; FiveM art remains packaged separately.
+- Actual corrected German 150% main-install screenshot was inspected and saved, with explicit TEST FIXTURE GPU/game labels. It shows zero horizontal clipping and normal vertical continuation to the action card. Community dialog EN/DE images are likewise actual renders, not hardware evidence.
+- Current workflow https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39615697165 has passed Windows unit/UI tests and Linux; Windows packaging remains in progress. Do not claim final package success until complete. Parallel exact-commit run: 39615705926.
+- Cloud start instructions updated to v1.3/PR #3 and the separate community policy. Existing install script retained. Added observed failed-log host productionresultssa10.blob.core.windows.net while preserving prior custom hosts. Saved draft is not publication; review/save/publish remains an environment-settings action.
+- Latest pushed application checkpoint: 5dbc03e. Next: download latest Windows artifacts, verify JUnit/counts, inspect actual Windows community/150% images, independently check ZIP/installer hashes and archive contents, publish BUILD_V1_3.md and update PR #3. No further source changes planned absent a diagnosed failure.
+
+## Verified v1.3 handover — artifacts and remaining GitHub status
+
+- Validated application/build source: `5dbc03e56b3d8a899bf51ad8fc6ee2993203014f`. Full local suite **277 passed / 1 Windows-only skip**, 52.15s. Downloaded Windows JUnit **278 tests / 0 failures / 0 errors / 0 skips**, 106.076s. All 233 original Windows tests plus 45 new tests remain enabled.
+- Exact run 39615697165: Linux completed success; every Windows step, including tests, source/packaged smoke, actual screenshots, normal GUI lifetime, assets, EXE/ZIP/Inno Setup/checksums/upload and Complete job, reports success. At handover the aggregate Windows job/check suite/run still says in_progress despite all steps completed. Check suite 107358394480 confirms pending finalization. Do not claim overall workflow success until GitHub changes it. Parallel same-source run 39615705926 likewise pending; later documentation-only runs are queued. No code/test/build step failure remains diagnosed.
+- Successfully downloaded artifacts from this exact run. Independently recomputed both ZIP/installer SHA-256 values, ZIP CRC passed, AKENO.exe/FiveM artwork present, no proprietary NR/SR model bundled. See [BUILD_V1_3.md](BUILD_V1_3.md) for exact hashes and links. Actual normal/150% Windows manager images visually inspected and committed; no fake hardware/installation/evaluation success.
+- Build artifact: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39615697165/artifacts/12351249695 . Tests/screenshots/logs: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39615697165/artifacts/12352431875 . Local verified copies: /workspace/akeno-v1.3-build-5dbc03e .
+- Previously pushed documentation checkpoint: 6e5d110. Final handover head is available via git log -1 / draft PR #3. Branch is fully recoverable from GitHub and /workspace/akeno-v1.3-community-runtime.bundle. Claude/v1.2 remain unchanged.
+- Next account: check actual GitHub aggregate finalization (gh run view 39615697165 --json status,conclusion) before changing CI or claiming it green. Source is frozen at 5dbc03e; later changes are documentation/screenshots only. Read BUILD_V1_3.md, COMMUNITY_RUNTIME_GUIDE.md and COMMUNITY_RUNTIME_REVIEW.md before attempting physical-PC acceptance. Continue with honest local expert review/import of a legitimate runtime and an offline RTX 4080/5090 diagnostic/creation/evaluation/benchmark/restore test. No RHI binary is pre-approved, no real GPU execution or real-game installation/rollback has been verified here. Keep FiveM community deployment blocked and do not loosen trust to remove missing evidence.

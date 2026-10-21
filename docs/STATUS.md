@@ -1,4 +1,6 @@
-# Project status — v1.2 integration
+# Project status — v1.3 community runtime integration
+
+v1.3 adds a separate Community Runtime Manager, explicit local review records, four trust categories and controlled offline-only dry-run/install/rollback using existing adapters. No RHI model is pre-approved and no RTX 4080/5090 NR execution has been established here. See COMMUNITY_RUNTIME_PROGRESS.md and COMMUNITY_RUNTIME_GUIDE.md; historic signed-only limitations below remain applicable to the original official/FiveM workflows, not this separate local review path.
 
 **v1.2 update:** FiveM is integrated into Library and Secure Install with persistent server profiles, read-only diagnostics and separate execution levels. NVIDIA CL metadata is accepted only with coherent runtime/export identity and valid NVIDIA signer verification. Exact build hashes matter; newer signed runtimes are not categorically rejected by GPU generation. See [INTEGRATION_PROGRESS.md](INTEGRATION_PROGRESS.md) for current test/build results and [RTX_RUNTIME_REVIEW.md](RTX_RUNTIME_REVIEW.md) for evidence limits. The original v1.1 capability record below is retained as history; its old literal-OriginalFilename and version-only assumptions are superseded by the v1.2 review.
 

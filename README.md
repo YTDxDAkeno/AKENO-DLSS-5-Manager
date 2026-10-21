@@ -1,13 +1,13 @@
 # AKENO DLSS 5 Manager
 
-**v1.2 integration branch:** one Windows launcher combining the completed v1.1 design/dependency workflow with a four-step FiveM Legacy wizard, robust NVIDIA CL runtime identity, read-only existing-setup diagnostics and explicit neural execution evidence. See [integration progress](docs/INTEGRATION_PROGRESS.md), [runtime review](docs/RTX_RUNTIME_REVIEW.md), and [fixture screenshots](docs/screenshots/v1.2-fivem/). No RTX 4080/FiveM hardware success is claimed; reviewed recipes and actual server/runtime evidence remain required.
+**v1.3 community runtime branch:** the existing launcher now includes a separate Community Runtime Manager for local review/import and controlled offline neural experiments. Four trust categories, exact DLL/source pins, explicit consent, backup/rollback and fresh execution evidence preserve the official NVIDIA gate and FiveM restrictions. No RHI model or RTX 4080 success is pre-approved. See [progress](docs/COMMUNITY_RUNTIME_PROGRESS.md), [user guide](docs/COMMUNITY_RUNTIME_GUIDE.md), [source review](docs/COMMUNITY_RUNTIME_REVIEW.md) and [actual fixture screenshots](docs/screenshots/v1.3-community/).
 
 
 A Windows desktop launcher that makes DLSS 5 Neural Rendering community mods easier to understand,
 safer to install and simple to undo — with honest answers about what works on your GPU.
 
-> **Status:** v1.2 integration — the v1.1 design and dependency workflow are retained alongside FiveM.
-> Exact current test counts and Windows build results are recorded in docs/INTEGRATION_PROGRESS.md. It has **not** yet been
+> **Status:** v1.3 integration — original design, official dependencies and FiveM are retained.
+> Exact current test counts and Windows build results are recorded in docs/COMMUNITY_RUNTIME_PROGRESS.md. It has **not** yet been
 > verified on a physical NVIDIA RTX GPU; what has and has not been verified is listed in
 > [docs/STATUS.md](docs/STATUS.md). Please read it before relying on any feature.
 
@@ -72,7 +72,7 @@ nothing about them is officially supported.
 | GPU | Status in AKENO |
 |---|---|
 | NVIDIA RTX 50 (Blackwell) | Community-verified: upstream reports NVIDIA's signed runtime (310.8.0) creates the neural feature (RTX 5090, drivers 616.64 / 617.14). |
-| NVIDIA RTX 40 / 30 / 20 | Experimental: upstream reports NVIDIA's **signed** `nvngx_dlssnr.dll` 310.8.0 refusing the neural feature on these generations (`0xbad00001`, [DLSS5-Feeder #131](https://github.com/jlrouzies-fr/DLSS5-Feeder/issues/131)). Community results on older GPUs (e.g. the RTX 4070 numbers in the OptiScaler DLSS 5 README) rely on a **modified** NVIDIA DLL, which AKENO **will not** install. AKENO shows this before you install, and reads the game's log afterwards to tell you whether it actually ran. DLSS Super Resolution keeps working. |
+| NVIDIA RTX 40 / 30 / 20 | Experimental: upstream reports NVIDIA's **signed** `nvngx_dlssnr.dll` 310.8.0 refusing the neural feature on these generations (`0xbad00001`, [DLSS5-Feeder #131](https://github.com/jlrouzies-fr/DLSS5-Feeder/issues/131)). Other-game community reports do not establish the exact RTX 4080 runtime. v1.3 can use a separately reviewed, hash-pinned local community runtime in an eligible offline experiment. It never marks such a file NVIDIA-authenticated or infers neural evaluation from an SR swap. |
 | NVIDIA GTX (no Tensor Cores), AMD, Intel | Detected and shown, marked unsupported with the reason. |
 
 AKENO starts on any Windows 10/11 x64 PC; no NVIDIA library is needed to launch it.
@@ -95,7 +95,7 @@ AKENO starts on any Windows 10/11 x64 PC; no NVIDIA library is needed to launch 
 * **No scripts.** AKENO never runs downloaded `.ps1`, `.bat` or `.py` files.
 * **No NVIDIA redistribution.** NVIDIA runtimes come only from your own PC (NVIDIA driver, NGX store,
   your games, or a file you pick), must name themselves as the runtime they are imported as, and must
-  carry a valid NVIDIA Authenticode signature. Modified NVIDIA DLLs are refused.
+  carry a valid NVIDIA Authenticode signature in the official workflow. The separate community manager requires explicit local review/permission, exact pins and offline scope; community files never pass that official signature gate or enter its global runtime table. No proprietary runtime is bundled or automatically downloaded.
 * **Anti-cheat = blocked.** Known anti-cheat files (EAC, BattlEye, Vanguard, …) or a database entry block
   installation. "None found" is never presented as proof that a game has no anti-cheat.
 * **Transactional installs.** Game not running → permissions → conflicts → dependencies → summary →
@@ -144,7 +144,7 @@ python -m pytest                       # unit, integration and offscreen UI test
 python -m akeno                        # run from source
 python packaging\make_icon.py          # application icon (original artwork)
 pyinstaller --noconfirm packaging\akeno.spec      # -> dist\AKENO\AKENO.exe
-iscc /DAppVersion=1.1.0 packaging\installer.iss   # -> packaging\out\...Setup-x64.exe (Inno Setup 6)
+iscc /DAppVersion=1.3.0 packaging\installer.iss   # -> packaging\out\...Setup-x64.exe (Inno Setup 6)
 ```
 
 `python -m akeno --smoke-test` scans real hardware, games and NVIDIA runtimes, checks the bundled design
@@ -192,3 +192,5 @@ docs/                 STATUS.md, ARCHITECTURE.md, DEPENDENCIES.md, DEVELOPMENT_P
 GPL-3.0-or-later. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 Validated v1.2 integration build, downloads, checksums and real-PC limits: [docs/BUILD_V1_2.md](docs/BUILD_V1_2.md).
+
+Validated v1.3 source/build evidence, downloads and exact hashes: [docs/BUILD_V1_3.md](docs/BUILD_V1_3.md).
