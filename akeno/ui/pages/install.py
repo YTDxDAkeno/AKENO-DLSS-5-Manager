@@ -237,13 +237,23 @@ class InstallPage(QWidget):
         self.head = ElidedLabel("", "dim")
         tcol.addWidget(self.head)
         top.addLayout(tcol, 1)
-        top.addWidget(button(t("Community Runtime Manager"), "layers", on_click=self._community_manager))
+        self._header_row = top
+        self._community_button = button(t("Community Runtime Manager"), "layers", on_click=self._community_manager)
+        top.addWidget(self._community_button)
         self.chips = [StepChip(i + 1, t(n)) for i, n in enumerate(("System", "Game", "Dependencies", "Installation"))]
         for c in self.chips:
             top.addWidget(c, 0, Qt.AlignmentFlag.AlignBottom)
         lay.addLayout(top)
+        self._community_row = QWidget()
+        self._community_row_layout = QHBoxLayout(self._community_row)
+        self._community_row_layout.setContentsMargins(0, 0, 0, 0)
+        self._community_row_layout.addStretch(1)
+        self._community_row.hide()
+        lay.addWidget(self._community_row)
+        self._narrow = None
 
         body = QGridLayout()
+        self._install_grid = body
         body.setHorizontalSpacing(14)
         body.setVerticalSpacing(14)
         self.sec_system = WizardSection(1, t("System"), "cpu")
@@ -354,6 +364,24 @@ class InstallPage(QWidget):
             sig.connect(self.refresh)
         ctl.busy_changed.connect(self._busy)
         self.refresh()
+
+    def set_density(self, level: int) -> None:
+        # Preserve the original three-column layout on wide screens. Stack actions on narrow/high-DPI windows.
+        narrow = self.window().width() < 1550 or level >= 1
+        if narrow == self._narrow:
+            return
+        self._narrow = narrow
+        self._install_grid.removeWidget(self.act_card)
+        self._install_grid.addWidget(self.act_card, 2 if narrow else 0, 0 if narrow else 2,
+                                     1 if narrow else 2, 2 if narrow else 1)
+        self._install_grid.setColumnStretch(2, 0 if narrow else 4)
+        if narrow:
+            self._header_row.removeWidget(self._community_button)
+            self._community_row_layout.addWidget(self._community_button)
+        else:
+            self._community_row_layout.removeWidget(self._community_button)
+            self._header_row.insertWidget(1, self._community_button)
+        self._community_row.setVisible(narrow)
 
     def on_show(self) -> None:
         self.refresh()

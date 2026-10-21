@@ -280,3 +280,24 @@ def test_generic_workflow_cannot_modify_active_community_experiment(experiment):
     with pytest.raises(PermissionError):s.plan_install(fresh,a,s.package_for(a),{},Path('.'))
     with pytest.raises(PermissionError):s.install(fresh,InstallPlan(a.id,None,g.target_dir))
     assert not s.configure(fresh,a,{},'quality').ok
+
+
+@pytest.mark.parametrize('language',['en','de'])
+def test_scaled_install_actions_and_community_entry_fit_window(qtbot,experiment,language):
+    from akeno import i18n
+    from akeno.ui import theme
+    from akeno.ui.controller import Controller
+    from akeno.ui.main_window import MainWindow
+    from PySide6.QtWidgets import QApplication
+    s,g,c,root=experiment;s.downloads=s.downloads.real;i18n.set_language(language)
+    try:
+        QApplication.instance().setStyleSheet(theme.stylesheet())
+        w=MainWindow(Controller(s));qtbot.addWidget(w);w.resize(1280,720);w.show()
+        # Show the page without starting a real runtime-search worker.
+        w.stack.setCurrentIndex(list(w.pages).index('install'))
+        qtbot.wait(100)
+        page=w.pages['install'];host=w.hosts['install'];page.set_density(2);qtbot.wait(100)
+        assert host.scroll.horizontalScrollBar().maximum()==0
+        assert page._community_button.isVisible()
+        assert page.act_card.width() <= host.width()
+    finally:i18n.set_language('en')

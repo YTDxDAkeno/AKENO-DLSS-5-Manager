@@ -57,3 +57,10 @@ No new runtime, real installation, GPU execution or performance success has been
 - Earlier e0333cd Windows/Linux workflow passed, but does not validate the later scope/version/review-UI edge cases. Current 1bc1433 Windows CI must pass before final release evidence.
 - Updated README to the actual v1.3 separate-trust behavior and manual Inno Setup fallback to 1.3.0. The automatic workflow already derives the version from the app. No proprietary model is packaged.
 - Draft PR #3 remains mergeable and targets v1.2. Next: final Windows workflow, artifact hashes and actual Windows screenshots. No additional source feature work planned unless a diagnosed failure requires it.
+
+## Checkpoint — scaled Secure Install clipping fixed
+
+- Actual German 150% render of an ordinary game exposed horizontal clipping on Secure Install. Existing three-column content plus header controls exceeded the viewport; the shared PageHost intentionally disables horizontal scrolling. New manager dialog itself was already readable.
+- Secure Install now retains its original wide-screen arrangement and stacks the existing action card/community button below the other controls on narrow/short windows. No new page, artwork replacement or global launcher layout change.
+- Added EN/DE 1280x720 regression asserting zero hidden horizontal overflow, visible manager entry and action-card width within the host. Both pass. Initial test setup used a minimal download stub without SettingsPage.cache_size; corrected the test fixture to use its real cache implementation, not production code.
+- Last full suite before this layout-only fix: **275 passed, 1 Windows-only skip**. Next: full suite plus actual DE150 render of the fix, current Windows pipeline (old green builds do not include it), artifact/download/hash inspection and final PR evidence. Previously pushed c706803; continue on this branch only.
