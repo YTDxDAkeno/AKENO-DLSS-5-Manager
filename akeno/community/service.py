@@ -10,7 +10,7 @@ from pathlib import Path
 
 from akeno.backends import runtimes
 from akeno.backends.base import BackendContext, FileOp, InstallPlan
-from akeno.community.runtime import Category, RuntimeManager, regular
+from akeno.community.runtime import Category, RuntimeManager, regular, regular_game_file
 from akeno.core import processes
 from akeno.core.models import AntiCheatRisk, CompatStatus, GraphicsApi, Vendor
 from akeno.diagnostics import neural
@@ -67,7 +67,7 @@ class CommunityService:
         if not game.exe_path or not game.target_dir or not Path(game.install_dir).is_dir():
             raise PermissionError(msg("The game location is unresolved."))
         exe, install = Path(game.exe_path), Path(game.install_dir).resolve()
-        regular(exe)
+        regular_game_file(exe)
         if not exe.resolve().is_relative_to(install) or exe.resolve().is_relative_to(app_home().resolve()):
             raise PermissionError(msg("The game executable must be inside its own installation."))
         info = pe.parse(str(exe))
@@ -138,7 +138,7 @@ class CommunityService:
         for name in sorted(paths):
             p = Path(name)
             if p.exists():
-                regular(p)
+                regular_game_file(p)
                 files.append((str(p.resolve()), sha256_file(p)))
             else:
                 files.append((str(p.absolute()), None))
