@@ -26,6 +26,7 @@ class Category(str, Enum):
     OFFICIAL = "official"
     COMMUNITY = "reviewed_community"
     UNKNOWN = "unreviewed"
+    ADVANCED = "advanced_local"
     REJECTED = "rejected"
 
 
@@ -33,6 +34,7 @@ LABELS = {
     Category.OFFICIAL: "Official NVIDIA runtime — Signature verified",
     Category.COMMUNITY: "Experimental community runtime — Not NVIDIA-signed",
     Category.UNKNOWN: "Unverified — Import requires further review",
+    Category.ADVANCED: "Advanced local experiment — Unverified",
     Category.REJECTED: "Rejected runtime",
 }
 
@@ -46,6 +48,9 @@ def regular(path: Path) -> None:
 
 
 def validate_review(data: dict) -> dict:
+    if isinstance(data, dict) and data.get("schema") == 3:
+        from akeno.community.profiles import validate_profile
+        return validate_profile(data)
     if not isinstance(data, dict) or data.get("schema") not in (1, 2):
         raise ValueError(msg("Unsupported community review schema."))
     required = ("sha256", "version", "repository", "upstream_commit", "reviewer", "reviewed_at",
@@ -166,6 +171,10 @@ class RuntimeManager:
                 result.category, result.detail = Category.REJECTED, msg("The known modified runtime cannot be classified as NVIDIA-authenticated; the signature result conflicts with its recorded provenance.")
             elif sig.is_nvidia:
                 result.category, result.detail = Category.OFFICIAL, LABELS[Category.OFFICIAL]
+            elif result.review and result.review.get("schema") == 3 and sig.checked:
+                result.category = Category.COMMUNITY if named else Category.ADVANCED
+                result.source = result.review["runtime_source"]
+                result.detail = "Experimental local use only. Signature is not NVIDIA-authenticated; safety and execution remain unverified."
             elif result.review and sig.checked:
                 result.category = Category.COMMUNITY
                 result.detail = "Local review and exact pin accepted. Signature is not NVIDIA-authenticated; safety and execution remain unproven."
@@ -180,7 +189,7 @@ class RuntimeManager:
         if consent is not True:
             raise PermissionError(msg("Explicit permission for local reuse and experimental import is required."))
         result = self.inspect(path, review, candidate_id)
-        if result.category not in (Category.OFFICIAL, Category.COMMUNITY):
+        if result.category not in (Category.OFFICIAL, Category.COMMUNITY, Category.ADVANCED):
             raise PermissionError(result.detail)
         folder = app_home() / "community-runtimes" / result.sha256
         folder.mkdir(parents=True, exist_ok=True)

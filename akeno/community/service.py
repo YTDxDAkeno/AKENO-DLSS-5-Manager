@@ -80,9 +80,12 @@ class CommunityService:
             raise PermissionError(msg("A detected RTX GPU and driver are required."))
         if game.api not in adapter.supported_apis or game.api == GraphicsApi.UNKNOWN:
             raise PermissionError(msg("The selected renderer is not supported by this backend."))
-        if candidate.category not in (Category.COMMUNITY, Category.OFFICIAL):
+        if candidate.category not in (Category.COMMUNITY, Category.OFFICIAL, Category.ADVANCED):
             raise PermissionError(candidate.detail)
-        if candidate.category == Category.COMMUNITY:
+        if candidate.review and candidate.review.get("schema") == 3:
+            from akeno.community.profiles import eligibility
+            eligibility(candidate.review, gpu, backend_id, game.api.value)
+        elif candidate.category == Category.COMMUNITY:
             from akeno.community import candidates
             named = candidates.by_hash(candidate.sha256)
             if named and gpu.device_id not in named.experimental_device_ids:
@@ -225,7 +228,7 @@ class CommunityService:
         stability = "process_observed" if exact_live else ("process_exit_observed" if game.id in self.seen_live else "not_observed")
         sessions = self.s.benchmarks.sessions(game.id)
         tx = self.s.installer.active_install(game.id)
-        return {"game": game.to_dict(), "gpu": self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
+        report = {"game": game.to_dict(), "gpu": self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
             "driver": self.s.selected_gpu().driver_version if self.s.selected_gpu() else None,
             "renderer": game.api.value, "transaction": tx, "neural": asdict(evidence),
             "runtime": self.s.db.get_setting("community-runtime:" + tx["params"].get("_community_runtime", "")) if tx else None,
@@ -237,3 +240,14 @@ class CommunityService:
             "limitations": ["User offline attestation is not live session detection.",
                 "Log attribution is not cryptographic GPU execution proof.",
                 "No absence of errors, file install, SR or FG success proves neural evaluation."]}
+
+        if observation:
+            from akeno.diagnostics.privacy import redact
+            from akeno.paths import sub
+            folder = sub('reports')
+            destination = folder / ('experiment-' + digest(game.id)[:16] + '.json')
+            public = redact(dict(report, measured_sessions=report['measured_sessions'][:100]))
+            temporary = destination.with_suffix('.tmp')
+            temporary.write_text(json.dumps(public, indent=2, default=str), encoding='utf-8')
+            temporary.replace(destination)
+        return report

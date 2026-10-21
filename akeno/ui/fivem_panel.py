@@ -20,7 +20,7 @@ from akeno.ui.widgets import Card, KeyValueGrid, StatusPill, button, confirm, in
 
 class FiveMPanel(Card):
     def __init__(self, ctl, game=None, compact=False):
-        super().__init__(t("FiveM Legacy setup"), "gamepad", theme.CYAN)
+        super().__init__(t("FiveM Legacy Experimental Graphics"), "gamepad", theme.CYAN)
         self.ctl, self.s, self.game = ctl, ctl.s, game
         self.prepared = self.observation = None
         self._loaded_game_id = None
@@ -110,6 +110,17 @@ class FiveMPanel(Card):
         ir.addWidget(self.install_button)
         il.addLayout(ir)
         self.tabs.addTab(installation, t("4. Installation"))
+        development = QWidget()
+        dl = QVBoxLayout(development)
+        dl.addWidget(label(t("Development validation collects first-test evidence without requiring prior Neural Rendering success. Active client protections and documented loading permissions still apply."), "dim", wrap=True))
+        self.contract = QLineEdit()
+        self.contract.setPlaceholderText(t("HTTPS documentation for the permitted plugin interface"))
+        self.loading_allowed = QCheckBox(t("This exact plugin is allowed by the documented client interface"))
+        self.protections_compatible = QCheckBox(t("Active client protections permit this exact plugin"))
+        for widget in (self.contract, self.loading_allowed, self.protections_compatible): dl.addWidget(widget)
+        self.dev_report = QPlainTextEdit(); self.dev_report.setReadOnly(True); dl.addWidget(self.dev_report)
+        dl.addWidget(button(t("Create isolated validation kit"), "file", on_click=self.development_kit))
+        self.tabs.addTab(development, t("5. Development validation"))
         for control in (self.server, self.reference):
             control.textChanged.connect(self._invalidate)
         for control in (self.permission, self.pure, self.hook, self.backend):
@@ -120,6 +131,27 @@ class FiveMPanel(Card):
         if compact:
             self.tabs.hide()
             self.body.addWidget(label(t("Open Secure Install for the complete server policy, runtime evidence and backup wizard."), "muted", wrap=True))
+
+    def development_kit(self):
+        if not self.game: return
+        from akeno.fivem.development import validation_plan, write_kit
+        from akeno.diagnostics.privacy import redact
+        adapter = self.s.backend_for(self.game)
+        if not adapter: return
+        report = validation_plan(adapter.installation, ServerPolicy(self.server.text().strip(), self.owned.isChecked(), self.reference.text().strip(),
+                self.permission.currentData(), self.pure.currentData(), self.hook.currentData(),
+                frozenset({self.backend.currentData()}) if self.permission.currentData() is True else frozenset(),
+                self.s.fivem.policy(self.game.id).known_graphics_hashes, self.consent.isChecked()), self.s.selected_gpu(),
+            self.backend.currentData(), self.contract.text(), self.loading_allowed.isChecked(), self.protections_compatible.isChecked())
+        self.dev_report.setPlainText(json.dumps(redact(report), indent=2))
+        path, _ = QFileDialog.getSaveFileName(self, t("Create isolated validation kit"), 'akeno-fivem-validation', '')
+        if path:
+            try:
+                target = Path(path).resolve()
+                if target.is_relative_to(adapter.installation.root.resolve()) or (adapter.installation.gta_dir and target.is_relative_to(adapter.installation.gta_dir.resolve())):
+                    raise ValueError('Choose a folder outside FiveM and GTA installations.')
+                write_kit(target, report)
+            except (ValueError, OSError) as exc: self._error(exc)
 
     def _invalidate(self, *args):
         self._policy_revision += 1
@@ -206,10 +238,10 @@ class FiveMPanel(Card):
         self.prepared = None
         self.install_button.setEnabled(False)
         self.ctl.installs_changed.emit()
-        info(self, t("FiveM Legacy setup"), "\n".join(t(m) for m in result.messages), error=not result.ok)
+        info(self, t("FiveM Legacy Experimental Graphics"), "\n".join(t(m) for m in result.messages), error=not result.ok)
 
     def _error(self, error):
-        info(self, t("FiveM Legacy setup"), str(error), error=True)
+        info(self, t("FiveM Legacy Experimental Graphics"), str(error), error=True)
 
     def save(self):
         if not self.game:

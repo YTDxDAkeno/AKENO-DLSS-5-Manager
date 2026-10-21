@@ -238,7 +238,7 @@ class InstallPage(QWidget):
         tcol.addWidget(self.head)
         top.addLayout(tcol, 1)
         self._header_row = top
-        self._community_button = button(t("Community Runtime Manager"), "layers", on_click=self._community_manager)
+        self._community_button = button(t("Install Experimental DLSS 5"), "layers", on_click=self._community_manager)
         top.addWidget(self._community_button)
         self.chips = [StepChip(i + 1, t(n)) for i, n in enumerate(("System", "Game", "Dependencies", "Installation"))]
         for c in self.chips:

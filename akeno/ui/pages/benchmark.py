@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QSpinBox, QTableWidget,
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QSpinBox, QTableWidget, QLineEdit,
                                QTableWidgetItem, QVBoxLayout, QWidget, QAbstractItemView)
 
 from akeno.benchmark.stats import consistency_label
@@ -52,6 +52,13 @@ class BenchmarkPage(QWidget):
         row.addWidget(label(t("Duration"), "dim"))
         row.addWidget(self.duration)
         run.body.addLayout(row)
+        conditions = QHBoxLayout()
+        self.conditions = {}
+        for key, title in [('game_version', 'Game version'), ('workload', 'Scene / workload'),
+                           ('resolution', 'Game resolution'), ('settings', 'Graphics settings')]:
+            edit = QLineEdit(); edit.setPlaceholderText(t(title))
+            edit.setAccessibleName(t(title)); self.conditions[key] = edit; conditions.addWidget(edit)
+        run.body.addLayout(conditions)
         row2 = QHBoxLayout()
         self.btn_start = button(t("Start Benchmark"), "play", "primary", on_click=self._start)
         self.btn_stop = button(t("Stop"), "stop", on_click=self._stop)
@@ -79,6 +86,7 @@ class BenchmarkPage(QWidget):
         acts = QHBoxLayout()
         acts.addWidget(button(t("Export CSV"), "export", on_click=lambda: self._export("csv")))
         acts.addWidget(button(t("Export JSON"), "export", on_click=lambda: self._export("json")))
+        acts.addWidget(button(t("Export HTML"), "export", on_click=lambda: self._export("html")))
         acts.addWidget(button(t("Delete selected"), "trash", "danger", on_click=self._delete))
         acts.addStretch(1)
         acts.addWidget(label(t("Select two sessions to compare them."), "muted"))
@@ -178,9 +186,10 @@ class BenchmarkPage(QWidget):
         a = self.s.backend_for(game)
         active = self.s.db.active_profile(game.id, a.id) if a else None
         return {"gpu": gpu.name if gpu else None, "driver": gpu.driver_version if gpu else None,
-                "resolution": f"{disp.width}x{disp.height}" if disp and disp.width else None,
+                "resolution": self.conditions["resolution"].text().strip() or None,
                 "backend_id": a.id if a and self.s.installer.active_install(game.id, a.id) else None,
-                "neural_config": active["params"] if active else {}}
+                "neural_config": dict(active["params"] if active else {},
+                    capture_conditions={k: v.text().strip() for k, v in self.conditions.items()})}
 
     def _start(self) -> None:
         gid = self.game_combo.currentData()
@@ -271,7 +280,7 @@ class BenchmarkPage(QWidget):
         path, _ = QFileDialog.getSaveFileName(self, t("Export"), f"akeno-benchmarks.{kind}", f"{kind.upper()} (*.{kind})")
         if not path:
             return
-        (self.s.benchmarks.export_csv if kind == "csv" else self.s.benchmarks.export_json)(sessions, path)
+        getattr(self.s.benchmarks, "export_" + kind)(sessions, path)
         self.status.setText(t("Exported {n} session(s).", n=len(sessions)))
 
     def _delete(self) -> None:

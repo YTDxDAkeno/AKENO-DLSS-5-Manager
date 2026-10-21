@@ -41,6 +41,7 @@ jobs:
         run: python -m pytest -q --junitxml=test-results.xml
         env:
           QT_QPA_PLATFORM: offscreen
+          AKENO_V14_SCREENSHOTS: screenshots/v14-fixtures
       - name: Smoke test from source (real Windows hardware/library scan, every page built)
         run: python -m akeno --smoke-test
         env:
@@ -97,6 +98,11 @@ jobs:
           if ($p.HasExited) { throw "AKENO.exe exited during normal start (exit code $($p.ExitCode))" }
           Stop-Process -Id $p.Id -Force
           Get-Content "$env:AKENO_HOME\logs\akeno.log" -Tail 40
+      - name: Public offline inventory (no proprietary binaries)
+        shell: pwsh
+        run: |
+          if (Get-ChildItem runtimes -Recurse -File -Include *.dll,*.bin,*.zip) { throw "Proprietary/runtime inputs are forbidden in public CI" }
+          Copy-Item runtimes dist\AKENO\runtimes -Recurse
       - name: Portable ZIP
         shell: pwsh
         run: |
@@ -133,6 +139,7 @@ jobs:
           name: windows-test-results-and-screenshots
           path: |
             test-results.xml
+            screenshots/v14-fixtures/*.png
             screenshots/windows-runner/*.png
             screenshots/windows-runner-150pct/*.png
             screenshots/fivem-fixture/*.png

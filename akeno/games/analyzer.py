@@ -278,6 +278,13 @@ def analyze(raw: RawGame, exe_override: str | None = None, api_override: str | N
     info = pe.parse(exe, with_version=False)
     game.architecture = info.machine if info.valid else None
     api, apis, source = detect_api(exe)
+    # Only this exact game identity and executable layout carry the DX12 profile.
+    rel_exe = Path(exe).relative_to(Path(raw.install_dir)).as_posix().lower()
+    if (raw.launcher == 'steam' and str(raw.launcher_id) == '1285190'
+            and rel_exe == 'oakgame/binaries/win64/borderlands4.exe' and info.valid):
+        api, source = GraphicsApi.D3D12, 'Borderlands 4 Steam 1285190 DX12 game profile; not NR execution evidence'
+        apis = sorted(set(apis + ['d3d12']))
+        game.notes.append('Borderlands 4 supports native DLSS. Test offline single-player only; co-op/protected sessions are separate.')
     game.api, game.api_candidates, game.api_source = api, apis, source
     if api_override:
         game.api, game.api_source = GraphicsApi(api_override), msg("selected by you")
@@ -289,6 +296,22 @@ def analyze(raw: RawGame, exe_override: str | None = None, api_override: str | N
         for m in scan_dir_mods(raw.install_dir):
             if m.kind in ("dlss", "dlss_fg", "dlss_rr", "streamline", "xess", "fsr"):
                 mods.append(m)
+    # Unreal/Streamline plugins may sit outside the executable directory.
+    seen = {m.path for m in mods}
+    for plugin_root in (Path(raw.install_dir) / 'Engine' / 'Plugins', Path(raw.install_dir) / 'OakGame' / 'Plugins'):
+        if not plugin_root.is_dir() or plugin_root.is_symlink():
+            continue
+        scanned = 0
+        for folder, dirs, files in os.walk(plugin_root, followlinks=False):
+            dirs[:] = [d for d in dirs if not (Path(folder) / d).is_symlink()]
+            if len(Path(folder).relative_to(plugin_root).parts) >= 7:
+                dirs[:] = []
+            scanned += 1
+            if scanned > 2000:
+                break
+            for mod in scan_dir_mods(folder):
+                if mod.path not in seen:
+                    mods.append(mod); seen.add(mod.path)
     game.existing_mods = mods
     if not any(m.kind == "dlss" for m in mods):
         dlss = _find_file(raw.install_dir, "nvngx_dlss.dll", 6)

@@ -77,6 +77,13 @@ class AppServices:
         self.fivem = FiveMService(self)
         from akeno.community.service import CommunityService
         self.community = CommunityService(self)
+        from akeno.community.bundles import OfflineBundle
+        try:
+            self.offline_bundle = OfflineBundle()
+        except (OSError, ValueError) as exc:
+            log.warning("Offline bundle unavailable: %s", exc)
+            self.offline_bundle = OfflineBundle(Path(__file__).parent / '_absent_bundle')
+            self.offline_bundle.errors.append(str(exc))
         self.system: SystemInfo | None = None
         cached = self.db.get_setting("_last_system")
         if cached:
@@ -148,8 +155,9 @@ class AppServices:
         self.db.set_game_overrides(game.id, ov)
 
     def runtime_lookup(self, name: str) -> dict | None:
-        return runtimes.best_runtime(self.db, name, allow_unverified=not is_windows() and
+        local = runtimes.best_runtime(self.db, name, allow_unverified=not is_windows() and
                                      bool(os.environ.get("AKENO_ALLOW_UNVERIFIED_RUNTIME_FOR_TESTS")))
+        return local or self.offline_bundle.official_runtime(name)
 
     def context(self, game: Game, staging: Path | None = None, allow_disable: list[str] | None = None) -> BackendContext:
         if game.launcher == "fivem":
@@ -210,8 +218,13 @@ class AppServices:
         if not package.installable:
             raise PermissionError(f"{package.name} {package.version} is not a reviewed, verified package "
                                   f"({package.trust.value}); automatic installation is disabled.")
-        res = self.downloads.fetch(package.url, package.sha256, os.path.basename(package.url), package.size,
-                                   progress, token)
+        bundled = self.offline_bundle.backend_archive(package)
+        if bundled is None:
+            res = self.downloads.fetch(package.url, package.sha256, os.path.basename(package.url), package.size,
+                                       progress, token)
+            source = res.path
+        else:
+            source = bundled
         wanted = adapter.required_package_files(game, package)
         missing_pins = [k for k, v in wanted.items() if not v]
         if missing_pins:
@@ -219,7 +232,7 @@ class AppServices:
         staging = cache_dir() / "staging" / f"{package.id}"
         if staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
-        archive.extract(res.path, staging, wanted, package.root)
+        archive.extract(source, staging, wanted, package.root)
         return staging
 
     def _community_active(self, game: Game) -> bool:
