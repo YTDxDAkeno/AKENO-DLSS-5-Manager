@@ -68,3 +68,13 @@ Commit/push meaningful checkpoints at most five minutes apart during active work
 - Added original FiveM art packaging check and Windows screenshot steps for the clearly labelled RTX 4080/FiveM fixture at normal and 150% scale. Selected actual launcher screenshots saved under docs/screenshots/v1.2-fivem/.
 - Documented source pins, official Swapper behavior, runtime identity repair, 310.9.16 uncertainty, driver 610.88 warning and physical-PC acceptance work in docs/RTX_RUNTIME_REVIEW.md.
 - Next: create integration draft PR, finish current full tests and Windows build, inspect scaled/German renders and publish exact artifact/checksum links. No physical RTX/FiveM compatibility claim is allowed.
+
+## Checkpoint — integration PR and final acceptance checks
+
+- Integration draft PR: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/pull/2 . GitHub reports MERGEABLE; base is Claude's development branch. PR #1 is retained; main is not merged.
+- Latest full local suite before final presentation/attribution refinements: **229 passed, 1 skipped** (real Windows-only signature test). Latest targeted UI/evidence/i18n checks: **17 passed**. Source `AKENO 1.2.0 smoke test OK`, 19/19 original design assets and all eight pages.
+- The wizard now explicitly displays recognized hardware, DLSS SR/FG capabilities, NR runtime presence, creation, evaluation, installation attribution, game compatibility and server permission separately. UI plan results are discarded if policy fields changed while a worker was preparing the plan.
+- Observation also pins the selected executable hash; replacing a game build invalidates attribution. Creation-only/historical events never turn the attributed status green.
+- RTX 40/FiveM recommendations do not extrapolate FPS from another game's RTX 4070 cost model; RTX 40 measured sessions require matching GPU/driver/resolution metadata. Missing prerequisite findings recommend disabled. Removed the inherited blanket “enough VRAM at any working resolution” claim while retaining profiles and PresentMon functionality.
+- Inspected normal English and German 150% real launcher renders with labelled synthetic hardware/server data. FiveM steps and all original artwork remain visible; selected renders are committed under docs/screenshots/v1.2-fivem/.
+- Windows pipeline for the latest application changes is still running; do not mistake the earlier b16c83b green build for final validation. Exact artifact/checksum links will be recorded after final CI completion.

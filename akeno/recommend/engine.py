@@ -67,6 +67,9 @@ def _relevant(sessions: list[dict[str, Any]], gpu: GpuInfo | None, resolution: s
     for s in sessions:
         if gpu and s.get("gpu") and s["gpu"] != gpu.name:
             continue
+        if gpu and gpu.generation == "RTX 40" and (s.get("gpu") != gpu.name or
+                s.get("driver") != gpu.driver_version or (resolution and s.get("resolution") != resolution)):
+            continue
         if resolution and s.get("resolution") and s["resolution"] != resolution:
             continue
         out.append(s)
@@ -79,7 +82,7 @@ def recommend(game: Game | None, system: SystemInfo | None, gpu: GpuInfo | None,
         return Recommendation(None, None, "—", None, None, "Select a game to get a recommendation.", basis="none")
     if adapter is None or compat is None:
         return Recommendation(None, None, "—", None, None, "No backend is available for this game.", basis="none")
-    if compat.status in (CompatStatus.BLOCKED, CompatStatus.INCOMPATIBLE):
+    if compat.blockers or compat.status in (CompatStatus.BLOCKED, CompatStatus.INCOMPATIBLE):
         reason = compat.blockers[0].message if compat.blockers else "Not compatible."
         return Recommendation(adapter.id, "disabled", "Disabled", None, None,
                               "DLSS 5 Neural Rendering is not recommended for this game.",
@@ -109,7 +112,7 @@ def recommend(game: Game | None, system: SystemInfo | None, gpu: GpuInfo | None,
             o.measured = _stats(by_label[pid])
             o.meets_target = o.measured.avg_fps >= target_fps
             o.consistency = consistency_label(o.measured)
-        elif baseline and game.api == GraphicsApi.D3D12 and pid in REFERENCE_COST_MS and pixels:
+        elif baseline and game.api == GraphicsApi.D3D12 and pid in REFERENCE_COST_MS and pixels and game.launcher != "fivem" and not (gpu and gpu.generation == "RTX 40"):
             cost = REFERENCE_COST_MS[pid] * pixels / REFERENCE_PIXELS
             o.estimated_fps = round(1000.0 / (baseline.avg_frametime_ms + cost), 1)
             o.meets_target = o.estimated_fps >= target_fps
@@ -122,7 +125,7 @@ def recommend(game: Game | None, system: SystemInfo | None, gpu: GpuInfo | None,
             rec.vram_note = (msg("{vram:.0f} GB VRAM: keep a single model pass and a working resolution of 67% or "
                                  "lower; extra passes each need their own video memory.", vram=vram))
         else:
-            rec.vram_note = msg("{vram:.0f} GB VRAM: enough for one model pass at any working resolution.", vram=vram)
+            rec.vram_note = msg("{n} GB VRAM detected. Memory fit depends on resolution, game and model; measure before increasing quality.", n=f"{vram:.0f}")
     else:
         rec.vram_note = "VRAM size unknown."
 

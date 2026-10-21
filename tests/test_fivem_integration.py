@@ -101,3 +101,12 @@ def test_all_eight_pages_and_embedded_fivem_wizard(workflow, qtbot, language):
         from akeno.ui import workers
         workers.drain()
         win.close()
+
+
+def test_unknown_fivem_prerequisites_do_not_recommend_enabling_nr(workflow):
+    w = workflow
+    g = register(w)
+    w.svc.fivem.save_policy(g.id, w.policy, "optiscaler_nr")
+    recommendation = w.svc.recommendation(g)
+    assert recommendation.profile_id == "disabled"
+    assert not any(outlook.estimated_fps for outlook in recommendation.outlooks)

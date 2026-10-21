@@ -14,7 +14,7 @@ from akeno.diagnostics import neural
 from akeno.hardware.support import OFFICIAL
 from akeno.i18n import t
 from akeno.ui import theme
-from akeno.ui.widgets import Card, KeyValueGrid, button, confirm, info, label
+from akeno.ui.widgets import Card, KeyValueGrid, StatusPill, button, confirm, info, label
 
 
 class FiveMPanel(Card):
@@ -23,6 +23,7 @@ class FiveMPanel(Card):
         self.ctl, self.s, self.game = ctl, ctl.s, game
         self.prepared = self.observation = None
         self._loaded_game_id = None
+        self._policy_revision = 0
         self.context = label("", "dim", wrap=True)
         self.body.addWidget(self.context)
         self.tabs = QTabWidget()
@@ -81,6 +82,8 @@ class FiveMPanel(Card):
         self.tabs.addTab(policy_page, t("2. Server policy"))
         evidence = QWidget()
         el = QVBoxLayout(evidence)
+        self.execution_grid = KeyValueGrid(220)
+        el.addWidget(self.execution_grid)
         self.evidence = QPlainTextEdit()
         self.evidence.setReadOnly(True)
         self.evidence.setMinimumHeight(220)
@@ -117,6 +120,7 @@ class FiveMPanel(Card):
             self.body.addWidget(label(t("Open Secure Install for the complete server policy, runtime evidence and backup wizard."), "muted", wrap=True))
 
     def _invalidate(self, *args):
+        self._policy_revision += 1
         self.prepared = None
         self.install_button.setEnabled(False)
 
@@ -169,7 +173,32 @@ class FiveMPanel(Card):
         result = self.s.fivem.compatibility(adapter)
         self.findings.setPlainText(t("Technical status") + ": " + t(result.status.value) + "\n\n" +
                                   "\n".join(describe(f) for f in result.findings))
-        self.plan_button.setEnabled(adapter.review is not None and not result.blockers)
+        allowed = adapter.review is not None and not result.blockers
+        self.plan_button.setEnabled(allowed)
+        self.plan_button.setToolTip(t("A reviewed recipe and all prerequisite evidence are required."))
+        self._execution_rows(adapter, None)
+
+    def _execution_rows(self, adapter, observed):
+        gpu = self.s.selected_gpu()
+        technologies = OFFICIAL.get(gpu.generation if gpu else None, {})
+        runtime = self.s.runtime_lookup("nvngx_dlssnr.dll")
+        local_runtime = any(f.path.name.lower() == "nvngx_dlssnr.dll" for f in adapter.installation.inventory)
+        state = observed.state if observed else "none"
+        permission = adapter.policy.graphics_plugins_allowed
+        policy_text = t("Allowed") if permission is True else t("Prohibited") if permission is False else t("Unknown")
+        valid_stream = observed and state not in ("failed", "stale")
+        initialized = bool(valid_stream and any(x["stage"] == "initialized" for x in observed.lines))
+        evaluated = state in ("running", "verified")
+        rows = [(t("Hardware recognized"), StatusPill(gpu.name if gpu else t("Unknown"), "info" if gpu else "pending")),
+                (t("DLSS upscaling hardware"), StatusPill(t("Supported") if technologies.get("sr") else t("Unknown"), "info")),
+                (t("Frame Generation hardware"), StatusPill(t("Supported") if technologies.get("fg") else t("Unsupported or unknown"), "info")),
+                (t("Neural runtime found"), StatusPill(t("Imported verified copy") if runtime else t("Present, not verified") if local_runtime else t("Not found"), "info" if runtime else "warn" if local_runtime else "pending")),
+                (t("Neural feature creation"), StatusPill(t("Reported successful") if initialized else t("Not verified"), "info" if initialized else "pending")),
+                (t("Neural frame evaluation"), StatusPill(t("Reported successful") if evaluated else t("Not verified"), "info" if evaluated else "pending")),
+                (t("Current installation attribution"), StatusPill(t("verified") if state == "verified" else t("Not verified"), "ok" if state == "verified" else "pending")),
+                (t("Game compatibility"), t(self.s.fivem.compatibility(adapter).status.value)),
+                (t("Server permission"), policy_text)]
+        self.execution_grid.set_rows(rows)
 
     def _done(self, result):
         self.prepared = None
@@ -243,6 +272,7 @@ class FiveMPanel(Card):
         try:
             result = neural.inspect(a.target, self.observation, self.game.id,
                                     [p.path for p in processes.processes_in_dir(str(a.installation.root))])
+            self._execution_rows(a, result)
             self.evidence.setPlainText(t(result.state) + "\n" + t(result.detail) + "\n\n" +
                                       "\n".join(f"{line['file']}: {line['line']}" for line in result.lines))
         except (OSError, ValueError) as exc:
@@ -257,8 +287,9 @@ class FiveMPanel(Card):
         a = self.s.backend_for(self.game) if self.game else None
         if not a:
             return
+        revision = self._policy_revision
         def done(prepared):
-            if not self.game or prepared.installation.game.id != self.game.id or self.s.fivem.policy(self.game.id) != prepared.adapter.policy:
+            if revision != self._policy_revision or not self.game or prepared.installation.game.id != self.game.id or self.s.fivem.policy(self.game.id) != prepared.adapter.policy:
                 return
             self.prepared = prepared
             self.findings.setPlainText("\n".join(prepared.plan.summary) + "\n\n" +

@@ -75,3 +75,11 @@ def test_actual_optiscaler_build_marker_is_only_initialized(tmp_path):
     setup(tmp_path)
     (tmp_path / "OptiScaler.log").write_text("DLSS-NR: pass 1 built at 1280x720 (Natural), first evaluated next frame\n")
     assert neural.inspect(tmp_path).state == "initialized"
+
+
+def test_replaced_executable_invalidates_execution_attribution(tmp_path):
+    exe = setup(tmp_path)
+    observation = neural.begin("g", tmp_path, exe, ["nvngx_dlssnr.dll"])
+    exe.write_bytes(b"different game build")
+    (tmp_path / "ReShade.log").write_text("feature 18 created\ninline feature 18 evaluation succeeded\n")
+    assert neural.inspect(tmp_path, observation, "g", [str(exe)]).state == "stale"

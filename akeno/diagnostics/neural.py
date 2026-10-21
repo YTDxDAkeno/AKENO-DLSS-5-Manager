@@ -27,6 +27,7 @@ class Observation:
     artifacts: tuple[tuple[str, str], ...]
     cursors: tuple[tuple[str, LogCursor], ...]
     started_at: float
+    executable_sha256: str
 
 
 @dataclass
@@ -65,7 +66,10 @@ def begin(game_id: str, target: str | Path, executable: str | Path, artifacts: l
             if size > LIMIT:
                 raise ValueError("Rotate oversized logs before starting a bounded observation")
             cursors.append((name, LogCursor(size, _prefix(p, size))))
-    return Observation(game_id, str(target), str(Path(executable).resolve()), tuple(pins), tuple(cursors), time.time())
+    exe = Path(executable)
+    if exe.is_symlink() or not exe.is_file():
+        raise ValueError("The selected executable must be an existing regular file")
+    return Observation(game_id, str(target), str(exe.resolve()), tuple(pins), tuple(cursors), time.time(), sha256_file(exe))
 
 
 def classify(line: str) -> str | None:
@@ -95,6 +99,9 @@ def inspect(target: str | Path, observation: Observation | None = None, game_id:
     if observation:
         if str(root) != observation.target or game_id != observation.game_id:
             return NeuralEvidence("stale", detail="The selected game or target changed.")
+        executable = Path(observation.executable)
+        if executable.is_symlink() or not executable.is_file() or sha256_file(executable) != observation.executable_sha256:
+            return NeuralEvidence("stale", detail="The selected executable changed.")
         for name, pin in observation.artifacts:
             p = root / name
             if p.is_symlink() or not p.is_file() or not p.resolve().is_relative_to(root) or sha256_file(p) != pin:
@@ -114,7 +121,6 @@ def inspect(target: str | Path, observation: Observation | None = None, game_id:
         if observation and not cursor and stat.st_mtime < observation.started_at:
             continue
         streams.append((stat.st_mtime_ns, name, path, cursor.size if cursor else 0))
-    rank = {"none": 0, "installed": 1, "loaded": 2, "initialized": 3, "running": 4}
     for _, name, path, offset in sorted(streams):
         with path.open("rb") as f:
             f.seek(offset)
