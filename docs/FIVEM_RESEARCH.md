@@ -1,0 +1,46 @@
+# FiveM Legacy / neural-rendering source review
+
+Reviewed 2026-10-21 (Europe/Berlin). This is a bounded review of the listed text/source revisions, not a binary malware audit, independent benchmark, penetration test or real-server/RTX validation. Upstream claims remain claims unless explicitly identified as official documentation. Search results/stars/release names do not establish trust.
+
+## Official platform evidence
+
+[CitizenFX/fivem-docs at 6ec9770535bbdd58297e5cb01f264b5a55d937a7](https://github.com/citizenfx/fivem-docs/tree/6ec9770535bbdd58297e5cb01f264b5a55d937a7):
+
+- [Client manual](https://github.com/citizenfx/fivem-docs/blob/6ec9770535bbdd58297e5cb01f264b5a55d937a7/content/docs/client-manual/_index.md): certain plugins/ASI scripts can be placed inside the application data `plugins` directory; servers can disallow them; compatibility/crashes remain the user's risk.
+- [Installation](https://github.com/citizenfx/fivem-docs/blob/6ec9770535bbdd58297e5cb01f264b5a55d937a7/content/docs/client-manual/installing-fivem.md): default `%LOCALAPPDATA%/FiveM`; running the installer in an empty directory supports a portable location.
+- [CitizenFX.ini](https://github.com/citizenfx/fivem-docs/blob/6ec9770535bbdd58297e5cb01f264b5a55d937a7/content/docs/client-manual/citizenfx.md): `FiveM.app/CitizenFX.ini`, `[Game] IVPath`, configured `SavedBuildNumber`, and update channels.
+- [Server commands](https://github.com/citizenfx/fivem-docs/blob/6ec9770535bbdd58297e5cb01f264b5a55d937a7/content/docs/server-manual/server-commands.md): `sv_pureLevel` 1 allows audio/known graphics exceptions; 2 blocks modified files. `sv_scriptHookAllowed` defaults false and carries an explicit security warning when enabled. These are separate controls, not a guarantee that any arbitrary graphics injector is allowed.
+- [Legacy versus Enhanced](https://github.com/citizenfx/fivem-docs/blob/6ec9770535bbdd58297e5cb01f264b5a55d937a7/content/docs/developers/legacy-vs-enhanced.md): Enhanced pure mode always enabled; graphics mods unavailable during early access. No extrapolation of Legacy plugin support to Enhanced.
+
+[NVIDIA developer DLSS page](https://developer.nvidia.com/rtx/dlss), retrieved during this task: describes DLSS 4/4.5, SR, RR, FG and Multi Frame Generation, with RTX 50/Blackwell restrictions on MFG. It does **not** establish official FiveM DLSS 5 integration or RTX 4080 support for the community neural feature. The public NVIDIA DLSS SDK README likewise is not a FiveM compatibility statement. Feature names and RTX marketing support must not be substituted for successful neural-model creation/evaluation.
+
+## FiveM-specific projects found
+
+Public GitHub repository search for `FiveM DLSS` identified the following sources. Only text/source paths listed below were inspected for the FiveM-specific projects. Their release executables, plugin packs and proprietary runtimes were not fetched or run.
+
+| Project and pinned revision | Technical observation | Security/provenance disposition |
+| --- | --- | --- |
+| [kerim0x1/FiveM-DLSS5](https://github.com/kerim0x1/FiveM-DLSS5/tree/24c25313f13acc358f1f018cd2f59186e3576173) | A pack around Feeder, ReShade, RenoDX and Lumenite. README specifies `FiveM.app/plugins/d3d11.dll`, RTX 50 for the signed model, and GPU-matched Discord runtime for RTX 20/30/40. It also calls FiveM D3D12, which is inconsistent enough that runtime/API evidence must be obtained independently. | Not approved. `scripts/Pack-FiveMRelease.ps1` requires NVIDIA runtimes and the consumer in the pack; NOTICE/legal text says those are not in the public Git tree. Distribution permission and executable provenance are not established by that statement. `Install-FiveMDLSS5.ps1` copies existing stacks, can overwrite files and removes helper components; AKENO executes none of it. |
+| [LanteanDev/GTAV---FiveM---Legacy-DLSS_NR](https://github.com/LanteanDev/GTAV---FiveM---Legacy-DLSS_NR/tree/7a892f9a5e8cb310887d74fa7e6b1bcb5665a03e) | README links a demonstration and explicitly says a **patched** `nvngx_dlssnr.dll` from RenoDX Discord is needed. | Not approved under the requested constraints. README/repository-tree inspection cannot establish driver signatures, redistribution rights, actual neural execution or RTX 4080 behavior. No pack inspected/executed. |
+| [bankrollmadethisbeat/BMTB-DLSS-INSTALLER](https://github.com/bankrollmadethisbeat/BMTB-DLSS-INSTALLER/tree/53c55a16b97461b5e3261f9398422c51e9d02d2f) | README advertises RTX 20–50 packages, automatic detection/backup/repair and bundled third-party files. Root tree exposes README, not the installer source. A second search result under `bankrollmadethisbeat313` is a redirect. | Insufficient implementation evidence. No independent confirmation of hashes, signing, runtime modification, bundled licenses, telemetry claims or neural evaluation. No executable downloaded. Absence of source is not a malware verdict, but it prevents approval here. |
+| [VannWasHere/fivem-dlss](https://github.com/VannWasHere/fivem-dlss/tree/ee0965d2f0878726b20148ecd8452213c43b08f7) | C++/CMake D3D11 ASI frame-generation prototype. `src/frame_gen/frame_generator.cpp` explicitly says DLSS3 is not implemented and falls back to the FSR3-labelled backend. This is not DLSS 5 Neural Rendering. | Not a backend for the requested feature. README restricts use to single-player FiveM experiences. Only selected source/build/setup text inspected, not a complete audit of resources, SDK dependencies or release bytes. No multiplayer compatibility assurance. |
+
+No project in this table supplies a reviewed signed-runtime RTX 4080 / FiveM Legacy route suitable for automatic enablement. None is added to AKENO's installable catalog, even when an upstream README says "works".
+
+## Existing AKENO backend candidates
+
+| Candidate | Source evidence | Result for FiveM Legacy / RTX 4080 |
+| --- | --- | --- |
+| [DLSS5-Feeder at 16cb1946a8331751b0f89a728b797d895ecdfba1](https://github.com/jlrouzies-fr/DLSS5-Feeder/tree/16cb1946a8331751b0f89a728b797d895ecdfba1) | Feeds graphics frames into a DLSS evaluation for a separate neural consumer. README says NVIDIA-signed `nvngx_dlssnr.dll` 310.8.0 fails neural feature creation on RTX 20/30/40, and recommends modified GPU-matched runtimes outside this task's constraints. Some combinations of driver/runtime/consumer fail. The source also warns about fake downloads. | Candidate feeder only, not a complete backend. Require exact ReShade add-on capability, input/motion/depth route, exactly one consumer, pins and legal signed runtimes. Do not run its external installer or treat a successful overlay/DLAA test as neural success. |
+| [Skynizz/optiscaler-dlss5 at fc702f8ca22f97b01bd6a02f3386bffb3484fc35](https://github.com/Skynizz/optiscaler-dlss5/tree/fc702f8ca22f97b01bd6a02f3386bffb3484fc35) | README reports RTX 4070 experiments in other games and says the undocumented NVIDIA runtime is user-supplied. `deploy/install.py` chooses proxy names/ASI and copies a supplied model. The D3D11 route in AKENO uses `dlss_12`. | Candidate consumer only. Other-game RTX 4070 reports conflict with the Feeder runtime account and do not establish FiveM/RTX 4080 behavior. A native input or separately reviewed feeder chain is needed. Generic Windows proxy fallback behavior is not proof of FiveM plugin loading. |
+| [Stock OptiScaler at 824a7b79b775d0413a6a9ff739161caef7de6b4b](https://github.com/optiscaler/OptiScaler/tree/824a7b79b775d0413a6a9ff739161caef7de6b4b) | README warns against online-game use because of anti-cheat/bans. Stock upscaler functionality is distinct from a reviewed NR fork. | Not an approved FiveM NR backend. An owned server does not cancel upstream limitations or turn generic upscaler support into NR support. |
+
+The bundled AKENO catalog's existing hashes and trust labels were preserved. This task did **not** independently re-audit its general release artifacts; a verified generic package is only an artifact-integrity input, not FiveM permission or compatibility evidence.
+
+## Review limits and next evidence
+
+A full public-repository search is not a full web/community census. Paid/closed-source mods, Discord distributions and binaries whose source/provenance is not available were not reverse engineered or certified. No antivirus scan, Windows build/load test, real server-policy test, FPS/VRAM measurement or hardware signature test was performed.
+
+The official NVIDIA SDK source checkout used during general API research contained NVIDIA-distributed SDK binaries. None was executed, imported, installed, redistributed or used for validation; that temporary checkout was removed, retaining only its README/license/revision text. The integration itself obtains no proprietary DLLs from the network. Generic upstream source checkouts also contain build-tool dependencies; none was executed.
+
+A maintainer needs independently reviewable logs showing successful neural-feature creation **and evaluation** with a legally obtained, unmodified NVIDIA-signed runtime on the actual RTX 4080/driver/FiveM build. A server operator must separately approve the exact plugin stack under the effective server restrictions. Until both exist, the correct software result is **blocked / evidence missing**, with experimental status as the maximum for any future reviewed route.
