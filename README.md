@@ -1,10 +1,13 @@
 # AKENO DLSS 5 Manager
 
+**v1.2 integration branch:** one Windows launcher combining the completed v1.1 design/dependency workflow with a four-step FiveM Legacy wizard, robust NVIDIA CL runtime identity, read-only existing-setup diagnostics and explicit neural execution evidence. See [integration progress](docs/INTEGRATION_PROGRESS.md), [runtime review](docs/RTX_RUNTIME_REVIEW.md), and [fixture screenshots](docs/screenshots/v1.2-fivem/). No RTX 4080/FiveM hardware success is claimed; reviewed recipes and actual server/runtime evidence remain required.
+
+
 A Windows desktop launcher that makes DLSS 5 Neural Rendering community mods easier to understand,
 safer to install and simple to undo — with honest answers about what works on your GPU.
 
-> **Status:** v1.1.0 — new AKENO design, automatic dependency resolution and a guided install wizard.
-> The application, 121 automated tests and the Windows build pipeline pass. It has **not** yet been
+> **Status:** v1.2 integration — the v1.1 design and dependency workflow are retained alongside FiveM.
+> Exact current test counts and Windows build results are recorded in docs/INTEGRATION_PROGRESS.md. It has **not** yet been
 > verified on a physical NVIDIA RTX GPU; what has and has not been verified is listed in
 > [docs/STATUS.md](docs/STATUS.md). Please read it before relying on any feature.
 
@@ -187,3 +190,5 @@ docs/                 STATUS.md, ARCHITECTURE.md, DEPENDENCIES.md, DEVELOPMENT_P
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Validated v1.2 integration build, downloads, checksums and real-PC limits: [docs/BUILD_V1_2.md](docs/BUILD_V1_2.md).

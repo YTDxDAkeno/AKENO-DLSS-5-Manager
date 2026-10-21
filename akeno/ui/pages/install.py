@@ -217,7 +217,15 @@ class InstallPage(QWidget):
         self._needs_ack = True
         self._can_resolve = False
         self.disable_checks: list = []
-        lay = QVBoxLayout(self)
+        from akeno.ui.fivem_panel import FiveMPanel
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        self.fivem_panel = FiveMPanel(ctl)
+        self.fivem_panel.hide()
+        root_layout.addWidget(self.fivem_panel)
+        self.generic_panel = QWidget()
+        root_layout.addWidget(self.generic_panel)
+        lay = QVBoxLayout(self.generic_panel)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
 
@@ -260,6 +268,7 @@ class InstallPage(QWidget):
         rbr.addWidget(button(t("Find in NVIDIA driver"), "search", on_click=self._find_runtime))
         rbr.addWidget(button(t("Import file…"), "file", on_click=self._import_runtime))
         rbr.addStretch(1)
+        rbr.addWidget(button(t("Inspect existing setup"), "file", on_click=self._inspect_existing))
         rtl.addLayout(rbr)
         self.sec_deps.add_extra(rt_tools)
         self.pkg_info = label("", "muted", wrap=True)
@@ -360,6 +369,13 @@ class InstallPage(QWidget):
             self._update_buttons()
 
     # ------------------------------------------------------------------------------------------
+    def _inspect_existing(self):
+        game = self.s.selected_game()
+        if game:
+            from akeno.ui.runtime_diagnostics import RuntimeDiagnosticsDialog
+            dialog = RuntimeDiagnosticsDialog(self.ctl, game, self)
+            dialog.exec()
+
     def _ctx(self):
         g = self.s.selected_game()
         a = self.s.backend_for(g)
@@ -367,6 +383,13 @@ class InstallPage(QWidget):
 
     def refresh(self) -> None:
         g, a, pkg = self._ctx()
+        five_m = bool(g and g.launcher == "fivem")
+        self.fivem_panel.setVisible(five_m)
+        self.generic_panel.setVisible(not five_m)
+        if five_m:
+            self.fivem_panel.refresh(g)
+            self.btn_install.setEnabled(False)
+            return
         enabled = g is not None and a is not None
         for w in (self.sec_system, self.sec_game, self.sec_deps, self.sec_install, self.act_card):
             w.setEnabled(enabled)
@@ -759,6 +782,9 @@ class InstallPage(QWidget):
 
     def _install(self) -> None:
         g, a, pkg = self._ctx()
+        if g and g.launcher == "fivem":
+            self.fivem_panel.tabs.setCurrentIndex(3)
+            return
         if not (g and a and pkg):
             return
         if self._can_resolve or not self.s.dependency_plan(g).ready:

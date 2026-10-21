@@ -1,7 +1,7 @@
 """Authenticode signature checks for user-supplied NVIDIA runtime files (Windows only).
 
 ``WinVerifyTrust`` answers whether the embedded signature is valid and chains to a trusted root;
-the signer's subject name is read with ``CryptQueryObject``/``CertGetNameStringW``. A file counts as
+the signer's subject name is read from the verified provider state with ``CertGetNameStringW``. A file counts as
 an official NVIDIA binary only when both hold: valid signature *and* signer "NVIDIA Corporation".
 """
 
@@ -23,7 +23,7 @@ class SignatureInfo:
 
     @property
     def is_nvidia(self) -> bool:
-        return self.valid and bool(self.signer) and "nvidia" in self.signer.lower()
+        return self.checked and self.valid and " ".join((self.signer or "").casefold().split()) == "nvidia corporation"
 
 
 def verify(path: str) -> SignatureInfo:
@@ -59,13 +59,16 @@ def verify(path: str) -> SignatureInfo:
     wd.dwUnionChoice = 1         # WTD_CHOICE_FILE
     wd.pFile = ctypes.pointer(fi)
     wd.dwStateAction = 1         # WTD_STATEACTION_VERIFY
-    wd.dwProvFlags = 0x10        # WTD_CACHE_ONLY_URL_RETRIEVAL
+    wd.dwProvFlags = 0x1000        # WTD_CACHE_ONLY_URL_RETRIEVAL
     wintrust = ctypes.WinDLL("wintrust")
     wintrust.WinVerifyTrust.restype = ctypes.c_long
+    wintrust.WinVerifyTrust.argtypes = [wintypes.HWND, ctypes.POINTER(GUID), ctypes.POINTER(WINTRUST_DATA)]
     hr = wintrust.WinVerifyTrust(None, ctypes.byref(action), ctypes.byref(wd))
-    wd.dwStateAction = 2         # WTD_STATEACTION_CLOSE
-    wintrust.WinVerifyTrust(None, ctypes.byref(action), ctypes.byref(wd))
-    signer = _signer_name(path)
+    try:
+        signer = _trusted_signer_name(wd.hWVTStateData) if hr == 0 else None
+    finally:
+        wd.dwStateAction = 2         # WTD_STATEACTION_CLOSE
+        wintrust.WinVerifyTrust(None, ctypes.byref(action), ctypes.byref(wd))
     code = hr & 0xFFFFFFFF
     if hr == 0:
         return SignatureInfo(True, True, signer, "Valid Authenticode signature.")
@@ -75,38 +78,32 @@ def verify(path: str) -> SignatureInfo:
     return SignatureInfo(True, False, signer, reasons.get(code, f"Signature check failed (0x{code:08X})."))
 
 
-def _signer_name(path: str) -> str | None:
+def _trusted_signer_name(state) -> str | None:
+    """Read the actual verified signature's leaf, never an arbitrary embedded certificate."""
     from ctypes import wintypes
-    crypt32 = ctypes.WinDLL("crypt32")
-    h_store = wintypes.HANDLE()
-    h_msg = wintypes.HANDLE()
-    enc = wintypes.DWORD()
-    ctype = wintypes.DWORD()
-    fmt = wintypes.DWORD()
-    ok = crypt32.CryptQueryObject(1, ctypes.c_wchar_p(path), 0x400, 0x2, 0, ctypes.byref(enc), ctypes.byref(ctype),
-                                  ctypes.byref(fmt), ctypes.byref(h_store), ctypes.byref(h_msg), None)
-    # CERT_QUERY_OBJECT_FILE, CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED, CERT_QUERY_FORMAT_FLAG_BINARY
-    if not ok:
+    if not state:
         return None
-    try:
-        crypt32.CertEnumCertificatesInStore.restype = ctypes.c_void_p
-        crypt32.CertEnumCertificatesInStore.argtypes = [wintypes.HANDLE, ctypes.c_void_p]
-        crypt32.CertGetNameStringW.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
-                                               wintypes.LPWSTR, wintypes.DWORD]
-        names = []
-        ctx = crypt32.CertEnumCertificatesInStore(h_store, None)
-        while ctx:
-            buf = ctypes.create_unicode_buffer(256)
-            crypt32.CertGetNameStringW(ctx, 4, 0, None, buf, 256)  # CERT_NAME_SIMPLE_DISPLAY_TYPE
-            if buf.value:
-                names.append(buf.value)
-            ctx = crypt32.CertEnumCertificatesInStore(h_store, ctx)
-        # The leaf (signer) is usually the publisher; prefer a name that is not a CA.
-        for n in names:
-            if "nvidia" in n.lower() and "ca" not in n.lower().split():
-                return n
-        leaf = [n for n in names if "root" not in n.lower() and " ca" not in n.lower()]
-        return leaf[0] if leaf else (names[0] if names else None)
-    finally:
-        crypt32.CertCloseStore(h_store, 0)
-        crypt32.CryptMsgClose(h_msg)
+    class PROVIDER_CERT(ctypes.Structure):
+        _fields_ = [("cbStruct", wintypes.DWORD), ("pCert", ctypes.c_void_p)]
+    class PROVIDER_SIGNER(ctypes.Structure):
+        _fields_ = [("cbStruct", wintypes.DWORD), ("sftVerifyAsOf", wintypes.FILETIME),
+                    ("csCertChain", wintypes.DWORD), ("pasCertChain", ctypes.POINTER(PROVIDER_CERT))]
+    wintrust, crypt32 = ctypes.WinDLL("wintrust"), ctypes.WinDLL("crypt32")
+    wintrust.WTHelperProvDataFromStateData.argtypes = [wintypes.HANDLE]
+    wintrust.WTHelperProvDataFromStateData.restype = ctypes.c_void_p
+    wintrust.WTHelperGetProvSignerFromChain.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    wintrust.WTHelperGetProvSignerFromChain.restype = ctypes.POINTER(PROVIDER_SIGNER)
+    data = wintrust.WTHelperProvDataFromStateData(state)
+    signer = wintrust.WTHelperGetProvSignerFromChain(data, 0, False, 0) if data else None
+    if not signer or not signer.contents.csCertChain or not signer.contents.pasCertChain:
+        return None
+    certificate = signer.contents.pasCertChain[0].pCert
+    crypt32.CertGetNameStringW.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
+                                         wintypes.LPWSTR, wintypes.DWORD]
+    crypt32.CertGetNameStringW.restype = wintypes.DWORD
+    length = crypt32.CertGetNameStringW(certificate, 4, 0, None, None, 0)
+    if length < 2 or length > 4096:
+        return None
+    name = ctypes.create_unicode_buffer(length)
+    crypt32.CertGetNameStringW(certificate, 4, 0, None, name, length)
+    return name.value or None

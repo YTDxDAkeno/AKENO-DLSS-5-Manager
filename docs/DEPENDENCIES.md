@@ -50,7 +50,7 @@ this page, the catalog and the resolver together.
 Every candidate — wherever it was found — must:
 
 1. be a valid 64-bit PE file,
-2. name itself (PE `OriginalFilename`) as the runtime it is imported as — a renamed NVIDIA DLL is refused,
+2. establish the intended runtime family through coherent PE identity and NGX exports (including legitimate NVIDIA CL build metadata); conflicting renamed libraries are refused,
 3. carry a valid Authenticode signature from NVIDIA (checked with `WinVerifyTrust`).
 
 A modified NVIDIA DLL fails step 3 and is refused, even if it would make Neural Rendering start on an older
@@ -88,3 +88,7 @@ and the hash of every extracted file in `akeno/data/catalog.json`, run the tests
   reviewable; patched NVIDIA DLLs would also defeat NVIDIA's code signature.
 * **Vulkan layer registration** for the Feeder (machine-wide registry change needing administrator rights).
 * Anything that touches anti-cheat, DRM, NVIDIA authentication or licensing.
+
+## v1.2 identity/evidence update
+
+See [RTX_RUNTIME_REVIEW.md](RTX_RUNTIME_REVIEW.md): displayed version is not build identity; NVIDIA CL metadata is not itself a reason to reject a legitimate signed runtime. Exact hash, family and actual signer matter. Local copying still requires appropriate permission; Authenticode does not establish a redistribution license. No new proprietary download source was added.

@@ -258,7 +258,7 @@ class DependencyResolver:
         from akeno.hardware.support import runtime_verdict
         gpu = self.s.selected_gpu()
         v = runtime_verdict(version, gpu.generation if gpu else None, self.s.compat_db.nr_runtimes())
-        return v.text if v.state in ("works", "fails") else ""
+        return v.text
 
     def _dep_nr_runtime(self, game: Game, adapter: BackendAdapter, required: bool) -> Dependency:
         return self._runtime_dep("nr_runtime", game, required)

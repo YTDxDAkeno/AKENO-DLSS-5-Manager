@@ -51,7 +51,7 @@ OFFICIAL = {
 
 # Used when the compatibility database carries no "nr_runtimes" section (older or downloaded copies).
 DEFAULT_NR_RUNTIMES: list[dict[str, Any]] = [{
-    "version": "310.8.*",
+    "version": "310.8.0.0",
     "signed": True,
     "works_on": ["RTX 50"],
     "fails_on": ["RTX 20", "RTX 30", "RTX 40"],
@@ -85,7 +85,7 @@ class RuntimeVerdict:
 
 
 def runtime_verdict(version: str | None, generation: str | None, data: list[dict[str, Any]] | None = None,
-                    present: bool = True) -> RuntimeVerdict:
+                    present: bool = True, build_sha256: str | None = None) -> RuntimeVerdict:
     """Documented behaviour of NVIDIA's signed runtime ``version`` on ``generation``."""
     if not present:
         return RuntimeVerdict("none", msg("No NVIDIA Neural Rendering runtime is available yet."))
@@ -95,6 +95,11 @@ def runtime_verdict(version: str | None, generation: str | None, data: list[dict
         if not _version_matches(version, entry.get("version", "")):
             continue
         ev = entry.get("evidence")
+        hashes = entry.get("sha256") or []
+        if isinstance(hashes, str):
+            hashes = [hashes]
+        if not build_sha256 or build_sha256 not in hashes:
+            return RuntimeVerdict("unknown", msg("A version-level community report exists for {v} on {g}; this exact runtime hash has not been verified.", v=version, g=generation), ev)
         if generation in entry.get("works_on", []):
             return RuntimeVerdict("works", msg("Runtime {v} is reported to create the neural feature on {g}.",
                                                v=version, g=generation), ev)
@@ -151,15 +156,15 @@ def verify_from_logs(target_dir: str | None, since: float | None = None) -> Veri
             if any(m in low for m in FAILURE_MARKERS):          # failures win on a line that mentions both
                 last = ("failed", line)
             elif any(m in low for m in SUCCESS_MARKERS):
-                last = ("verified", line)
+                last = ("running" if "evaluation succeeded" in low else "initialized", line)
         if last and (latest is None or st.st_mtime >= latest[0]):
             latest = (st.st_mtime, last[0], rel, last[1].strip()[:240])
     if latest is None:
         return Verification("none", msg("Not verified yet: start the game once with the mod installed, then check again."))
     mtime, kind, rel, line = latest
     when = datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
-    if kind == "verified":
-        return Verification("verified", msg("Verified on this PC: {f} reports the neural model running.", f=rel),
+    if kind in ("running", "initialized"):
+        return Verification(kind, msg("Backend evidence ({stage}) from {f}; current installation attribution is still required.", stage=kind, f=rel),
                             rel, line, when)
     return Verification("failed", msg("Not running on this PC: {f} reports a neural feature failure.", f=rel),
                         rel, line, when)
@@ -198,13 +203,18 @@ def gpu_support(gpu: GpuInfo | None, runtime_version: str | None, runtime_presen
         rep.community = msg("Community-verified with NVIDIA's signed runtime (RTX 5090 reports, drivers 616.64 and 617.14).")
         rep.community_state = "ok"
     elif gen in ("RTX 20", "RTX 30", "RTX 40"):
-        rep.community = msg("Experimental: NVIDIA's signed runtime 310.8.0 refuses the neural feature on {g}. Community "
-                            "results on older GPUs rely on a modified NVIDIA DLL, which AKENO does not install.", g=gen)
+        rep.community = msg("Experimental on {g}: older-runtime failures and other-game successes are reported. New signed builds require their own evidence.", g=gen)
         rep.community_state = "warn"
-        rep.limitations.append(msg("Expect Neural Rendering not to start with a signed runtime unless a newer NVIDIA "
-                                   "driver adds support; DLSS Super Resolution keeps working."))
+        rep.limitations.append(msg("Results depend on the exact signed runtime hash, driver and backend; verify neural creation and evaluation locally."))
     else:
         rep.community = msg("Unknown NVIDIA GPU generation.")
+    if gpu and gpu.driver_version:
+        try:
+            driver = tuple(int(x) for x in gpu.driver_version.split("."))
+        except ValueError:
+            driver = ()
+        if driver and driver < (616, 56):
+            rep.limitations.append(msg("Driver {v} predates the community test matrix starting at 616.56. Check NVIDIA's official update page; no driver is updated automatically.", v=gpu.driver_version))
     if rv.state == "fails":
         rep.community_state = "fail"
         rep.limitations.append(rv.text)
@@ -213,7 +223,7 @@ def gpu_support(gpu: GpuInfo | None, runtime_version: str | None, runtime_presen
         rep.recommendations.append(msg("{n} GB VRAM: keep one model pass and a working resolution of 67% or lower.",
                                        n=f"{vram:.0f}"))
     elif vram:
-        rep.recommendations.append(msg("{n} GB VRAM: enough for one model pass at any working resolution.",
+        rep.recommendations.append(msg("{n} GB VRAM detected. Memory fit depends on resolution, game and model; measure before increasing quality.",
                                        n=f"{vram:.0f}"))
     rep.recommendations.append(msg("Neural Rendering costs FPS: use the Performance profile first and measure with a "
                                    "benchmark before raising quality."))

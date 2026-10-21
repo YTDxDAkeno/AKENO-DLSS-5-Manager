@@ -25,6 +25,8 @@ class PeInfo:
     file_version: str | None = None
     strings: dict[str, str] = field(default_factory=dict)
     error: str | None = None
+    exports: list[str] = field(default_factory=list)
+    export_dll_name: str | None = None
 
 
 def _rva_to_offset(rva: int, sections: list[tuple[int, int, int, int]]) -> int | None:
@@ -74,6 +76,32 @@ def parse(path: str | Path, with_version: bool = True, version_scan_limit: int =
                     break
                 vsize, va, raw_size, raw_ptr = struct.unpack_from("<IIII", s, 8)
                 sections.append((va, vsize, raw_ptr, raw_size))
+            if len(opt) >= dd_off + 8:
+                exp_rva, exp_size = struct.unpack_from("<II", opt, dd_off)
+                exp_off = _rva_to_offset(exp_rva, sections) if exp_rva else None
+                if exp_off is not None and exp_off + 40 <= size:
+                    f.seek(exp_off)
+                    export = f.read(40)
+                    name_rva = struct.unpack_from("<I", export, 12)[0]
+                    name_off = _rva_to_offset(name_rva, sections)
+                    if name_off is not None and name_off < size:
+                        info.export_dll_name = _read_cstr(f, name_off)
+                    count = struct.unpack_from("<I", export, 24)[0]
+                    names_rva = struct.unpack_from("<I", export, 32)[0]
+                    names_off = _rva_to_offset(names_rva, sections)
+                    if names_off is not None:
+                        for i in range(min(count, 4096)):
+                            if names_off + 4 * i + 4 > size:
+                                break
+                            f.seek(names_off + 4 * i)
+                            raw = f.read(4)
+                            if len(raw) != 4:
+                                break
+                            entry = _rva_to_offset(struct.unpack("<I", raw)[0], sections)
+                            if entry is not None and entry < size:
+                                name = _read_cstr(f, entry)
+                                if name:
+                                    info.exports.append(name)
             if len(opt) >= dd_off + 16:
                 imp_rva, _imp_size = struct.unpack_from("<II", opt, dd_off + 8)
                 off = _rva_to_offset(imp_rva, sections) if imp_rva else None
@@ -100,14 +128,16 @@ def parse(path: str | Path, with_version: bool = True, version_scan_limit: int =
                         name = _read_cstr(f, name_off).lower()
                         if name and name not in info.imports:
                             info.imports.append(name)
-            if with_version and size <= version_scan_limit:
+            if with_version:
                 rsrc = _resource_section(sections, opt, dd_off)
                 if rsrc is not None:
                     f.seek(rsrc[0])
                     blob = f.read(min(rsrc[1], 8 * 1024 * 1024))
-                else:
+                elif size <= version_scan_limit:
                     f.seek(max(0, size - 4 * 1024 * 1024))
-                    blob = f.read()
+                    blob = f.read(4 * 1024 * 1024)
+                else:
+                    blob = b""
                 info.file_version, info.strings = parse_version_blob(blob)
             return info
     except OSError as exc:
@@ -124,7 +154,10 @@ def _resource_section(sections, opt: bytes, dd_off: int) -> tuple[int, int] | No
         return None
     for va, vsize, raw_ptr, raw_size in sections:
         if va <= rva < va + max(vsize, raw_size):
-            return raw_ptr + (rva - va), min(raw_size - (rva - va), max(rsize, 0) or raw_size)
+            delta = rva - va
+            if delta >= raw_size:
+                return None
+            return raw_ptr + delta, min(raw_size - delta, max(rsize, 0) or raw_size)
     return None
 
 

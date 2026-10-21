@@ -18,10 +18,10 @@ def test_official_feature_matrix_keeps_technologies_apart():
 
 
 def test_runtime_verdicts_follow_documented_evidence():
-    assert support.runtime_verdict("310.8.0.0", "RTX 50").state == "works"
+    assert support.runtime_verdict("310.8.0.0", "RTX 50").state == "unknown"
     for g in ("RTX 20", "RTX 30", "RTX 40"):
         v = support.runtime_verdict("310.8.0.0", g)
-        assert v.state == "fails" and "0xbad00001" in v.text and v.evidence["url"].endswith("/131")
+        assert v.state == "unknown" and "exact runtime hash" in v.text and v.evidence["url"].endswith("/131")
     assert support.runtime_verdict("311.2.0.0", "RTX 40").state == "unknown", "newer runtime: no claim either way"
     assert support.runtime_verdict(None, "RTX 50", present=False).state == "none"
 
@@ -31,8 +31,8 @@ def test_gpu_support_report_per_generation():
     assert r50.community_state == "ok" and r50.hardware == HardwareSupport.COMMUNITY
     assert "Not an official" in r50.official
     r40 = support.gpu_support(rtx("NVIDIA GeForce RTX 4070", device=0x2786, vram_gb=12), "310.8.0.0", True)
-    assert r40.community_state == "fail", "documented refusal with this runtime must show as failing"
-    assert any("modified" in x or "refuse" in x for x in [r40.community] + r40.limitations)
+    assert r40.community_state == "warn", "version-only reports cannot establish exact-build failure"
+    assert any("signed runtime hash" in x for x in r40.limitations)
     r30_no_rt = support.gpu_support(rtx(), None, False)
     assert r30_no_rt.community_state == "warn" and r30_no_rt.backends
     none = support.gpu_support(None, None, False)
@@ -53,7 +53,7 @@ def test_verification_requires_explicit_success_lines(tmp_path):
     _write(tmp_path / "dlss5-feed.log", "NGX calls are routed through OptiScaler DLSS-NR (winmm.dll)\n"
                                          "neural model (feature 18) loaded\n")
     v = support.verify_from_logs(str(tmp_path))
-    assert v.state == "verified" and v.file == "dlss5-feed.log" and "feature 18" in v.line
+    assert v.state == "initialized" and v.file == "dlss5-feed.log" and "feature 18" in v.line
 
 
 def test_verification_reports_failure_and_latest_file_wins(tmp_path):
@@ -67,3 +67,18 @@ def test_verification_reports_failure_and_latest_file_wins(tmp_path):
 def test_verification_ignores_logs_from_before_the_install(tmp_path):
     _write(tmp_path / "dlss5-feed.log", "neural model (feature 18) loaded\n", time.time() - 3600)
     assert support.verify_from_logs(str(tmp_path), since=time.time() - 60).state == "none"
+
+
+def test_exact_runtime_hash_is_required_for_known_verdict():
+    data = [{"version": "310.9.16.0", "sha256": ["a" * 64], "works_on": ["RTX 40"],
+             "evidence": {"source": "synthetic reviewed test"}}]
+    assert support.runtime_verdict("310.9.16.0", "RTX 40", data).state == "unknown"
+    assert support.runtime_verdict("310.9.16.0", "RTX 40", data, build_sha256="b" * 64).state == "unknown"
+    assert support.runtime_verdict("310.9.16.0", "RTX 40", data, build_sha256="a" * 64).state == "works"
+
+
+def test_reported_5090_driver_61088_gets_explicit_warning():
+    gpu = rtx("NVIDIA GeForce RTX 5090", device=0x2B85, vram_gb=32)
+    gpu.driver_version = "610.88"
+    report = support.gpu_support(gpu, None, False)
+    assert any("610.88" in text and "616.56" in text for text in report.limitations)

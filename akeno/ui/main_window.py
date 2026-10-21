@@ -394,7 +394,7 @@ class MainWindow(QMainWindow):
 
         def work():
             if tx["kind"] == "snapshot":
-                return self.s.installer.restore_snapshot(tx_id, force=True)
+                return self.s.restore_snapshot(tx_id, force=True)
             return self.s.restore(tx_id, force=force)
 
         def done(res):

@@ -18,7 +18,7 @@ from akeno.ui.widgets import (Card, Clickable, EmptyState, KeyValueGrid, Spinner
                               confirm, info, label, scaled)
 
 LAUNCHERS = {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "ubisoft": "Ubisoft Connect", "ea": "EA app",
-             "xbox": "Xbox / Microsoft Store", "manual": "Added manually"}
+             "xbox": "Xbox / Microsoft Store", "manual": "Added manually", "fivem": "FiveM"}
 
 
 class GameCard(Clickable):
@@ -175,6 +175,12 @@ class LibraryPage(QWidget):
             self.detail_body.addWidget(label(t("Select a game to see its analysis."), "dim", wrap=True))
             return
         self.detail_id = g.id
+        if g.launcher == "fivem":
+            from akeno.ui.fivem_panel import FiveMPanel
+            self.detail_body.addWidget(FiveMPanel(self.ctl, g, compact=True))
+            self.detail_body.addWidget(button(t("Open FiveM setup"), "sliders", "primary",
+                on_click=lambda: self.ctl.navigate.emit("install")))
+            return
         self.detail_body.addWidget(label(g.name, "h2"))
         grid = KeyValueGrid(130)
         exe_combo = QComboBox()

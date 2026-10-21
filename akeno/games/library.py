@@ -17,6 +17,7 @@ class GameLibrary:
     def __init__(self, db: Database):
         self.db = db
         self.last_errors: list[str] = []
+        self.fivem_installations: dict = {}
 
     def _raw_from_game(self, g: Game) -> RawGame:
         return RawGame(id=g.id, name=g.name, install_dir=g.install_dir, launcher=g.launcher,
@@ -38,11 +39,17 @@ class GameLibrary:
 
     def manual_dirs(self) -> list[str]:
         return [d["install_dir"] if not d.get("exe_path") else d["exe_path"]
-                for d, manual, _ in self.db.games() if manual]
+                for d, manual, _ in self.db.games() if manual and d.get("launcher") != "fivem"]
 
     def scan(self, extra_manual: list[str] | None = None, progress=None) -> list[Game]:
         """Discover installed games and analyse each. Previously known manual games are kept."""
         manual = list(dict.fromkeys((extra_manual or []) + self.manual_dirs()))
+        from akeno.fivem.discovery import discover
+        portable = [d["install_dir"] for d, _, _ in self.db.games() if d.get("launcher") == "fivem"]
+        installations = discover([*portable, *(extra_manual or [])])
+        self.fivem_installations = {i.game.id: i for i in installations}
+        roots = {str(i.root) for i in installations} | {str(i.app_dir) for i in installations}
+        manual = [p for p in manual if os.path.dirname(p) not in roots and p not in roots]
         raws, errors = launchers.scan_all(manual)
         self.last_errors = errors
         from akeno.core import processes
@@ -52,7 +59,14 @@ class GameLibrary:
             procs = []
         result = []
         found_ids = set()
+        for installation in installations:
+            game = installation.game
+            self.db.upsert_game(game.to_dict(), manual=False)
+            result.append(game)
+            found_ids.add(game.id)
         for i, raw in enumerate(raws):
+            if raw.install_dir in roots:
+                continue
             if progress:
                 progress(i, len(raws), raw.name)
             ov = self.db.game_overrides(raw.id)
@@ -74,6 +88,12 @@ class GameLibrary:
         return sorted(result, key=lambda g: g.name.lower())
 
     def add_manual(self, path: str, name: str | None = None) -> Game:
+        from akeno.fivem.discovery import inspect_installation
+        installation = inspect_installation(path)
+        if installation:
+            self.fivem_installations[installation.game.id] = installation
+            self.db.upsert_game(installation.game.to_dict(), manual=False)
+            return installation.game
         raw = launchers.manual_game(path, name)
         game = analyzer.analyze(raw)
         if not game.exe_path:
@@ -84,6 +104,15 @@ class GameLibrary:
     def reanalyze(self, game_id: str) -> Game | None:
         g = self.get(game_id)
         if not g:
+            return None
+        if g.launcher == "fivem":
+            from akeno.fivem.discovery import inspect_installation
+            installation = inspect_installation(g.install_dir)
+            if installation:
+                self.fivem_installations[g.id] = installation
+                self.db.upsert_game(installation.game.to_dict(), manual=False)
+                return installation.game
+            self.fivem_installations.pop(g.id, None)
             return None
         ov = self.db.game_overrides(game_id)
         raw = self._raw_from_game(g)

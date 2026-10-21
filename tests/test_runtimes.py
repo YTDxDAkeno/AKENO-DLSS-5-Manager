@@ -14,7 +14,7 @@ from helpers import make_pe
 def nv_dll(path: Path, original: str = NR_RUNTIME, version=(310, 8, 0, 0), machine="x64", marker=b"") -> Path:
     make_pe(path, ["kernel32.dll"], machine=machine, dll=True, version=version,
             strings={"CompanyName": "NVIDIA Corporation", "OriginalFilename": original, "ProductName": "NVIDIA NGX"},
-            pad=64)
+            pad=64, export_name=original, exports=["NVSDK_NGX_D3D12_CreateFeature", "NVSDK_NGX_D3D12_EvaluateFeature"])
     if marker:
         with open(path, "ab") as f:
             f.write(marker)

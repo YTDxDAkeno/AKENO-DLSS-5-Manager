@@ -11,7 +11,7 @@ Licensing (reviewed 2026-10-20, see docs/DEPENDENCIES.md):
 
 So AKENO can only *find and import* a copy that is already on this PC. Every candidate, wherever it was
 found, must carry a valid Authenticode signature from NVIDIA and identify itself (PE version resource) as
-the runtime it is imported as. Modified ("patched") NVIDIA DLLs — the community route for RTX 20/30/40 —
+the runtime it is imported as. Some community distributions use modified ("patched") NVIDIA DLLs. Those
 fail the signature check and are refused, because installing them would mean bypassing NVIDIA's code
 signature. A renamed NVIDIA DLL (e.g. ``nvngx_dlssg.dll`` saved as ``nvngx_dlssnr.dll``) is refused too.
 """
@@ -49,6 +49,7 @@ SOURCES = {
     "game": "One of your installed games",
     "rhi": "RHI tool folder (copy made by a third-party tool)",
     "downloads": "Your Downloads folder",
+    "swapper": "Local DLSS Swapper library (signature and identity still required)",
     "manual": "File you selected",
 }
 SOURCE_RANK = {k: i for i, k in enumerate(SOURCES)}
@@ -141,10 +142,13 @@ def search_roots(file_name: str = NR_RUNTIME, game_dirs: Iterable[str] = (), use
             # Documented by Skynizz/optiscaler-dlss5 (its installer looks here). Accepted only with an intact
             # NVIDIA signature, which proves the copy is unmodified whatever tool put it there.
             roots.append(SearchRoot(os.path.join(la, "RHI", "DLSS-NR"), "rhi", 2, (low,)))
+            for cache in (os.path.join(la, "DLSS Swapper"), os.path.join(la, "DLSSSwapper")):
+                roots.append(SearchRoot(cache, "swapper", 5, (low,), bin_files=True))
+            roots.append(SearchRoot(os.path.join(pd, "NVIDIA Corporation", "NGX"), "ngx_store", 6, (low,), bin_files=True))
             roots.append(SearchRoot(os.path.join(os.path.expanduser("~"), "Downloads"), "downloads", 2, (low,)))
     for gd in game_dirs:
         if gd:
-            roots.append(SearchRoot(gd, "game", 0, (low,)))
+            roots.append(SearchRoot(gd, "game", 3, (low,)))
     return roots
 
 
@@ -182,8 +186,8 @@ def _bin_matches(path: str, file_name: str) -> bool:
             return False
     except OSError:
         return False
-    orig, _ = _identity_names(path)
-    return bool(orig) and orig.lower() == file_name.lower()
+    from akeno.backends.runtime_identity import identify
+    return identify(pe.parse(path), file_name.lower())[0]
 
 
 def expand_cabinet(src: str, dest_dir: str) -> str | None:
@@ -209,6 +213,8 @@ def evaluate(path: str, file_name: str | None = None, source: str = "manual",
     """Hash, version, architecture, identity and NVIDIA signature of one file."""
     verifier = verifier or authenticode.verify
     want = (file_name or os.path.basename(path)).lower()
+    if os.path.islink(path) or os.path.getsize(path) > MAX_FILE:
+        raise ValueError("Linked or oversized runtime file")
     sha = sha256_file(path)
     info = pe.parse(path)
     if not info.valid:
@@ -218,19 +224,19 @@ def evaluate(path: str, file_name: str | None = None, source: str = "manual",
     if info.machine != "x64":
         return RuntimeCandidate(path, sha, info.file_version, info.machine, None, TrustState.BLOCKED,
                                 f"Wrong architecture ({info.machine}); a 64-bit DLL is required.", source, want, orig)
-    if orig and orig.lower() != want:
+    from akeno.backends.runtime_identity import identify
+    identity_ok, identity_detail = identify(info, want)
+    if not identity_ok:
         return RuntimeCandidate(path, sha, info.file_version, info.machine, None, TrustState.BLOCKED,
-                                f"This file identifies itself as {orig}, not {want}. Renamed files are not accepted.",
-                                source, want, orig)
+                                identity_detail, source, want, orig)
     sig = verifier(path)
+    if sha256_file(path) != sha:
+        return RuntimeCandidate(path, sha, info.file_version, info.machine, sig.signer, TrustState.BLOCKED,
+                                "File changed during identity/signature verification.", source, want, orig)
     if not sig.checked:
         trust, detail = TrustState.UNVERIFIED, sig.detail
     elif sig.is_nvidia:
-        if not orig:
-            trust, detail = TrustState.BLOCKED, ("Signed by NVIDIA, but the file has no version resource naming it "
-                                                 f"{want}; AKENO cannot confirm what it is.")
-        else:
-            trust, detail = TrustState.VERIFIED, f"Valid signature from {sig.signer}."
+        trust, detail = TrustState.VERIFIED, f"Valid signature from {sig.signer}. {identity_detail}"
     elif sig.valid:
         trust, detail = TrustState.BLOCKED, f"Signed by '{sig.signer}', not NVIDIA."
     else:
@@ -274,7 +280,7 @@ def discover_report(file_name: str = NR_RUNTIME, game_dirs: Iterable[str] = (), 
                     src_note = path
                 try:
                     cand = evaluate(real, file_name, root.source, verifier)
-                except OSError as exc:
+                except (OSError, ValueError) as exc:
                     rep.errors.append(f"{path}: {exc}")
                     continue
                 cand.extracted_from = src_note

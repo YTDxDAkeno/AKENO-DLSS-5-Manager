@@ -1,0 +1,136 @@
+# AKENO v1.2 integration handover
+
+## Active branch and scope
+
+- Branch: `codex/akeno-v1.2-fivem-integration`.
+- Base: Claude v1.1 commit `3f44822`; merged existing FiveM branch without conflicts. No Claude branch changed; PR #1 retained.
+- User brief: integrate FiveM into the existing Windows launcher, fix NVIDIA changelist-metadata false rejection, strengthen runtime identity/authenticity, improve read-only working-setup diagnostics and neural execution evidence, build/test Linux and Windows artifacts.
+- User reports father's RTX 4080 already runs DLSS 5 modifications in multiple games. Treat as a user report, not a reason to exclude RTX 40 or manufacture a verified FiveM result. Exact game/backend/driver/runtime/log details requested asynchronously; independent work continues.
+- Baseline combined test suite running. No real Windows/NVIDIA/FiveM hardware available locally.
+- Confirmed defect: runtime evaluator compares `OriginalFilename` or `InternalName` literally to a DLL filename. CL metadata is rejected before signature verification. Fix requires runtime-specific export/metadata evidence, not removing identity checks.
+- Additional security issue identified: Authenticode publisher selection currently enumerates all certificates and accepts any name containing NVIDIA. Bind publisher to the actual signature signer and require the expected organization.
+
+## Current work / next steps
+
+1. Complete baseline; research pinned runtime exports/logs and newer-runtime reports.
+2. Add PE export identity and robust CL runtime validation + regression tests.
+3. Integrate FiveM discovery/service routing and styled setup panel with persistent owned-server profiles.
+4. Add read-only inventory/import diagnostics and attributed neural execution levels.
+5. Preserve all v1.1 pages/assets/i18n and dependency workflows; run complete tests, screenshots, Windows CI/build.
+6. Create new integration PR targeting Claude branch, do not merge main; record artifacts and limitations.
+
+Commit/push meaningful checkpoints at most five minutes apart during active work. At each checkpoint update results, unresolved errors and exact next steps here. Latest successful pushed commit is available via `git log -1 origin/codex/akeno-v1.2-fivem-integration` (avoid self-referential commit IDs).
+
+## Checkpoint — runtime identity repair
+
+- Combined v1.1 + prior FiveM baseline: **193 tests passed** on Linux.
+- Added bounded PE export-table inspection, including export module identity.
+- CL metadata now requires coherent NVIDIA product-family evidence and actual NGX Create/Evaluate export pairs; conflicting SR/RR/FG/NR identities, non-DLLs, generic CL-only names and overlay strings remain rejected.
+- Authenticode publisher now comes from the actual WinVerifyTrust-verified signer chain, not an arbitrary embedded certificate; expected publisher comparison is exact. Signature checks remain mandatory.
+- Added local Swapper cache roots, alternate NGX model store and bounded nested game search. No proprietary downloads.
+- Father's follow-up: tool described as “DLSS 5 Swapper”, other programs, latest driver; exact game/runtime/driver/log evidence still unavailable. Do not convert that report into a verified NR claim.
+- Next: integrated FiveM service/library/UI, attributed neural diagnostics, compatibility presentation, regression tests and Windows build.
+
+## Checkpoint — integrated wizard and evidence pipeline
+
+- NVIDIA fix tests: 45 targeted runtime/resolver tests passed; 89 FiveM/library/install tests passed before UI wiring.
+- FiveM discovery now persists as a distinct launcher entry, retains its inspection through reanalysis, and uses original GPL artwork. Generic install/configure paths explicitly reject FiveM; reviewed transactions remain routed through FiveMService.
+- Added an integrated four-step FiveM panel in Library/Secure Install, persistent owned-server policy, read-only diagnostic export, observation/log verification, snapshot and reviewed-plan controls. All eight existing pages remain.
+- Added append-aware log observations with artifact hashes, selected-game/target binding, live process-path attribution, rotation/truncation checks and separate installed/loaded/initialized/running/verified states. Known OptiScaler build/failure markers are treated separately from evaluation success. Historical logs do not count as fresh verified execution.
+- Updated compatibility presentation: missing evidence is unknown; denied policies and signature/path failures remain blocked. Some older tests intentionally expect the former blanket blocked/creation-is-verified behavior and are being updated to the stricter/new semantics. Full UI/i18n regression work is still in progress; this is NOT a final validated build.
+- GitHub credential failure: initial branch push succeeded at f470bb3; later Git reads/push and API return authentication errors. User asked to renew the existing connection, not provide a token in chat. Local commits continue; a Git bundle is saved at `/workspace/akeno-v1.2-fivem-integration.bundle` for recovery. Pushes/PR/Windows Actions remain dependent on restored access.
+- Next: finish translations and regression tests, diagnose any actual UI failures, research newer runtime evidence, screenshots and packaging validation.
+
+## Checkpoint — authentication restored and UI regressions
+
+- User renewed the existing GitHub connection. `gh auth status` and `gh api user --jq .login` now confirm YTDxDAkeno; Git read/push retried after that meaningful state change. No credentials were overwritten and no new token created.
+- Fixed UI test setup to use the real cache interface rather than an incomplete download stand-in. EN/DE integrated eight-page UI + policy persistence and translation coverage: **9 tests passed**.
+- New neural evidence suite: **7 tests passed**, including old-log retouch, rotation, changed artifacts, cross-game binding and separate log streams.
+- Updated prior tests to expect unknown/missing evidence without enabling installation, and initialized rather than verified for creation-only log markers. No deployment gate was removed.
+- Added German wizard labels/messages and invalidation of prepared plans when policy controls or selection change.
+- Next: full combined suite, remaining dynamic FiveM message translations, compatibility/driver evidence refinement, fixture screenshots, Windows CI and build artifacts.
+
+## Checkpoint — support distinctions and main-launcher screenshots
+
+- Complete merged suite at b16c83b: **226 passed**. Additional exact-runtime-hash and driver-warning tests plus EN/DE checks: **17 targeted tests passed** after subsequent edits.
+- Version-only community reports no longer establish exact-runtime success/failure; hash-specific evidence is required. Driver 610.88 receives an explicit advisory relative to the documented 616.56+ community matrix, with the official NVIDIA link and no automatic update.
+- Official beeradmoore DLSS Swapper source describes replacing existing DLSS/FSR/XeSS libraries, not adding DLSS to unsupported games. Public issue searches returned no relevant exact 310.9.16/RTX 4080 evidence in the queried projects; absence of a result is NOT proof that the configuration cannot work.
+- Added a clearly labelled RTX 4080/FiveM screenshot fixture to the existing app, preserving the eight pages and all original artwork. Initial screenshot-fixture syntax error corrected before counting any fixture render. First real launcher render generated successfully; analysis display refined to readable component/status controls with optional technical details rather than raw JSON as the primary UI.
+- Snapshot restore now routes through FiveM safety guards from the main Backups page. User-facing FiveM prerequisites are localized; exact original technical details remain available in diagnostic exports.
+- Current next steps: run updated complete suite, inspect final English/German and scaled renders, publish new integration PR and verify Windows workflow/artifacts. Existing PR #1 remains open.
+
+## Checkpoint — Windows evidence and final regression pass
+
+- Restored-auth checkpoint b16c83b passed the full Windows and Linux Actions pipeline: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39521388662 . This validates that earlier integrated snapshot, not every later edit.
+- Added real Windows Authenticode API regression using a Microsoft-signed system executable (no proprietary test DLL committed); Linux correctly skips it. Added file-change-during-signature-check rejection.
+- 42 targeted runtime/resolver/integration/i18n tests passed with 1 Windows-only skip. Full latest suite running. One prior full run was 227 passed / 1 failed because the resolver discarded the new unknown verdict's text; corrected resolver to retain the exact-build uncertainty note and updated its prior blanket-refusal expectation.
+- Existing-setup diagnosis/import dialog is available inside Secure Install for ordinary games too. User permission is required for reuse; import remains signature/identity checked and does not replace game files.
+- Added original FiveM art packaging check and Windows screenshot steps for the clearly labelled RTX 4080/FiveM fixture at normal and 150% scale. Selected actual launcher screenshots saved under docs/screenshots/v1.2-fivem/.
+- Documented source pins, official Swapper behavior, runtime identity repair, 310.9.16 uncertainty, driver 610.88 warning and physical-PC acceptance work in docs/RTX_RUNTIME_REVIEW.md.
+- Next: create integration draft PR, finish current full tests and Windows build, inspect scaled/German renders and publish exact artifact/checksum links. No physical RTX/FiveM compatibility claim is allowed.
+
+## Checkpoint — integration PR and final acceptance checks
+
+- Integration draft PR: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/pull/2 . GitHub reports MERGEABLE; base is Claude's development branch. PR #1 is retained; main is not merged.
+- Latest full local suite before final presentation/attribution refinements: **229 passed, 1 skipped** (real Windows-only signature test). Latest targeted UI/evidence/i18n checks: **17 passed**. Source `AKENO 1.2.0 smoke test OK`, 19/19 original design assets and all eight pages.
+- The wizard now explicitly displays recognized hardware, DLSS SR/FG capabilities, NR runtime presence, creation, evaluation, installation attribution, game compatibility and server permission separately. UI plan results are discarded if policy fields changed while a worker was preparing the plan.
+- Observation also pins the selected executable hash; replacing a game build invalidates attribution. Creation-only/historical events never turn the attributed status green.
+- RTX 40/FiveM recommendations do not extrapolate FPS from another game's RTX 4070 cost model; RTX 40 measured sessions require matching GPU/driver/resolution metadata. Missing prerequisite findings recommend disabled. Removed the inherited blanket “enough VRAM at any working resolution” claim while retaining profiles and PresentMon functionality.
+- Inspected normal English and German 150% real launcher renders with labelled synthetic hardware/server data. FiveM steps and all original artwork remain visible; selected renders are committed under docs/screenshots/v1.2-fivem/.
+- Windows pipeline for the latest application changes is still running; do not mistake the earlier b16c83b green build for final validation. Exact artifact/checksum links will be recorded after final CI completion.
+
+## Checkpoint — diagnosed Windows signature fixture and large-model metadata
+
+- Windows 5921495 run failed only the new real-signature test: the OS PowerShell file had no embedded signature. The verifier is intentionally for embedded runtime signatures; system components may use catalog signing. The regression now verifies the installed python.org executable's embedded Python Software Foundation signature and asserts it cannot be NVIDIA. No signature bypass/conditional pass was added.
+- Found and fixed a separate parser issue relevant to large NR models: v1.1 skipped all version metadata when a file exceeded 96 MB, even when a bounded resource section existed. Version resources are now read up to the existing 8 MB resource cap regardless of total file size; whole-file fallback stays bounded. Added regression above the whole-file scan threshold and protected malformed resource ranges from negative sizes.
+- Actions log retrieval initially hit network restrictions on the results receiver/Azure blob redirect; required exact hosts were added while preserving the existing allowed domains. Job log then confirmed the failure above. New-domain configuration is saved; publication remains separate.
+- Latest source smoke: AKENO 1.2.0, eight pages, 19/19 original assets. Full local suite at 7992080: pending completion; prior latest full result was 229 passed / 1 Windows-only skip. New parser tests: 28 passed / 1 Windows-only skip.
+- Next: push signature-fixture/parser corrections, verify Windows tests/build and artifact checksums, finish final screenshots/report. Current hardware success remains unproven; diagnose the father's working installation with the new read-only export.
+
+## Checkpoint — deterministic isolated Windows cryptographic regression
+
+- Full Linux suite at 71b7766: **232 passed, 1 Windows-only skipped**. Final localized status display additionally passed EN/DE regression checks.
+- Windows signature regression remains under investigation; installed binaries are not reliable embedded-signature fixtures (toolcache builds may be unsigned). The real-API positive test now creates a deterministic embedded signature on a temporary PE copy using an explicitly non-NVIDIA CI publisher, temporarily trusts that publisher only in the disposable runner's CurrentUser store, verifies the actual signer, corrupts a hashed byte to require rejection, and removes certificate/private key in finally. It runs only on isolated Windows CI, never silently changes a gaming PC's trust store. Production signature policy is unchanged; no NVIDIA success is simulated by this test.
+- Current documentation/build results must distinguish the earlier b16c83b green Windows build from these newer corrections. No final Windows-green claim yet.
+- Final UI source uses localized compatibility labels instead of internal enum text. Source fixture screenshots are real renders and remain clearly labelled. Next: retrieve latest exact Windows failure logs, validate the deterministic fixture, complete EXE/ZIP/installer/checksum artifacts and final handover.
+
+## Correction — exact Windows failure identified
+
+- The newly retrieved full job log for run 39522671051 proves **the Python embedded-signature test passed**. That run had **232 passed / 1 failed**, with only `test_dashboard_fits_maximised_1920x1080_without_scrolling` failing (33 px overflow).
+- The earlier assumption that the remaining failure was still the signature fixture was incorrect. Removed the speculative certificate-store fixture from 8e3c7ed and restored the already-passing real signed python.org test. Final application/tests do not install any trust roots or create signing certificates. Superseded speculative CI runs are cancelled.
+- Root cause: the longer honest VRAM note added dashboard wrapping on Windows. Kept detailed guidance on Hardware Scan, shortened the dashboard recommendation note without promising memory fit, and retained the unchanged no-scroll assertion.
+- Next: verify final Windows tests/packaging and refresh artifact/report links. The actual Windows signer selection is now exercised successfully; real NVIDIA signatures/NR execution on the owner's computers remain unverified.
+
+## Checkpoint — provenance report and bounded dashboard summary
+
+- Existing FiveM diagnostic exports now include the stored server policy, compatibility findings, and exact SHA-256 catalog matches with an explicit warning that a match proves neither execution nor licensing. The analysis table displays component role/version/source/verification. Added coverage and German labels.
+- Windows fd890bb still reports 33 px dashboard overflow (232 tests passed). Shortening the VRAM note alone did not resolve it; that earlier diagnosis was incomplete. The changed exact-build uncertainty can lengthen the recommendation reason. The dashboard now elides the visible reason to one line while preserving every reason in its tooltip; the original no-scroll regression remains unchanged.
+- One targeted run caught the new untranslated Version header before commit; translation added. Final Windows packaging remains pending.
+
+## Checkpoint — final source validation and refreshed screenshots
+
+- Application commit `210d6fb203ef3258e18ea7b9f3aa59124b0add31` is pushed. Full local suite: **232 passed, 1 skipped in 48.74s**; the skip is the real Windows-only Authenticode API test. Targeted integration/layout/runtime/i18n suite: **47 passed, 1 skipped**. `git diff --check` passes.
+- Source smoke: **AKENO 1.2.0 smoke test OK**, all eight pages, 19/19 original design assets. Linux hardware scanning correctly reports Windows APIs unavailable and does not invent GPU/runtime results.
+- Refreshed English wizard/Library and German 150% screenshots from this application commit; visually inspected both languages. Fixtures remain labelled and installation remains gated.
+- Current source Windows/Linux pipeline: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39523697460 . Pending its final tests/build, download the Windows artifact, independently verify SHA256SUMS, update PR #2 and final handover. Do not count old successful builds as validation of this snapshot.
+
+## Checkpoint — green Windows build, screenshot font defect found
+
+- Application `210d6fb` passed Windows **233/233 tests** (111.65s), Linux, source/packaged smoke, normal GUI lifetime, original+FiveM asset checks and EXE/ZIP/Inno Setup packaging. Run: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39523697460 . Documentation snapshot `6fa00ae` also passed both CI jobs.
+- Downloaded the 210d6fb build and independently matched ZIP/installer SHA-256 against SHA256SUMS, checked ZIP CRC and found AKENO.exe/FiveM artwork inside. Also downloaded Windows JUnit: 233 tests, zero failures/errors/skips.
+- Visual inspection of the actual Windows screenshot artifact exposed missing font glyphs in Qt's offscreen plugin (boxes instead of text). Earlier green tests did not establish usable typography. Windows CI now points QT_QPA_FONTDIR to the runner's existing C:\Windows\Fonts; no vendor font download or app font replacement. Re-run Windows tests/layout and inspect the new screenshot artifact before final handover. Linux/German screenshots already render correctly.
+- Added the observed exact GitHub artifact storage host productionresultssa11.blob.core.windows.net to the saved network draft; access subsequently worked. Another docs-only run used a different blocked storage host; no claim of independently checking that run's artifact. Configuration remains a draft requiring review/save/publish in environment settings.
+
+## Checkpoint — Windows build with real system fonts is green
+
+- Pushed `64cda9d23f477a817a9c33a03ea20523a0f79a96` adds only CI font configuration/progress documentation; application source remains exactly `210d6fb`. Both jobs passed: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39524321496 . Windows layout tests passed with system fonts, followed by source/packaged smoke, normal GUI lifetime, asset checks, ZIP/installer/checksums.
+- Build artifact: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39524321496/artifacts/12311299707 . Windows test/screenshot artifact: https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/39524321496/artifacts/12311644453 .
+- Current next step: download both artifacts into /workspace/akeno-v1.2-build-64cda9d, visually verify glyphs and compare SHA256SUMS independently, then finalize BUILD_V1_2.md/PR #2. The new observed storage host productionresultssa7.blob.core.windows.net was added to the saved cloud draft, preserving prior domains. Domain propagation currently blocks this run's download; do not claim the newest screenshots/hashes independently checked yet. Earlier 210d6fb packages were independently checked successfully.
+
+## Final verified handover
+
+- Final validated CI snapshot `64cda9d` passed both Windows/Linux jobs in runs 39524328413 and 39524321496. Downloaded artifacts from **39524328413** (the same exact commit) successfully; Windows JUnit confirms **233 passed, zero skips/errors/failures**. Local full suite remains **232 passed, 1 Windows-only skip**.
+- Independently recomputed final ZIP/installer hashes, checked ZIP CRC, AKENO.exe and FiveM artwork. Exact hashes, artifact links and acceptance limits are in [BUILD_V1_2.md](BUILD_V1_2.md).
+- Visually inspected corrected actual Windows fixture screenshots at normal and 150% scaling; fonts are readable. Added selected Windows renders alongside EN/DE Linux renders. Original eight pages/artwork remain.
+- Latest pushed checkpoint before this documentation-only handover: `92d6d42`; the final handover commit is available through `git log -1` and PR #2. Application source has not changed after `210d6fb`; CI font configuration is validated at `64cda9d`.
+- No remaining local source/test failure. Remaining acceptance work needs real RTX 4080/5090 machines, authentic NVIDIA runtimes, fresh execution evidence and the permitted FiveM server; no approved production FiveM recipe or real installation-success claim. Next account should start with BUILD_V1_2.md, RTX_RUNTIME_REVIEW.md and the real diagnostic export, not relax security to enable a recipe. Keep checkpoints, preserve Claude/PR #1, do not merge main automatically.
