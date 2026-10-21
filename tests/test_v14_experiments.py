@@ -119,6 +119,30 @@ def test_advanced_5090_install_restore_fully_offline(experiment, monkeypatch, tm
     assert before == {f.name: f.read_bytes() for f in root.iterdir()}
 
 
+def test_large_game_executable_not_limited_like_a_runtime(experiment, monkeypatch):
+    """A ~771-MiB game EXE must not trip the 512-MiB DLL runtime cap.
+
+    Sparse synthetic file + test-only fingerprint avoid hashing 512+ MiB.
+    """
+    from akeno.backends import runtimes
+    from akeno.community.runtime import regular, regular_game_file
+    from akeno.community import service as community_service
+
+    s, game, imported, root = experiment
+    exe = root / 'Game.exe'
+    with exe.open('r+b') as stream:
+        stream.truncate(runtimes.MAX_FILE + 1)
+    with pytest.raises(ValueError, match='bounded regular runtime'):
+        regular(exe)
+    regular_game_file(exe)
+
+    original_hash = community_service.sha256_file
+    monkeypatch.setattr(community_service, 'sha256_file',
+        lambda path: 'synthetic-large-exe-fingerprint' if Path(path) == exe else original_hash(path))
+    plan = s.community.prepare(game.id, imported.sha256, 'optiscaler_nr', {}, True, True)
+    assert plan.plan.ops and plan.environment_pin
+
+
 def test_borderlands_exact_dx12_profile_and_plugin_inventory(tmp_path):
     root = tmp_path / 'Borderlands4'
     exe = make_pe(root/'OakGame/Binaries/Win64/Borderlands4.exe', ['d3d12.dll', 'd3d11.dll', 'opengl32.dll'])
