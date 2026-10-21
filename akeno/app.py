@@ -211,6 +211,11 @@ def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
         dialog.tabs.setCurrentIndex(index)
         app.processEvents()
         dialog.grab().save(os.path.join(out_dir, f"community-step-{index + 1}.png"))
+    from akeno.community.candidates import BANDUKIDS
+    dialog.tabs.setCurrentIndex(0)
+    dialog.candidate_choice.setCurrentIndex(dialog.candidate_choice.findData(BANDUKIDS.id))
+    app.processEvents()
+    dialog.grab().save(os.path.join(out_dir, "bandukids-runtime.png"))
     dialog.close()
     print(f"saved screenshots to {out_dir}")
     return 0

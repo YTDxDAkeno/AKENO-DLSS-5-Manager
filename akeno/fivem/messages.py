@@ -2,6 +2,8 @@
 from akeno.i18n import t
 
 LABELS = {
+    "fivem_runtime_policy": "The recipe names an unknown runtime trust policy.",
+    "fivem_community_evidence": "Bandukids FiveM deployment needs separate offline/client evaluation, allowed plugin loading and compatible client protections.",
     "fivem_no_review": "No reviewed FiveM recipe is available; compatibility is unknown and deployment remains disabled.",
     "fivem_server_permission": "Record an identified owned test server and its written permission.",
     "fivem_graphics_permission": "Graphics plugin permission is unknown or denied.",

@@ -53,6 +53,7 @@ class FiveMPanel(Card):
         actions = QHBoxLayout()
         actions.addWidget(button(t("Analyze"), "search", "primary", on_click=self.analyze))
         actions.addWidget(button(t("Export diagnostics"), "file", on_click=self.export))
+        actions.addWidget(button(t("Bandukids runtime review"), "layers", on_click=self.community_review))
         analysis_layout.addLayout(actions)
         self.tabs.addTab(analysis, t("1. Analysis"))
         policy_page = QWidget()
@@ -249,6 +250,13 @@ class FiveMPanel(Card):
                         self.plugins.setItem(row, 3, QTableWidgetItem(source))
                         self.plugins.setItem(row, 4, QTableWidgetItem(verification))
             self.ctl.run("fivem_analyze", work, done, self._error)
+
+    def community_review(self):
+        from akeno.ui.community_runtime import CommunityRuntimeDialog
+        from akeno.community.candidates import BANDUKIDS
+        dialog = CommunityRuntimeDialog(self.ctl, self)
+        dialog.candidate_choice.setCurrentIndex(dialog.candidate_choice.findData(BANDUKIDS.id))
+        dialog.exec()
 
     def export(self):
         if not self.game:

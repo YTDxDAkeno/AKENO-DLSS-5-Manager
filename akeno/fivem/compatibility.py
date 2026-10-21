@@ -20,7 +20,9 @@ class BackendReview:
 
     No real FiveM recipe is shipped. Fixtures may construct one to test the pipeline.
     Each recipe needs an exact client/configuration fingerprint, artifact pins, explicit
-    server permission and successful signed-runtime neural-feature evidence for its GPU.
+    server permission and successful neural-feature evidence for its exact GPU/runtime.
+    Signed NVIDIA is the default; the separate Bandukids community policy requires
+    a pinned local review plus offline/client evaluation and loading/protection evidence.
     Evidence must include feature creation AND evaluation, not just a working overlay/SR.
     """
     backend_id: str
@@ -40,6 +42,12 @@ class BackendReview:
     prerequisite_hashes: tuple[tuple[str, str], ...] = ()
     gpu_device_id: int | None = None
     tested_vram_bytes: int | None = None
+    runtime_policy: str = "nvidia_signed"
+    community_candidate_id: str | None = None
+    community_review_sha256: str | None = None
+    offline_feature_evaluated: bool = False
+    client_plugin_loading_verified: bool = False
+    client_protection_compatible: bool = False
 
 
 # Explicitly empty: a catalog package being verified does NOT establish FiveM compatibility.
@@ -78,7 +86,7 @@ def policy_findings(policy: ServerPolicy, review: BackendReview | None, package:
 
 
 def evidence_findings(installation: FiveMInstallation, ctx: BackendContext,
-                      review: BackendReview | None, package: Package | None) -> list[Finding]:
+                      review: BackendReview | None, package: Package | None, community_inspector=None) -> list[Finding]:
     out: list[Finding] = []
     def block(code, message):
         out.append(Finding(Severity.BLOCKER, code, message))
@@ -102,7 +110,14 @@ def evidence_findings(installation: FiveMInstallation, ctx: BackendContext,
         return out
     if not review.source.startswith("https://") or not re.fullmatch(r"[0-9a-f]{40}", review.upstream_commit):
         block("fivem_review_source", "The recipe needs a pinned upstream commit and an HTTPS evidence reference.")
-    if not review.neural_feature_evaluated or not review.signed_runtime:
+    community = review.runtime_policy == "reviewed_bandukids"
+    if review.runtime_policy not in ("nvidia_signed", "reviewed_bandukids"):
+        block("fivem_runtime_policy", "The recipe names an unknown runtime trust policy.")
+    if community:
+        if (review.signed_runtime or not review.neural_feature_evaluated or not review.offline_feature_evaluated
+                or not review.client_plugin_loading_verified or not review.client_protection_compatible):
+            block("fivem_community_evidence", "A community FiveM recipe needs offline and exact-client neural evaluation, permitted plugin loading and compatible client protections; signature spoofing is forbidden.")
+    elif not review.neural_feature_evaluated or not review.signed_runtime:
         block("fivem_neural_evidence", "Successful neural-feature creation/evaluation with an unmodified signed runtime is not documented.")
     if review.client_fingerprint != installation.fingerprint:
         block("fivem_client_revision", "The inspected client/configuration differs from the reviewed test configuration.")
@@ -128,14 +143,21 @@ def evidence_findings(installation: FiveMInstallation, ctx: BackendContext,
     for item in installation.inventory:
         if item.path.name.lower() in needed:
             try:
-                if item.sha256 != pins.get(item.path.name.lower()) or runtimes.evaluate(str(item.path)).trust != TrustState.VERIFIED:
+                name = item.path.name.lower()
+                if item.sha256 != pins.get(name):
+                    raise ValueError("existing runtime differs from the reviewed pin")
+                if community and name == runtimes.NR_RUNTIME:
+                    from .community import verify_runtime
+                    verify_runtime(item.path, ctx.runtime_lookup(name), review, community_inspector, gpu)
+                elif runtimes.evaluate(str(item.path)).trust != TrustState.VERIFIED:
                     raise ValueError("existing runtime is not the reviewed signed copy")
             except (OSError, ValueError) as exc:
                 block("fivem_existing_runtime", f"{item.path.name}: {exc}")
     for name in sorted(needed):
         record = ctx.runtime_lookup(name)
         # Existing files are not trusted merely because their names match.
-        if not record or record.get("trust") != TrustState.VERIFIED.value:
+        expected_trust = "reviewed_community" if community and name == runtimes.NR_RUNTIME else TrustState.VERIFIED.value
+        if not record or record.get("trust") != expected_trust:
             block("fivem_runtime_trust", f"Import and verify your legally obtained {name}; proprietary downloads are never performed.")
             continue
         path = Path(record.get("stored_path") or "")
@@ -143,9 +165,13 @@ def evidence_findings(installation: FiveMInstallation, ctx: BackendContext,
             if path.is_symlink() or not path.is_file() or sha256_file(path) != pins.get(name) or record.get("sha256") != pins.get(name):
                 raise ValueError("runtime hash differs from the reviewed copy")
             # Recheck actual Authenticode, not just a cached database trust flag.
-            candidate = runtimes.evaluate(str(path))
-            if candidate.trust != TrustState.VERIFIED:
-                raise ValueError("a valid NVIDIA Authenticode signature cannot be established")
+            if community and name == runtimes.NR_RUNTIME:
+                from .community import verify_runtime
+                verify_runtime(path, record, review, community_inspector, gpu)
+            else:
+                candidate = runtimes.evaluate(str(path))
+                if candidate.trust != TrustState.VERIFIED:
+                    raise ValueError("a valid NVIDIA Authenticode signature cannot be established")
         except (OSError, ValueError) as exc:
             block("fivem_runtime_integrity", f"{name}: {exc}")
     return out

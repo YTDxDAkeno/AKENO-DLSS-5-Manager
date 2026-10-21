@@ -3,10 +3,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout,
     QLineEdit, QPlainTextEdit, QTabWidget, QVBoxLayout, QWidget, QScrollArea)
 from akeno.backends import runtimes
 from akeno.community.runtime import Category, LABELS, load_review
+from akeno.community import candidates
 from akeno.i18n import t
 from akeno.ui import theme
 from akeno.ui.widgets import Card, StatusPill, KeyValueGrid, button, label
@@ -42,6 +44,19 @@ class CommunityRuntimeDialog(QDialog):
             scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setWidget(page)
             self.tabs.addTab(scroll, name); pages.append(lay)
         inventory, experiment, evidence = pages
+        self.candidate_choice = QComboBox()
+        self.candidate_choice.addItem(t("Generic local runtime — explicit review required"), None)
+        for candidate in candidates.all_candidates():
+            self.candidate_choice.addItem(t("Bandukids Ada NR — RTX 4080 experimental, unverified"), candidate.id)
+        inventory.addWidget(self.candidate_choice)
+        self.candidate_info = label("", "dim", wrap=True)
+        self.candidate_info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        inventory.addWidget(self.candidate_info)
+        source_links = QHBoxLayout()
+        self.code_link = button(t("View candidate source"), "file", on_click=lambda: self.open_candidate_source(False))
+        self.runtime_link = button(t("View runtime source page"), "file", on_click=lambda: self.open_candidate_source(True))
+        source_links.addWidget(self.code_link); source_links.addWidget(self.runtime_link)
+        inventory.addLayout(source_links)
         self.path = QLineEdit(); self.path.setReadOnly(True)
         inventory.addWidget(self.path)
         files = QHBoxLayout()
@@ -98,7 +113,27 @@ class CommunityRuntimeDialog(QDialog):
         for control in (self.profile,): control.currentIndexChanged.connect(self.invalidate)
         self.offline.toggled.connect(self.invalidate); self.consent.toggled.connect(self.invalidate)
         self.permission.toggled.connect(self.invalidate)
+        self.candidate_choice.currentIndexChanged.connect(self.candidate_changed)
+        self.candidate_changed()
         self.profiles()
+
+    def candidate_changed(self, *_):
+        candidate = candidates.by_id(self.candidate_choice.currentData())
+        self.review = self.evaluation = None
+        self.invalidate()
+        self.category.set(t("Unverified — Import requires further review"), "pending")
+        self.code_link.setEnabled(candidate is not None); self.runtime_link.setEnabled(candidate is not None)
+        self.candidate_info.setText(t("Bandukids candidate: {sha}. Modified runtime; Windows HashMismatch was reported. ComfyUI video claims are not game evidence. RTX 4080 is experimental/unverified; RTX 20/30 remain unverified. Source, security and local-use reviews are still required.", sha=candidate.sha256) if candidate else "")
+        if self.path.text(): self.inspect()
+
+    def open_candidate_source(self, runtime):
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        candidate = candidates.by_id(self.candidate_choice.currentData())
+        if candidate:
+            # Explicit click on static provenance pages only; no binary download or arbitrary review URL execution.
+            QDesktopServices.openUrl(QUrl(candidate.runtime_source if runtime else
+                candidate.repository + "/tree/" + candidate.source_commit))
 
     def invalidate(self, *_):
         self.revision += 1; self.prepared = None; self.install_button.setEnabled(False)
@@ -152,18 +187,20 @@ class CommunityRuntimeDialog(QDialog):
     def inspect(self):
         if not self.path.text(): return
         path, review, revision = self.path.text(), self.review, self.revision
-        self.run('inspect', lambda: self.service.runtimes.inspect(path, review),
+        candidate_id = self.candidate_choice.currentData()
+        self.run('inspect', lambda: self.service.runtimes.inspect(path, review, candidate_id),
                  lambda result: self.show_evaluation(result) if revision == self.revision else None)
 
     def import_runtime(self):
         if not self.permission.isChecked():
             self.message.setText(t("Explicit local reuse permission is required.")); return
         path, review, revision = self.path.text(), self.review, self.revision
+        candidate_id = self.candidate_choice.currentData()
         def done(result):
             if revision == self.revision:
                 self.path.setText(result.path); self.show_evaluation(result)
                 self.message.setText(t("Imported into the separate runtime cache. Game files are unchanged."))
-        self.run('import', lambda: self.service.runtimes.import_local(path, review, True), done)
+        self.run('import', lambda: self.service.runtimes.import_local(path, review, True, candidate_id), done)
 
     def review_template(self):
         if not self.evaluation:
@@ -177,6 +214,13 @@ class CommunityRuntimeDialog(QDialog):
             "local_use_permitted":False, "limitations":[], "targets":[{"generation":gpu.generation if gpu else '',
                 "driver":gpu.driver_version if gpu else '', "api":self.game.api.value if self.game else '',
                 "backend":self.backend.currentData(), "status":"experimental", "evidence":""}]}
+        candidate = candidates.by_id(self.candidate_choice.currentData())
+        if candidate:
+            try:
+                template = candidates.review_draft(candidate, self.evaluation, gpu,
+                    self.game.api.value if self.game else '', self.backend.currentData())
+            except ValueError as exc:
+                self.message.setText(t(str(exc))); return
         Path(path).write_text(json.dumps(template, indent=2), encoding='utf-8')
         self.message.setText(t("Complete the source, security, license and target review before loading this template. Empty evidence cannot authorize import."))
 

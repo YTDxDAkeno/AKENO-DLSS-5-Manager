@@ -13,6 +13,7 @@ import shutil
 import tempfile
 from urllib.parse import urlsplit
 
+from akeno.community import candidates
 from akeno.backends import runtimes
 from akeno.backends.runtime_identity import identify
 from akeno.games import pe
@@ -45,21 +46,27 @@ def regular(path: Path) -> None:
 
 
 def validate_review(data: dict) -> dict:
-    if not isinstance(data, dict) or data.get("schema") != 1:
+    if not isinstance(data, dict) or data.get("schema") not in (1, 2):
         raise ValueError(msg("Unsupported community review schema."))
-    required = ("sha256", "version", "repository", "release", "upstream_commit", "reviewer", "reviewed_at",
+    required = ("sha256", "version", "repository", "upstream_commit", "reviewer", "reviewed_at",
                 "modifications", "build_instructions", "security_review", "license_review")
     if any(not isinstance(data.get(k), str) or not data[k].strip() for k in required):
         raise ValueError(msg("The review needs complete source, build, security and licensing evidence."))
     if not re.fullmatch(r"[a-f0-9]{64}", data["sha256"]) or not re.fullmatch(r"[a-f0-9]{40}", data["upstream_commit"]):
         raise ValueError(msg("The review needs exact SHA-256 and upstream commit pins."))
-    repo = urlsplit(data["repository"])
-    release = urlsplit(data["release"])
-    if (repo.scheme != "https" or repo.netloc != "github.com" or repo.query or repo.fragment
-            or not re.fullmatch(r"/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo.path)
-            or release.scheme != "https" or release.netloc != "github.com" or release.query or release.fragment
-            or not release.path.startswith(repo.path + "/releases/tag/") or ".." in release.path):
-        raise ValueError(msg("Repository and release must identify the same explicit GitHub source."))
+    candidate = None
+    if data["schema"] == 2:
+        candidate = candidates.validate_binding(data)
+    else:
+        if candidates.by_hash(data["sha256"]):
+            raise ValueError(msg("Use the named candidate review so runtime source and modified-signature risks remain explicit."))
+        repo = urlsplit(data["repository"])
+        release = urlsplit(data.get("release", ""))
+        if (repo.scheme != "https" or repo.netloc != "github.com" or repo.query or repo.fragment
+                or not re.fullmatch(r"/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo.path)
+                or release.scheme != "https" or release.netloc != "github.com" or release.query or release.fragment
+                or not release.path.startswith(repo.path + "/releases/tag/") or ".." in release.path):
+            raise ValueError(msg("Repository and release must identify the same explicit GitHub source."))
     if date.fromisoformat(data["reviewed_at"]) > date.today() or data.get("local_use_permitted") is not True:
         raise ValueError(msg("A dated local-use licensing review is required."))
     if not isinstance(data.get("limitations"), list) or not data["limitations"] or any(not isinstance(x, str) or not x.strip() for x in data["limitations"]):
@@ -74,6 +81,8 @@ def validate_review(data: dict) -> dict:
                 or t.get("api") not in ("d3d11", "d3d12", "vulkan")
                 or t.get("status") not in ("experimental", "incompatible") or not t.get("evidence")):
             raise ValueError(msg("Invalid exact compatibility target; review claims cannot certify execution."))
+        if candidate and (t.get("generation") != "RTX 40" or t.get("gpu_device_id") not in candidate.experimental_device_ids):
+            raise ValueError(msg("This named candidate has only an unverified RTX 4080 experimental profile; other GPUs need separate evidence."))
     return json.loads(json.dumps(data))
 
 
@@ -99,6 +108,7 @@ class Evaluation:
     source: str
     detail: str
     review: dict | None = None
+    named_candidate: dict | None = None
 
     def to_dict(self):
         d = asdict(self)
@@ -114,7 +124,7 @@ class RuntimeManager:
         self.db, self.verifier = db, verifier or authenticode.verify
         self.denied_hashes = frozenset(denied_hashes)
 
-    def inspect(self, path: str, review: dict | None = None) -> Evaluation:
+    def inspect(self, path: str, review: dict | None = None, candidate_id: str | None = None) -> Evaluation:
         p = Path(path)
         result = Evaluation(str(p), Category.REJECTED, "", None, None, None, None, {}, [],
                             "User-selected local file; origin not independently attested.", "")
@@ -123,6 +133,13 @@ class RuntimeManager:
             if p.suffix.lower() not in (".dll", ".bin"):
                 raise ValueError(msg("Select a runtime DLL/model; archives, scripts and installers are not accepted."))
             result.sha256 = sha256_file(p)
+            named = candidates.by_hash(result.sha256)
+            selected = candidates.by_id(candidate_id) if candidate_id else None
+            if candidate_id and (selected is None or selected.sha256 != result.sha256):
+                raise ValueError(msg("The selected file does not match the named runtime's published SHA-256."))
+            result.named_candidate = named.to_dict() if named else None
+            if named:
+                result.source = named.runtime_source
             if result.sha256 in self.denied_hashes:
                 raise ValueError(msg("This exact file hash is denied by the security policy."))
             info = pe.parse(str(p))
@@ -145,6 +162,8 @@ class RuntimeManager:
                     raise ValueError(msg("The selected DLL does not match the review's exact hash and version."))
             if not result.version:
                 result.category, result.detail = Category.UNKNOWN, msg("Runtime version metadata is missing; further review is required.")
+            elif named and sig.is_nvidia:
+                result.category, result.detail = Category.REJECTED, msg("The known modified runtime cannot be classified as NVIDIA-authenticated; the signature result conflicts with its recorded provenance.")
             elif sig.is_nvidia:
                 result.category, result.detail = Category.OFFICIAL, LABELS[Category.OFFICIAL]
             elif result.review and sig.checked:
@@ -157,10 +176,10 @@ class RuntimeManager:
             result.category, result.detail = Category.REJECTED, str(exc)
         return result
 
-    def import_local(self, path: str, review: dict | None, consent: bool) -> Evaluation:
+    def import_local(self, path: str, review: dict | None, consent: bool, candidate_id: str | None = None) -> Evaluation:
         if consent is not True:
             raise PermissionError(msg("Explicit permission for local reuse and experimental import is required."))
-        result = self.inspect(path, review)
+        result = self.inspect(path, review, candidate_id)
         if result.category not in (Category.OFFICIAL, Category.COMMUNITY):
             raise PermissionError(result.detail)
         folder = app_home() / "community-runtimes" / result.sha256
@@ -174,7 +193,7 @@ class RuntimeManager:
         os.close(fd)
         try:
             shutil.copyfile(path, temp)
-            copied = self.inspect(temp, review)
+            copied = self.inspect(temp, review, candidate_id)
             if copied.sha256 != result.sha256 or copied.category != result.category:
                 raise PermissionError(msg("Runtime changed while importing."))
             os.replace(temp, dest)
