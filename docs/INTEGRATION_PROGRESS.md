@@ -20,3 +20,13 @@
 6. Create new integration PR targeting Claude branch, do not merge main; record artifacts and limitations.
 
 Commit/push meaningful checkpoints at most five minutes apart during active work. At each checkpoint update results, unresolved errors and exact next steps here. Latest successful pushed commit is available via `git log -1 origin/codex/akeno-v1.2-fivem-integration` (avoid self-referential commit IDs).
+
+## Checkpoint — runtime identity repair
+
+- Combined v1.1 + prior FiveM baseline: **193 tests passed** on Linux.
+- Added bounded PE export-table inspection, including export module identity.
+- CL metadata now requires coherent NVIDIA product-family evidence and actual NGX Create/Evaluate export pairs; conflicting SR/RR/FG/NR identities, non-DLLs, generic CL-only names and overlay strings remain rejected.
+- Authenticode publisher now comes from the actual WinVerifyTrust-verified signer chain, not an arbitrary embedded certificate; expected publisher comparison is exact. Signature checks remain mandatory.
+- Added local Swapper cache roots, alternate NGX model store and bounded nested game search. No proprietary downloads.
+- Father's follow-up: tool described as “DLSS 5 Swapper”, other programs, latest driver; exact game/runtime/driver/log evidence still unavailable. Do not convert that report into a verified NR claim.
+- Next: integrated FiveM service/library/UI, attributed neural diagnostics, compatibility presentation, regression tests and Windows build.

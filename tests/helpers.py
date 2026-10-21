@@ -29,7 +29,7 @@ def _version_blob(version: tuple[int, int, int, int] | None, strings: dict[str, 
 
 def make_pe(path: Path, imports: list[str] = (), machine: str = "x64", dll: bool = False,
             version: tuple[int, int, int, int] | None = None, strings: dict[str, str] | None = None,
-            pad: int = 0) -> Path:
+            pad: int = 0, exports: list[str] | None = None, export_name: str = "fixture.dll") -> Path:
     """Write a minimal but structurally valid PE file with an import table and a version blob."""
     mach = {"x64": 0x8664, "x86": 0x14C}[machine]
     pe32plus = machine == "x64"
@@ -70,7 +70,22 @@ def make_pe(path: Path, imports: list[str] = (), machine: str = "x64", dll: bool
     sect = opt + opt_size
     struct.pack_into("<8sIIIIIIHHI", buf, sect, b".idata", len(idata), 0x1000, len(idata), idata_ptr, 0, 0, 0, 0, 0xC0000040)
     struct.pack_into("<8sIIIIIIHHI", buf, sect + 40, b".rsrc", len(rsrc), 0x2000, len(rsrc), rsrc_ptr, 0, 0, 0, 0, 0x40000040)
-    data = bytes(buf) + bytes(idata) + bytes(rsrc) + b"\0" * pad
+    edata = bytearray()
+    if exports is not None:
+        edata = bytearray(40 + len(exports) * 4)
+        name_rva = 0x3000 + len(edata)
+        edata += export_name.encode() + b"\0"
+        for i, name in enumerate(exports):
+            struct.pack_into("<I", edata, 40 + i * 4, 0x3000 + len(edata))
+            edata += name.encode() + b"\0"
+        struct.pack_into("<I", edata, 12, name_rva)
+        struct.pack_into("<I", edata, 24, len(exports))
+        struct.pack_into("<I", edata, 32, 0x3000 + 40)
+        struct.pack_into("<H", buf, 0x86, 3)
+        struct.pack_into("<II", buf, opt + dd_off, 0x3000, len(edata))
+        struct.pack_into("<8sIIIIIIHHI", buf, sect + 80, b".edata", len(edata), 0x3000,
+                         len(edata), rsrc_ptr + len(rsrc), 0, 0, 0, 0, 0x40000040)
+    data = bytes(buf) + bytes(idata) + bytes(rsrc) + bytes(edata) + b"\0" * pad
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(data)
     return path
