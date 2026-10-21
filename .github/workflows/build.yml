@@ -28,6 +28,9 @@ jobs:
   windows:
     name: Windows build, tests and smoke test
     runs-on: windows-2022
+    env:
+      # Qt's offscreen plugin does not discover Windows system fonts itself.
+      QT_QPA_FONTDIR: 'C:\Windows\Fonts'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
