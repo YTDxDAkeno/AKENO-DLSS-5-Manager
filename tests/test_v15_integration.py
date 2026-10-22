@@ -81,7 +81,7 @@ def test_visual_ab_requires_distinct_matching_real_image_files(experiment,tmp_pa
     with pytest.raises(ValueError,match='identical'):s.visual_comparisons.create(g.id,{'off':paths['off'],'on':paths['off']},conditions)
 
 
-def selftest_fixture(experiment,tmp_path,monkeypatch):
+def selftest_fixture(experiment,tmp_path,monkeypatch,official_inventory=False):
     import zipfile
     from dataclasses import asdict
     from akeno.backends import runtimes
@@ -90,7 +90,14 @@ def selftest_fixture(experiment,tmp_path,monkeypatch):
     s,g,c,root=native_pipeline(experiment)
     s.community.runtimes.verifier=lambda path: SignatureInfo(True,True,'NVIDIA Corporation','Synthetic SR signature') if Path(path).name=='nvngx_dlss.dll' else __import__('test_community_runtime').unsigned(path)
     sr=make_pe(tmp_path/'official'/'nvngx_dlss.dll',dll=True,version=(310,8,0,0),strings={'OriginalFilename':'nvngx_dlss.dll'},exports=['NVSDK_NGX_D3D12_CreateFeature','NVSDK_NGX_D3D12_EvaluateFeature'])
-    runtimes.import_runtime(s.db,str(sr),s.community.runtimes.verifier)
+    if official_inventory:
+        from akeno.pipeline.dlls import DllService
+        s.dlls=DllService(s,s.community.runtimes.verifier)
+        imported=s.dlls.import_official(sr,True)
+        assert imported['family']=='super_resolution'
+        assert s.runtime_lookup(runtimes.DLSS_RUNTIME) is None  # v1.5 stores are separate
+    else:
+        runtimes.import_runtime(s.db,str(sr),s.community.runtimes.verifier)
     host=make_pe(tmp_path/'host'/'dlss5-feed-host64.exe',imports=['winmm.dll'])
     archive=tmp_path/'synthetic-feeder.zip'
     with zipfile.ZipFile(archive,'w') as z:z.writestr('host64/dlss5-feed-host64.exe',host.read_bytes())
@@ -101,8 +108,9 @@ def selftest_fixture(experiment,tmp_path,monkeypatch):
     return s,g,c,root
 
 
-def test_isolated_pinned_host_selftest_never_changes_game_or_turns_sr_into_nr(experiment,tmp_path,monkeypatch):
-    s,g,c,root=selftest_fixture(experiment,tmp_path,monkeypatch)
+@pytest.mark.parametrize('official_inventory',[False,True])
+def test_isolated_pinned_host_selftest_never_changes_game_or_turns_sr_into_nr(experiment,tmp_path,monkeypatch,official_inventory):
+    s,g,c,root=selftest_fixture(experiment,tmp_path,monkeypatch,official_inventory=official_inventory)
     before={p.name:p.read_bytes() for p in root.iterdir()};launched=[]
     class Host:
         pid=42;returncode=0
@@ -120,6 +128,17 @@ def test_isolated_pinned_host_selftest_never_changes_game_or_turns_sr_into_nr(ex
     assert result['runtime']['sha256']==c.sha256 and result['host_adapter']['device_id']==0x2704
     assert {p.name:p.read_bytes() for p in root.iterdir()}==before
     assert s.db.get_setting('last_neural_selftest')['status']=='inconclusive'
+
+
+def test_selftest_refuses_modified_official_inventory_sr(experiment,tmp_path,monkeypatch):
+    """A stored inventory row alone cannot authorize a tampered NVIDIA DLL."""
+    from akeno.diagnostics.selftest import _official_sr_from_inventory
+    s,g,c,root=selftest_fixture(experiment,tmp_path,monkeypatch,official_inventory=True)
+    record=next(item for item in s.db.get_setting('official_dll_inventory',{}).values()
+                if item['name']=='nvngx_dlss.dll')
+    path=Path(record['stored_path'])
+    path.write_bytes(path.read_bytes()+b'tampered')
+    assert _official_sr_from_inventory(s) is None
 
 
 def test_selftest_never_runs_implicitly(experiment,monkeypatch):
