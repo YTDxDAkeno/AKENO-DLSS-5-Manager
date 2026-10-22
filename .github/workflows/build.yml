@@ -173,6 +173,8 @@ jobs:
             screenshots/v14-fixtures/*.png
             screenshots/v15-fixtures/*.png
             screenshots/v15-150pct/*.png
+            screenshots/v16-fixtures/*.png
+            screenshots/v16-150pct/*.png
             screenshots/windows-runner/*.png
             screenshots/windows-runner-150pct/*.png
             screenshots/fivem-fixture/*.png
