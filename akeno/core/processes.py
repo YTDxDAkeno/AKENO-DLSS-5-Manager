@@ -152,6 +152,9 @@ def module_inventory(pid: int, expected_birth: str | None = None) -> dict:
     try:
         entry = MODULEENTRY32W(); entry.dwSize = ctypes.sizeof(entry)
         ok = kernel.Module32FirstW(handle, ctypes.byref(entry))
+        if not ok:
+            return {'state': 'unavailable', 'modules': [],
+                    'detail': f'Module enumeration unavailable (Windows error {ctypes.get_last_error()}).'}
         while ok and len(modules) < 512:
             modules.append({'name': entry.szModule, 'path': entry.szExePath})
             ok = kernel.Module32NextW(handle, ctypes.byref(entry))
