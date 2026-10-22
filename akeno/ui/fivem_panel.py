@@ -130,6 +130,9 @@ class FiveMPanel(Card):
         nr=QHBoxLayout();nr.addWidget(button(t('Analyze FiveM Neural Rendering'),'search',on_click=self.analyze_neural))
         nr.addWidget(button(t('Export FiveM feasibility report'),'file',on_click=self.export_neural));nl.addLayout(nr)
         self.neural_summary=label(t('Not analyzed'),wrap=True);nl.addWidget(self.neural_summary)
+        self.neural_facts=KeyValueGrid(220);nl.addWidget(self.neural_facts)
+        nl.addWidget(button(t('Show technical details'),on_click=lambda:self.neural_technical.setVisible(not self.neural_technical.isVisible())))
+        self.neural_technical=QPlainTextEdit();self.neural_technical.setReadOnly(True);self.neural_technical.hide();nl.addWidget(self.neural_technical)
         self.neural_details=QPlainTextEdit();self.neural_details.setReadOnly(True);nl.addWidget(self.neural_details,1)
         self.neural_report=None;self._neural_epoch=0;self._neural_closed=False
         self.neural_mode.currentIndexChanged.connect(self._invalidate_neural)
@@ -147,7 +150,7 @@ class FiveMPanel(Card):
 
     def _invalidate_neural(self,*_):
         self._neural_epoch+=1;self.neural_report=None
-        self.neural_summary.setText(t('Not analyzed'));self.neural_details.clear()
+        self.neural_summary.setText(t('Not analyzed'));self.neural_details.clear();self.neural_technical.clear();self.neural_facts.set_rows([])
 
     def closeEvent(self,event):
         self._neural_closed=True;self._neural_epoch+=1
@@ -160,7 +163,16 @@ class FiveMPanel(Card):
             if self._neural_closed or epoch!=self._neural_epoch or not self.game or self.game.id!=game_id or self.neural_mode.currentData()!=mode:return
             self.neural_report=report
             self.neural_summary.setText(t('Deployment blocked: the exact FiveM renderer, loader and complete NR recipe must be verified first.'))
-            self.neural_details.setPlainText('\n'.join(t(item) for item in report['blockers'])+'\n\n'+json.dumps(redact(report),indent=2,ensure_ascii=False))
+            inspected=report['inspection'];process=inspected.get('process') or {};gpu=inspected.get('selected_gpu') or {}
+            self.neural_facts.set_rows([(t('Edition'),inspected.get('edition',t('Unknown'))),
+                (t('Observed client version'),inspected.get('client_version') or t('Unknown')),
+                (t('Actual game renderer'),t('Unknown') if inspected.get('game_renderer')=='unknown' else inspected['game_renderer']),
+                (t('Observed process'),process.get('name',t('Not found'))),
+                (t('GPU'),gpu.get('name',t('Unknown'))),(t('NVIDIA driver'),gpu.get('driver_version') or t('Unknown')),
+                (t('Supported plugin method'),t('Not verified')),(t('Current server policy'),t('Unknown')),
+                (t('Neural consumer'),t('Complete compatible recipe missing'))])
+            self.neural_details.setPlainText('\n\n'.join(t(item) for item in report['blockers']))
+            self.neural_technical.setPlainText(json.dumps(redact(report),indent=2,ensure_ascii=False))
         self.ctl.run('fivem_neural',lambda:self.s.fivem.neural_feasibility(game,mode),done,self._error)
 
     def export_neural(self):

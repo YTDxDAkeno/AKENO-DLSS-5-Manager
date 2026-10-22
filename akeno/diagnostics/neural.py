@@ -248,7 +248,7 @@ class NeuralMonitor:
                 health=diagnose(line)
                 for key in ('secure_loader','feature_18_requirements_query','consumer_fallback'):
                     if health[key] not in ('not_observed','unknown'):self.health[key]=health[key]
-                for key in ('query_observations','error_codes','stability_incidents','dispatch_observations'):
+                for key in ('query_observations','gpu_diagnostics','error_codes','stability_incidents','dispatch_observations'):
                     for item in health[key]:
                         if item not in self.health[key]:self.health[key].append(item)
                     self.health[key]=self.health[key][-24:]

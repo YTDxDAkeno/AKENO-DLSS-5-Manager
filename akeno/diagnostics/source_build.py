@@ -60,7 +60,7 @@ def prepare(source):
             text=text[:position+1]+'#include <Logger.h>\n#include "'+include+'"\n'+text[position+1:]
         path.write_text(text,encoding='utf-8',newline='\n')
         records.append({'path':path.relative_to(source).as_posix(),'base_sha256':hashlib.sha256(original.encode()).hexdigest(),'patched_sha256':hashlib.sha256(text.encode()).hexdigest()})
-    header=(resource_dir()/'diagnostic_source/AkenoNrDiagnostic.h').read_bytes()
+    header=(resource_dir()/'diagnostic_source/AkenoNrDiagnostic.h').read_bytes().replace(b'\r\n',b'\n')
     (source/'OptiScaler/dlssnr/AkenoNrDiagnostic.h').write_bytes(header)
     manifest={'schema':1,'build':BUILD,'upstream':'https://github.com/Skynizz/optiscaler-dlss5','source_commit':BASE,
               'license':'GPL-3.0','files':records,'counter_header_sha256':hashlib.sha256(header).hexdigest(),

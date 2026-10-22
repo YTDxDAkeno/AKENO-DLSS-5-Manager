@@ -74,7 +74,9 @@ toolchains are not claimed; each actual result receives SHA-256 hashes.
 Reproduce manually with the existing `tools/build-nr-diagnostic.ps1` or run
 `python tools/prepare_nr_diagnostic.py <exact-checkout>` then the upstream MSBuild
 Release/x64 build and `tools/package_nr_diagnostic.py`. The same Python preparation
-module and identical header are shipped in the Windows app. The separate diagnostic
+module and identical header are shipped in the Windows app. Git attributes and the
+preparer preserve canonical LF header bytes, so source identities survive Windows
+checkout line-ending conversion. The separate diagnostic
 workflow compiles that pinned source; its public artifact contains source/build
 records, never the compiled consumer or NVIDIA files.
 

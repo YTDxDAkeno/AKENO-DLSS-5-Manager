@@ -32,6 +32,10 @@ class VerificationSession:
             if self.last_evidence:
                 self.last_evidence.state = 'stale'
                 self.last_evidence.stages['evaluations_attributed_to_game'] = False
+                if self.last_evidence.execution:
+                    self.last_evidence.execution['integrity']='installation_changed; current attribution invalidated'
+                    for name in ('runtime_module_loaded','feature_created','evaluation_api_succeeded'):
+                        self.last_evidence.execution['stages'][name]=False
             return self.last_evidence
         exact = [p for p in live if p.path and str(Path(p.path).resolve()) == self.observation.executable]
         selected = exact[0] if len(exact) == 1 else None

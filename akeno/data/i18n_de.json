@@ -1293,5 +1293,12 @@
   "sv_pureLevel 2 blocks modified client files.": "sv_pureLevel 2 sperrt veränderte Clientdateien.",
   "Offline / singleplayer development": "Offline-/Einzelspieler-Entwicklung",
   "Authorized server assessment": "Prüfung eines autorisierten Servers",
-  "Unsupported / blocked session": "Nicht unterstützte / gesperrte Sitzung"
+  "Unsupported / blocked session": "Nicht unterstützte / gesperrte Sitzung",
+  "Show technical details": "Technische Details anzeigen",
+  "Observed client version": "Beobachtete Client-Version",
+  "Actual game renderer": "Tatsächlicher Spiel-Renderer",
+  "Observed process": "Beobachteter Prozess",
+  "Supported plugin method": "Unterstützter Plugin-Ladeweg",
+  "Current server policy": "Aktuelle Serverrichtlinie",
+  "Complete compatible recipe missing": "Vollständige kompatible Rezeptur fehlt"
 }

@@ -21,9 +21,19 @@ jobs:
       - name: Qt runtime libraries
         run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
       - run: pip install -r requirements-dev.txt
-      - run: python -m pytest -q
+      - run: python -m pytest -q --junitxml=linux-test-results.xml
         env:
           QT_QPA_PLATFORM: offscreen
+
+      - name: Publish bounded Linux test failure annotations
+        if: failure()
+        run: python tools/ci_test_annotations.py linux-test-results.xml
+      - name: Preserve Linux test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-test-results
+          path: linux-test-results.xml
 
   windows:
     name: Windows build, tests and smoke test

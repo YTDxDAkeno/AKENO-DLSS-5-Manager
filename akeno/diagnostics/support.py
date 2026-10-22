@@ -11,7 +11,7 @@ def safe_report(report, include_excerpts=False, consent=False):
     def select(value):
         if isinstance(value, dict):
             return {k: ('community_experimental' if k in ('category','_trust_category','trust') and v == 'reviewed_community' else select(v)) for k,v in value.items()
-                if include_excerpts or k not in ('raw_excerpts', 'line', 'backend_configuration')}
+                if include_excerpts or k not in ('raw_excerpts', 'line', 'backend_configuration','query_observations','gpu_diagnostics')}
         if isinstance(value, (list,tuple)):
             return [select(v) for v in value[:500]]
         if isinstance(value, str):

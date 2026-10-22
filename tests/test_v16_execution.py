@@ -144,3 +144,13 @@ def test_selftest_writes_json_only_zip_and_separates_phases(experiment,tmp_path,
     with ZipFile(app_home()/'self-tests'/result['id']/'result.zip') as z:
         assert z.namelist()==['result.json']
         assert json.loads(z.read('result.json'))['execution']==result['execution']
+
+
+def test_success_return_is_not_an_error_code_and_gpu_excerpts_need_export_consent():
+    from akeno.diagnostics.support import safe_report
+    health=diagnose('NGX init returned 0x00000001\nDRED: device removed 0x887A0006')
+    assert health['error_codes']==['0x887A0006'] and health['gpu_diagnostics']
+    basic=safe_report({'execution':{'diagnostics':health}})
+    assert 'gpu_diagnostics' not in basic['execution']['diagnostics']
+    full=safe_report({'execution':{'diagnostics':health}},True,True)
+    assert full['execution']['diagnostics']['gpu_diagnostics']

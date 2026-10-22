@@ -17,7 +17,7 @@ FAILURES = {
 def diagnose(text):
     """Bounded upstream log diagnostics, including errors outside NR-labelled lines."""
     text = text[-4*1024*1024:]
-    codes = sorted({c.upper().replace('0X','0x') for c in re.findall(r'0x[0-9a-fA-F]{8}\b', text)})
+    codes = sorted({c.upper().replace('0X','0x') for c in re.findall(r'0x[0-9a-fA-F]{8}\b', text) if int(c,16)&0x80000000})
     low = text.casefold()
     secure = bool(re.search(r'nvloadsignedlibraryw\(\).*fail|failed to verify.*(?:signature|nvngx_dlssnr)|signature.*(?:fail|invalid)|digitale signatur.*(?:nicht|fehl)', low))
     query_lines = [s[:1000] for s in text.splitlines() if re.search(r'(?:feature\s*(?:=|id\s*[:=])?\s*18|dlss.?nr)',s,re.I) and re.search(r'quer|requirements|capabilit|probe',s,re.I)]
@@ -32,7 +32,8 @@ def diagnose(text):
     if 'dlss-nr forwarder loaded from' in low:dispatch.append('forwarder_module_observed')
     if 'dlss-nr (proxy):' in low:dispatch.append('driver_proxy_log_observed')
     if re.search(r'dlss-nr.*(?:direct.runtime|direct runtime)',low):dispatch.append('direct_runtime_log_observed')
-    return {'secure_loader':'signature_rejected' if secure else 'not_observed',
+    gpu_lines=[s[:1000] for s in text.splitlines() if re.search(r'DRED|STALL frame|did not retire allocator',s,re.I)][-24:]
+    return {'gpu_diagnostics':gpu_lines,'secure_loader':'signature_rejected' if secure else 'not_observed',
             'feature_18_requirements_query':query, 'query_observations':query_lines[-12:],
             'error_codes':codes, 'stability_incidents':incidents, 'consumer_fallback':fallback,
             'dispatch_observations':dispatch, 'dred_observed':'DRED' in text,
