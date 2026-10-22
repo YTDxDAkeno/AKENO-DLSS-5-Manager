@@ -163,7 +163,7 @@ class NeuralSelfTest:
             if adapter_match:
                 name,luid,vendor,device,driver=adapter_match.groups()
                 result.host_adapter={'name':name,'luid':luid,'vendor_id':int(vendor,16),'device_id':int(device,16),'driver':driver}
-            if not result.host_adapter or result.host_adapter['device_id']!=gpu.device_id or result.host_adapter['driver']!=gpu.driver_version:
+            if not result.host_adapter or result.host_adapter['vendor_id']!=gpu.vendor_id or result.host_adapter['device_id']!=gpu.device_id or result.host_adapter['driver']!=gpu.driver_version or (gpu.luid and result.host_adapter['luid'].casefold()!=gpu.luid.casefold()):
                 result.limitations.append('Host adapter/driver identity could not be matched to the selected GPU. Hardware result remains inconclusive.')
                 if result.status=='pass':result.status='inconclusive'
             modules=result.process.get('module_inventory',{}).get('modules',[])

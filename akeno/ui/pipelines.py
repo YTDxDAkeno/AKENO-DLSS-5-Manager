@@ -46,6 +46,7 @@ class PipelineDialog(QDialog):
         pipeline.addWidget(button(t('Show technical details / file preview'),on_click=lambda:self.plan_view.setVisible(not self.plan_view.isVisible())))
         self.plan_view=QPlainTextEdit();self.plan_view.setReadOnly(True);self.plan_view.hide();pipeline.addWidget(self.plan_view,1)
         selftest.addWidget(label(t('This test uses a pinned 64-bit host in an isolated AKENO folder. It changes no game files. A successful standalone test does not prove that a game uses Neural Rendering.'),'dim',wrap=True))
+        selftest.addWidget(label(t('Test consumer: OptiScaler NR 1.3.0. Host: Feeder 1.19.0. An imported diagnostic build replaces only the identified consumer.'),'dim',wrap=True))
         test_actions=QHBoxLayout();test_actions.addWidget(button(t('Test Neural Rendering Runtime'),'play',on_click=self.start_selftest));test_actions.addWidget(button(t('Stop'),'stop',on_click=self.cancel));test_actions.addWidget(button(t('Export test result'),'file',on_click=self.export_result));selftest.addLayout(test_actions)
         self.test_status=label(t('Not tested'),'dim',wrap=True);selftest.addWidget(self.test_status)
         self.test_output=QPlainTextEdit();self.test_output.setReadOnly(True);selftest.addWidget(self.test_output,1)
