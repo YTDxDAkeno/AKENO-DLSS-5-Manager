@@ -106,6 +106,7 @@ class Observation:
     file_identities: tuple[tuple[str, tuple], ...] = ()
     diagnostic_builds: tuple[str, ...] = ()
     log_clock_ns: int = 0
+    diagnostic_modules: tuple[str, ...] = ()
 
 
 @dataclass
@@ -122,7 +123,7 @@ class NeuralEvidence:
     counters: dict = field(default_factory=dict)
 
 
-def begin(game_id, target, executable, artifacts, expected_hashes=None, diagnostic_builds=()):
+def begin(game_id, target, executable, artifacts, expected_hashes=None, diagnostic_builds=(), diagnostic_modules=()):
     target = Path(target).resolve()
     pins, metadata = [], []
     for name in artifacts:
@@ -144,7 +145,7 @@ def begin(game_id, target, executable, artifacts, expected_hashes=None, diagnost
         stat = identity(p)
         cursors.append((p.relative_to(target).as_posix(), LogCursor(stat[2], _anchor(p, stat[2]), stat)))
     return Observation(game_id, str(target), str(exe.resolve()), tuple(pins), tuple(cursors),
-        time.time(), exe_hash, tuple(metadata), tuple(diagnostic_builds), log_clock_ns())
+        time.time(), exe_hash, tuple(metadata), tuple(diagnostic_builds), log_clock_ns(), tuple(diagnostic_modules))
 
 
 def classify(line):

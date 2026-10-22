@@ -47,7 +47,8 @@ class VerificationSession:
             self.modules = processes.module_inventory(selected.pid, birth)
             self.module_checked = time.monotonic()
         installed_paths = {str(Path(self.observation.target, n).resolve()) for n, _ in self.observation.artifacts}
-        diagnostic_loaded=any(str(Path(m['path']).resolve()) in installed_paths and m['name'].casefold() not in ('nvngx_dlssnr.dll','nvngx_dlss.dll') for m in self.modules['modules'])
+        diagnostic_paths={str(Path(self.observation.target,name).resolve()) for name in self.observation.diagnostic_modules}
+        diagnostic_loaded=any(str(Path(m['path']).resolve()) in diagnostic_paths for m in self.modules['modules'])
         evidence = self.monitor.poll([selected.path] if selected else [], attribution_allowed=bool(birth),
             process_identity=current,diagnostic_loaded=diagnostic_loaded)
         self.polls += 1

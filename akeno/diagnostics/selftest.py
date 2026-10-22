@@ -168,6 +168,10 @@ class NeuralSelfTest:
                 if result.status=='pass':result.status='inconclusive'
             modules=result.process.get('module_inventory',{}).get('modules',[])
             model_loaded=any(Path(m['path']).resolve()==(work/runtimes.NR_RUNTIME).resolve() for m in modules)
+            diagnostic_loaded=any(Path(m['path']).resolve()==(work/'winmm.dll').resolve() for m in modules)
+            if diagnostic and not diagnostic_loaded:
+                result.limitations.append('The exact selected diagnostic consumer module was not observed in the host.')
+                if result.status=='pass':result.status='inconclusive'
             if not model_loaded:
                 result.limitations.append('The exact isolated NR runtime was not confirmed in a read-only module snapshot.')
                 if result.status=='pass':result.status='inconclusive'

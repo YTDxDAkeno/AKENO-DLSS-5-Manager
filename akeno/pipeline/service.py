@@ -120,6 +120,7 @@ class PipelineService:
                     item=diagnostic['binary_files'][op.source.name]
                     op.source=Path(item['stored_path']);op.expected_sha256=item['sha256']
             plan.params['_diagnostic_build']=diagnostic['build']
+            plan.params['_diagnostic_module']=decision.proxy
             plan.params['_diagnostic_source']=diagnostic['source_commit']
             plan.summary.append('Source-identified local diagnostic backend selected; not NVIDIA-authenticated or a security certification.')
         plan.params['_pipeline_route']=route_id

@@ -235,7 +235,8 @@ class CommunityService:
         # A game's overlay may legitimately save INI settings. Hash and report the effective config,
         # but keep binary/marker pins mandatory. Deployment and restore policies are unchanged.
         binary_pins = {name: pin for name,pin in expected.items() if name.casefold() != 'optiscaler.ini'}
-        observation = neural.begin(game.id, game.target_dir, game.exe_path, list(expected), binary_pins, diagnostic_builds=([tx['params']['_diagnostic_build']] if tx['params'].get('_diagnostic_build') else []))
+        observation = neural.begin(game.id, game.target_dir, game.exe_path, list(expected), binary_pins, diagnostic_builds=([tx['params']['_diagnostic_build']] if tx['params'].get('_diagnostic_build') else []),
+            diagnostic_modules=([tx['params']['_diagnostic_module']] if tx['params'].get('_diagnostic_module') in expected else []))
         from akeno.diagnostics.session import VerificationSession
         with self._monitor_lock:
             previous = self.sessions.get(game_id)
