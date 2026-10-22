@@ -171,6 +171,8 @@ class Installer:
                 if dst.exists():
                     st = dst.stat()
                     orig_sha = sha256_file(dst)
+                    if op.rel_path in plan.expected_originals and orig_sha!=plan.expected_originals[op.rel_path]:
+                        raise InstallError('Original changed before backup: '+op.rel_path)
                     bpath = bdir / "files" / op.rel_path.replace("\\", "/")
                     bpath.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(dst, bpath)
@@ -239,6 +241,7 @@ class Installer:
             dst = _safe_join(target_dir, rel)
             try:
                 if rec and rec["action"] == "replace" and rec["backup_path"]:
+                    if sha256_file(rec['backup_path'])!=rec['original_sha256']:raise OSError('Backup integrity changed during rollback.')
                     _atomic_write(dst, Path(rec["backup_path"]), None)
                 elif dst.exists():
                     dst.unlink()

@@ -13,7 +13,7 @@ from akeno.security.downloads import sha256_file
 from akeno.security import archive
 
 
-def build(runtime, backend_archive, destination, source='', permitted=False, manager=None, sr_runtime=None, include_presentmon=True):
+def build(runtime, backend_archive, destination, source='', permitted=False, manager=None, sr_runtime=None, include_presentmon=True, feeder_archive=None, pipeline_manifest=None):
     if not permitted:
         raise PermissionError('Confirm rights for personal local reuse. This does not grant redistribution rights.')
     destination = Path(destination)
@@ -47,6 +47,19 @@ def build(runtime, backend_archive, destination, source='', permitted=False, man
         for name, pin in package.files.items():
             if sha256_file(Path(temporary) / name) != pin:
                 raise ValueError('Backend member hash mismatch: ' + name)
+    if feeder_archive is not None:
+        feeder=catalog.package('dlss5-feeder-1.19.0')
+        regular(Path(feeder_archive))
+        if not feeder or sha256_file(feeder_archive)!=feeder.sha256:raise ValueError('Feeder archive differs from the pinned catalog.')
+        with tempfile.TemporaryDirectory() as temporary:archive.extract(Path(feeder_archive),Path(temporary),feeder.files,feeder.root)
+    if pipeline_manifest is not None:
+        # Reuse the exact local component validator; no scripts/components are executed.
+        from akeno.core.db import Database
+        from akeno.pipeline.manifests import ComponentStore
+        with tempfile.TemporaryDirectory() as temporary:
+            database=Database(Path(temporary)/'validate.sqlite')
+            try:ComponentStore(database).import_manifest(pipeline_manifest,True)
+            finally:database.close()
     destination.mkdir(parents=True)
     components = []
     for path, relative, kind, identity, extra in [
@@ -60,6 +73,23 @@ def build(runtime, backend_archive, destination, source='', permitted=False, man
         if sha256_file(target) != before or before != (evaluation.sha256 if kind == 'neural_runtime' else package.sha256):
             raise ValueError('An input changed during private packaging.')
         components.append(dict(id=identity, kind=kind, path=relative, sha256=before, **extra))
+    if feeder_archive is not None:
+        target=destination/'backends'/'feeder.zip';shutil.copyfile(feeder_archive,target)
+        if sha256_file(target)!=feeder.sha256:raise ValueError('Feeder changed during packaging.')
+        components.append({'id':feeder.id,'kind':'backend_archive','path':'backends/feeder.zip','sha256':feeder.sha256})
+    if pipeline_manifest is not None:
+        from akeno.pipeline.manifests import safe_relative
+        manifest_path=Path(pipeline_manifest)
+        data=json.loads(manifest_path.read_text(encoding='utf-8-sig'))
+        folder=destination/'pipeline';folder.mkdir()
+        for component in data['components']:
+            for item in [component,*component.get('assets',[])]:
+                relative=safe_relative(item['path']);source_path=manifest_path.parent/relative;regular(source_path)
+                target=folder/relative;target.parent.mkdir(parents=True,exist_ok=True)
+                shutil.copyfile(source_path,target)
+                if sha256_file(target)!=item['sha256']:raise ValueError('Pipeline dependency changed during packaging.')
+        target=folder/'components.json';target.write_text(json.dumps(data,indent=2),encoding='utf-8')
+        components.append({'id':'private-pipeline-components','kind':'pipeline_manifest','path':'pipeline/components.json','sha256':sha256_file(target)})
     if sr_runtime is not None:
         from akeno.backends import runtimes
         sr = runtimes.evaluate(str(sr_runtime), runtimes.DLSS_RUNTIME, verifier=manager.verifier)
@@ -99,7 +129,9 @@ if __name__ == '__main__':
     parser.add_argument('--output', required=True, type=Path)
     parser.add_argument('--source', default='')
     parser.add_argument('--sr-runtime', type=Path)
+    parser.add_argument('--feeder-archive', type=Path)
+    parser.add_argument('--pipeline-manifest', type=Path)
     parser.add_argument('--without-presentmon', action='store_true')
     parser.add_argument('--local-use-permitted', action='store_true')
     args = parser.parse_args()
-    build(args.runtime, args.backend_archive, args.output, args.source, args.local_use_permitted, sr_runtime=args.sr_runtime, include_presentmon=not args.without_presentmon)
+    build(args.runtime, args.backend_archive, args.output, args.source, args.local_use_permitted, sr_runtime=args.sr_runtime, include_presentmon=not args.without_presentmon,feeder_archive=args.feeder_archive,pipeline_manifest=args.pipeline_manifest)

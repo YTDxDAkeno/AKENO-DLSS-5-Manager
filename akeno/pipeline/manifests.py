@@ -2,6 +2,7 @@
 import json
 import re
 import shutil
+import posixpath
 from pathlib import Path, PureWindowsPath
 from akeno.paths import cache_dir
 from akeno.security.downloads import sha256_file
@@ -43,9 +44,29 @@ class ComponentStore:
             if src.suffix.lower() in ('.dll','.addon64','.addon32'):
                 if not info.valid or not info.is_dll or info.machine!=arch:raise ValueError('Component PE architecture mismatch.')
             if role=='reshade' and not {'ReShadeRegisterAddon','ReShadeUnregisterAddon'}<=set(info.exports):raise ValueError('ReShade full addon exports are required.')
-            record=dict(item,sha256=item['sha256'].lower(),architectures=[arch] if arch else [],trust='local_declared_not_a_security_review')
+            asset_records=[]
+            assets=item.get('assets',[])
+            if not isinstance(assets,list) or len(assets)>128:raise ValueError('Too many shader dependencies.')
+            destinations=set()
+            for asset in assets:
+                relative=safe_relative(asset['path']);destination=safe_relative(asset['destination'])
+                if not destination.startswith('reshade-shaders/') or destination in destinations:raise ValueError('Unsafe or duplicate shader asset destination.')
+                destinations.add(destination)
+                asset_path=manifest.parent/relative;regular(asset_path)
+                if not asset_path.resolve().is_relative_to(manifest.parent.resolve()) or sha256_file(asset_path)!=asset.get('sha256'):raise ValueError('Shader dependency hash mismatch.')
+                if asset_path.suffix.casefold() not in ('.fx','.fxh','.hlsl','.png','.dds','.lut'):raise ValueError('Unsupported shader asset type.')
+                asset_records.append(dict(asset,_source=str(asset_path)))
+            if role=='motion_provider':
+                main_destination=item.get('destination','reshade-shaders/Shaders/'+src.name)
+                available={main_destination,*destinations}
+                for shader,destination in [(src,main_destination),*[(Path(a['_source']),a['destination']) for a in asset_records if Path(a['_source']).suffix.casefold() in ('.fx','.fxh','.hlsl')]]:
+                    if shader.stat().st_size>4*1024*1024:raise ValueError('Shader source is too large.')
+                    for include in re.findall(r'^\s*#include\s*[<"]([^>"\r\n]+)[>"]',shader.read_text(errors='replace'),re.M):
+                        target=posixpath.normpath(posixpath.join(posixpath.dirname(destination),include.replace('\\','/')))
+                        if target not in available:raise ValueError('Missing pinned shader include: '+include)
+            record=dict(item,assets=asset_records,sha256=item['sha256'].lower(),architectures=[arch] if arch else [],trust='local_declared_not_a_security_review')
             validated[role]=record|{'_source':str(src)}
-        ordered_components(validated)
+        ordered_components(self.records()|validated)
         for role,item in validated.items():
             dest=cache_dir()/'components'/item['sha256']/Path(item['path']).name
             dest.parent.mkdir(parents=True,exist_ok=True)
@@ -55,6 +76,12 @@ class ComponentStore:
                 if sha256_file(tmp)!=item['sha256']:raise ValueError('Component changed during import.')
                 tmp.replace(dest)
             item.pop('_source',None);item['stored_path']=str(dest)
+            for asset in item.get('assets',[]):
+                asset_dest=cache_dir()/'components'/asset['sha256']/Path(asset['path']).name;asset_dest.parent.mkdir(parents=True,exist_ok=True)
+                if not asset_dest.exists():shutil.copyfile(asset.pop('_source'),asset_dest)
+                asset.pop('_source',None)
+                if sha256_file(asset_dest)!=asset['sha256']:raise ValueError('Changed shader asset cache.')
+                asset['stored_path']=str(asset_dest)
         existing=self.db.get_setting('pipeline_components',{})
         existing.update(validated);self.db.set_setting('pipeline_components',existing)
         return validated
@@ -67,7 +94,11 @@ class ComponentStore:
         p=Path(item['stored_path'])
         try:
             regular(p)
-            return item if sha256_file(p)==item['sha256'] else None
+            if sha256_file(p)!=item['sha256']:return None
+            for asset in item.get('assets',[]):
+                regular(Path(asset['stored_path']))
+                if sha256_file(asset['stored_path'])!=asset['sha256']:return None
+            return item
         except (OSError,ValueError):return None
 
     def import_diagnostic(self,path,permitted=False):
@@ -102,3 +133,23 @@ class ComponentStore:
             p=Path(item['stored_path']);regular(p)
             if sha256_file(p)!=item['sha256']:raise ValueError('Changed diagnostic backend binary.')
         return record
+
+
+def shader_dependencies(path):
+    """Read only literal local shader includes, bounded to the selected package's parent tree."""
+    path=Path(path).resolve();base=path.parent.parent
+    found=[];seen={path};pending=[path]
+    while pending:
+        current=pending.pop()
+        if len(seen)>128:raise ValueError('Shader dependency inventory exceeds 128 files.')
+        if current.stat().st_size>4*1024*1024:raise ValueError('Shader dependency source exceeds 4 MiB.')
+        for include in re.findall(r'^\s*#include\s*[<"]([^>"\r\n]+)[>"]',current.read_text(errors='replace'),re.M):
+            dependency=(current.parent/include.replace('\\','/')).resolve()
+            if not dependency.is_relative_to(base) or dependency.suffix.casefold() not in ('.fxh','.hlsl','.fx'):raise ValueError('Unsupported external shader include: '+include)
+            regular(dependency)
+            if dependency in seen:continue
+            seen.add(dependency);pending.append(dependency)
+            relative=posixpath.normpath('reshade-shaders/Shaders/'+posixpath.relpath(dependency.as_posix(),path.parent.as_posix()))
+            safe_relative(relative)
+            found.append({'source':str(dependency),'destination':relative})
+    return found

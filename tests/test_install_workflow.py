@@ -30,7 +30,7 @@ def env(tmp_path, db, monkeypatch):
     svc.system = system_with(rtx())
     # Game folder: DX12 game with its own DLSS and an unrelated existing ReShade dxgi.dll.
     game_dir = tmp_path / "games" / "Night City"
-    make_pe(game_dir / "bin" / "x64" / "NightCity.exe", ["d3d12.dll", "kernel32.dll"], pad=50000)
+    make_pe(game_dir / "bin" / "x64" / "NightCity.exe", ["d3d12.dll", "kernel32.dll", "winmm.dll"], pad=50000)
     make_pe(game_dir / "bin" / "x64" / "nvngx_dlss.dll", [], dll=True, version=(310, 2, 1, 0))
     make_pe(game_dir / "bin" / "x64" / "dxgi.dll", [], dll=True, strings={"ProductName": "ReShade"})
     (game_dir / "bin" / "x64" / "settings.cfg").write_text("user=1")

@@ -22,7 +22,7 @@ from akeno.core.models import Finding, Game, GraphicsApi, Severity, Vendor
 from akeno.i18n import msg
 from akeno.security.catalog import Package
 
-PROXY_ORDER = ("winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll")
+PROXY_ORDER = ("winmm.dll", "version.dll", "dbghelp.dll", "wininet.dll", "winhttp.dll", "dxgi.dll")
 FORWARDER = "nvngx.dll_dlssnr.dll"
 MARKER = "akeno-install.json"
 
@@ -188,8 +188,7 @@ class OptiScalerNrAdapter(BackendAdapter):
                 f.append(self.finding(W, "fg_mod", "A DLSS-FG to FSR3 mod is installed; OptiScaler bundles its own "
                                       "frame generation handling and the two may conflict."))
         if self._pick_proxy(game, managed) is None:
-            f.append(self.finding(B, "no_proxy_name", "Every proxy DLL name OptiScaler can use is already taken in "
-                                  "this folder (winmm, version, dbghelp, wininet, winhttp)."))
+            f.append(self.finding(B, "no_proxy_name", "No free supported proxy has an evidenced load path. Inspect game imports or the current process modules; a free filename alone is insufficient."))
         runtime_present = any(m.kind == "nvidia_nr_runtime" for m in game.existing_mods)
         if not runtime_present and ctx.runtime_lookup(NR_RUNTIME) is None:
             f.append(self.finding(B, "runtime_missing",
@@ -199,17 +198,8 @@ class OptiScalerNrAdapter(BackendAdapter):
         return f
 
     def _pick_proxy(self, game: Game, managed: set[str]) -> str | None:
-        kinds = {m.name.lower(): m.kind for m in game.existing_mods}
-        # Already installed by AKENO: keep the same name.
-        for name in list(PROXY_ORDER) + ["optiscaler.asi"]:
-            if name in managed:
-                return "OptiScaler.asi" if name == "optiscaler.asi" else name
-        if "asi_loader" in kinds.values():
-            return "OptiScaler.asi"
-        for name in PROXY_ORDER:
-            if name not in kinds:
-                return name
-        return None
+        from akeno.pipeline.proxy import resolve_proxy
+        return resolve_proxy(game,managed,supported=PROXY_ORDER)
 
     def required_package_files(self, game: Game, package: Package) -> dict[str, str | None]:
         return {n: package.files.get(n) for n in ("OptiScaler.dll", FORWARDER, "OptiScaler.ini")}

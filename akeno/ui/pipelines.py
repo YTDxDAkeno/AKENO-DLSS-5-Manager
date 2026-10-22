@@ -112,6 +112,7 @@ class PipelineDialog(QDialog):
             self.analysis=result;self.routes.blockSignals(True);self.routes.clear()
             for route in result['routes']:
                 text=t(route.name)+' · '+t(route.state.value)
+                if route.execution_state=='execution_verified':text+=' · '+t('execution_verified')
                 if route.recommended:text=t('Recommended')+' · '+text
                 self.routes.addItem(text,route.route_id)
             best=next((i for i,r in enumerate(result['routes']) if r.recommended),0);self.routes.setCurrentIndex(best);self.routes.blockSignals(False)
@@ -129,7 +130,9 @@ class PipelineDialog(QDialog):
                 'driver':t('Exact NVIDIA driver is known'),'runtime_pin':t('Imported exact neural runtime selected'),
                 'exclusive_consumer':t('Only one neural consumer'),'conflicts':t('No conflicting unmanaged graphics hooks'),
                 'proxy':t('A free supported loader path is evidenced'),'consumer':t('A compatible neural consumer is selected'),
-                'feeder_api':t('Reviewed Feeder transport for this renderer'),'bridge_contract':t('A complete reviewed legacy bridge is available')}
+                'feeder_api':t('Reviewed Feeder transport for this renderer'),'observed_component':t('Active component paths were observed'),'bridge_contract':t('A complete reviewed legacy bridge is available')}
+        if route.route_id=='configuration':
+            self.summary.setText(t('Use the game graphics menu or the NVIDIA app program profile for DLAA, quality and preset overrides. Keep those settings separate from NR activation. AKENO does not change global signature policies or unsupported driver flags.'))
         self.requirements.clear()
         for check in route.requirements:
             text=titles.get(check.code)
@@ -140,7 +143,12 @@ class PipelineDialog(QDialog):
         self.plan_view.setPlainText(json.dumps(redact(route.to_dict()),indent=2,ensure_ascii=False))
     def prepare(self):
         if not self.game:return
-        gid,route,pin=self.game.id,self.routes.currentData(),self.runtime.currentData();offline,consent=self.offline.isChecked(),self.consent.isChecked()
+        route=self.routes.currentData()
+        if route=='configuration':
+            self.show_route();self.status.setText(t('Configuration guidance only. No game or driver files changed.'));return
+        if route=='official_swap':
+            self.tabs.setCurrentIndex(2);self.status.setText(t('Choose an observed active path and an imported official version.'));return
+        gid,route,pin=self.game.id,route,self.runtime.currentData();offline,consent=self.offline.isChecked(),self.consent.isChecked()
         def done(prepared):
             self.prepared=prepared;self.plan_view.show();self.plan_view.setPlainText('\n'.join(t(x) for x in prepared.plan.summary)+'\n\n'+json.dumps(self.s.pipelines.diff(prepared),indent=2));self.status.setText(t('Preview ready. No game files changed.'))
         self.run('prepare',lambda:self.s.pipelines.prepare(gid,route,pin,offline,consent),done)
@@ -152,7 +160,8 @@ class PipelineDialog(QDialog):
         self.run('install',lambda:self.s.pipelines.install(prepared),self.install_done)
     def install_done(self,result):self.status.setText('\n'.join(t(x) for x in result.messages));self.ctl.installs_changed.emit();self.invalidate()
     def import_manifest(self):
-        path,_=QFileDialog.getOpenFileName(self,t('Import private component manifest'),'','JSON (*.json)')
+        bundled=self.s.offline_bundle.pipeline_manifest()
+        path,_=QFileDialog.getOpenFileName(self,t('Import private component manifest'),str(bundled) if bundled else '','JSON (*.json)')
         permitted=self.consent.isChecked()
         if path:self.run('import',lambda:self.s.pipelines.components.import_manifest(path,permitted),lambda _:self.status.setText(t('Local components imported. Analyze again.')))
     def import_diagnostic(self):
@@ -173,7 +182,13 @@ class PipelineDialog(QDialog):
         def work():
             with tempfile.TemporaryDirectory() as directory:
                 root=Path(directory);src=Path(path);shutil.copyfile(src,root/src.name)
-                item=dict(values,role=selected,path=src.name,sha256=sha256_file(root/src.name),architecture='x64' if selected=='reshade' else None,apis=['d3d12'],local_use_permitted=permitted)
+                assets=[]
+                if selected=='motion_provider':
+                    from akeno.pipeline.manifests import shader_dependencies
+                    for index,dependency in enumerate(shader_dependencies(src)):
+                        asset=Path(dependency['source']);name=f'asset-{index}'+asset.suffix;shutil.copyfile(asset,root/name)
+                        assets.append({'path':name,'destination':dependency['destination'],'sha256':sha256_file(root/name)})
+                item=dict(values,assets=assets,role=selected,path=src.name,sha256=sha256_file(root/src.name),architecture='x64' if selected=='reshade' else None,apis=['d3d12'],local_use_permitted=permitted)
                 (root/'manifest.json').write_text(json.dumps({'schema':1,'distribution':'private-local-use','components':[item]}))
                 return self.s.pipelines.components.import_manifest(root/'manifest.json',permitted)
         self.run('component',work,lambda _:self.status.setText(t('Local components imported. Analyze again.')))

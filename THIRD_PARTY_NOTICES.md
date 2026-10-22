@@ -62,3 +62,20 @@ upstream repositories above; the OptiScaler package also contains its own `Licen
 
 pytest (MIT), pytest-qt (MIT), PyInstaller (GPL-2.0 with exception), Inno Setup (Inno Setup licence) for
 the installer. None of these are part of the shipped application except the PyInstaller bootloader.
+
+
+## v1.5 source research and diagnostic additions
+
+The 19 upstream projects and their exact source revisions/licenses are documented in
+`docs/AKENO_V1_5_UPSTREAM_RESEARCH.md`. Manager patterns were independently implemented;
+no Recol AGPL implementation was copied into AKENO. The root licenses do not license
+NVIDIA runtime DLLs, Discord-only NR consumers, shaders/assets or every bundled binary.
+Public AKENO artifacts include none of those user-supplied proprietary components.
+
+The optional NR diagnostic counter header and preparation/build tools are AKENO GPL-3.0-or-later
+source additions to the pinned GPL Skynizz backend. Preserve upstream GPL/copyright/notices
+and corresponding source obligations when distributing a derivative. The public compile
+artifact contains source additions and build records, not a runtime bundle. Local component
+and diagnostic manifests declare local permission/provenance, not malware-free certification.
+The pinned Feeder host retains its MIT/component notices; PresentMon remains MIT; ReShade
+and shader import requires separate user-supplied license/permission metadata.

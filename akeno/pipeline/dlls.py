@@ -63,7 +63,8 @@ class DllService:
             path=Path(module['path']);name=path.name.casefold()
             if (name in FAMILIES or name.startswith('sl.') and name.endswith('.dll')) and path.resolve().is_relative_to(root):
                 regular(path);paths[str(path.resolve())]=sha256_file(path)
-        evidence={'exe_sha256':sha256_file(game.exe_path),'exe_path':str(Path(game.exe_path).resolve()),'pid':proc.pid,'created_at':birth,'paths':paths}
+        from akeno.diagnostics.neural import identity
+        evidence={'exe_metadata':list(identity(game.exe_path)),'path_metadata':{name:list(identity(name)) for name in paths},'exe_sha256':sha256_file(game.exe_path),'exe_path':str(Path(game.exe_path).resolve()),'pid':proc.pid,'created_at':birth,'paths':paths}
         self.s.db.set_setting('dll_load_evidence:'+game_id,evidence);return evidence
 
     def prepare(self,game_id,replacements,offline=False):
@@ -75,6 +76,10 @@ class DllService:
         evidence=self.s.db.get_setting('dll_load_evidence:'+game.id,{})
         exe_pin=sha256_file(game.exe_path)
         if evidence.get('exe_sha256')!=exe_pin or evidence.get('exe_path')!=str(Path(game.exe_path).resolve()):raise PermissionError('Observe loaded modules for this exact executable first.')
+        from akeno.pipeline.discovery import facts_for
+        from akeno.pipeline.resolver import resolve
+        decision=next(r for r in resolve(facts_for(self.s,game,offline)) if r.route_id=='official_swap')
+        if not decision.eligible:raise PermissionError('; '.join(c.detail for c in decision.requirements if not c.satisfied))
         inventory=self.s.db.get_setting('official_dll_inventory',{})
         root=Path(game.install_dir).resolve();plan=InstallPlan('official_dlss',None,str(root),kind='swap')
         if not replacements:raise ValueError('Select at least one observed component path.')

@@ -31,6 +31,7 @@ class SelfTestResult:
     duration_s: float = 0
     completion: str = 'not_started'
     gpu: dict | None = None
+    host_adapter: dict = field(default_factory=dict)
     runtime: dict = field(default_factory=dict)
     consumer: dict = field(default_factory=dict)
     process: dict = field(default_factory=dict)
@@ -72,10 +73,19 @@ class NeuralSelfTest:
         if explicit_action is not True:raise PermissionError('Start the runtime self-test explicitly.')
         if not is_windows():raise PermissionError('A physical Windows NVIDIA system is required for the runtime self-test.')
         candidate=self.s.community._candidate(runtime_sha)
+        from akeno.community.runtime import Category
+        if candidate.category not in (Category.OFFICIAL,Category.COMMUNITY,Category.ADVANCED):raise PermissionError(candidate.detail)
         gpu=self.s.selected_gpu()
-        if not gpu or gpu.vendor.value!='nvidia' or gpu.is_software:raise PermissionError('Detected NVIDIA hardware and driver are required.')
+        if not gpu or gpu.vendor.value!='nvidia' or gpu.is_software or not gpu.driver_version:raise PermissionError('Detected NVIDIA hardware and driver are required.')
         from akeno.community.profiles import eligibility
         if candidate.review and candidate.review.get('schema')==3:eligibility(candidate.review,gpu,'optiscaler_nr','d3d12')
+        elif candidate.category!=Category.OFFICIAL:
+            targets=(candidate.review or {}).get('targets',[])
+            matches=[row for row in targets if (row.get('generation'),row.get('driver'),row.get('backend'),row.get('api'))==(gpu.generation,gpu.driver_version,'optiscaler_nr','d3d12')]
+            if not matches or any(row.get('status')=='incompatible' for row in matches):raise PermissionError('Import an applicable local-use runtime profile for this exact hardware/driver/backend/API.')
+        from akeno.hardware.support import runtime_verdict
+        verdict=runtime_verdict(candidate.version,gpu.generation,self.s.compat_db.nr_runtimes(),build_sha256=candidate.sha256)
+        if verdict.state=='fails':raise PermissionError(verdict.text)
         package=self.s.catalog.package('dlss5-feeder-1.19.0')
         opti=self.s.catalog.package('optiscaler-dlss5-skynizz-1.3.0')
         if not package or not opti or not package.installable or not opti.installable:raise PermissionError('Pinned compatible Feeder/OptiScaler packages are unavailable.')
@@ -121,10 +131,13 @@ class NeuralSelfTest:
             with tempfile.TemporaryFile() as output:
                 proc=subprocess.Popen([str(host),'--test'],cwd=work,stdout=output,stderr=subprocess.STDOUT,creationflags=0x08000000)
                 result.process={'pid':proc.pid,'created_at':processes.creation_identity(proc.pid),'runner_sha256':runner_pin}
-                result.completion='running';deadline=time.monotonic()+min(max(timeout,10),300)
+                result.completion='running';last_module_check=0;deadline=time.monotonic()+min(max(timeout,10),300)
                 try:
                     while proc.poll() is None:
                         if token and token.cancelled:raise InterruptedError('Self-test cancelled.')
+                        if time.monotonic()-last_module_check>=2:
+                            result.process['module_inventory']=processes.module_inventory(proc.pid,result.process['created_at'])
+                            last_module_check=time.monotonic()
                         if time.monotonic()>deadline:raise TimeoutError('Self-test exceeded its time limit.')
                         time.sleep(.2)
                 finally:
@@ -145,6 +158,21 @@ class NeuralSelfTest:
                     result.neural_evaluations={'attempted':latest['eval_attempts'],'successful':latest['eval_success'],'failed':latest['eval_fail'],'observed_lower_bound':True}
                     result.feature_18_creation='success' if latest['create_success'] else 'not_observed'
                     result.status='fail' if latest['eval_fail'] or latest['create_fail'] else ('pass' if latest['eval_success'] and latest['create_success'] and proc.returncode==0 else 'inconclusive')
+            adapter_match=re.search(r'\[host\] device adapter: (.*?)  LUID ([0-9a-fA-F]+:[0-9a-fA-F]+)  PCI ([0-9a-fA-F]+):([0-9a-fA-F]+)  driver ([0-9.]+)',text)
+            if adapter_match:
+                name,luid,vendor,device,driver=adapter_match.groups()
+                result.host_adapter={'name':name,'luid':luid,'vendor_id':int(vendor,16),'device_id':int(device,16),'driver':driver}
+            if not result.host_adapter or result.host_adapter['device_id']!=gpu.device_id or result.host_adapter['driver']!=gpu.driver_version:
+                result.limitations.append('Host adapter/driver identity could not be matched to the selected GPU. Hardware result remains inconclusive.')
+                if result.status=='pass':result.status='inconclusive'
+            modules=result.process.get('module_inventory',{}).get('modules',[])
+            model_loaded=any(Path(m['path']).resolve()==(work/runtimes.NR_RUNTIME).resolve() for m in modules)
+            if not model_loaded:
+                result.limitations.append('The exact isolated NR runtime was not confirmed in a read-only module snapshot.')
+                if result.status=='pass':result.status='inconclusive'
+            for name,pin in result.consumer['file_pins'].items():
+                if name=='OptiScaler.ini':continue # legitimate overlay configuration changes are separate
+                if not (work/name).is_file() or sha256_file(work/name)!=pin:raise ValueError('An isolated test binary changed during execution.')
             result.completion='completed';result.consumer['exit_code']=proc.returncode
             if not result.neural_evaluations:result.limitations.append('300 successful DLAA/SR calls do not prove Feature 18. Stock OptiScaler normal DX12 success may not be logged; use a source-identified diagnostic build for counts.')
         except Exception as error:
@@ -154,6 +182,11 @@ class NeuralSelfTest:
             result.duration_s=round(time.monotonic()-started,3)
             payload=redact(asdict(result));(root/'result.json').write_text(json.dumps(payload,indent=2),encoding='utf-8')
             self.s.db.set_setting('last_neural_selftest',payload)
+            import hashlib
+            axes={'device_id':gpu.device_id,'driver':gpu.driver_version,'runtime_sha256':candidate.sha256,
+                  'consumer':'optiscaler_nr','consumer_version':opti.version,'api':'d3d12','diagnostic_build':result.consumer.get('diagnostic_build')}
+            identity=hashlib.sha256(json.dumps(axes,sort_keys=True).encode()).hexdigest()
+            self.s.db.set_setting('runtime-selftest:'+identity,{'axes':axes,'result':payload,'scope':'standalone_only'})
         return payload
 
     @staticmethod

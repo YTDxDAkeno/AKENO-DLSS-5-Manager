@@ -30,6 +30,10 @@ class PipelineService:
     def __init__(self,services):
         self.s=services;self.components=ComponentStore(services.db)
 
+    def component_selection_pin(self):
+        selection={'components':self.components.records(),'diagnostic':self.s.db.get_setting('diagnostic_optiscaler')}
+        return hashlib.sha256(json.dumps(selection,sort_keys=True).encode()).hexdigest()
+
     def _components(self,runtime):
         result=self.components.records().copy()
         # Inventory is cheap. Full byte validation is at prepare and immediately before deploy.
@@ -52,6 +56,14 @@ class PipelineService:
         if saved:runtime.update(sha256=runtime_sha,category='community_experimental')
         facts=facts_for(self.s,game,offline,runtime,self._components(runtime))
         routes=resolve(facts)
+        session=self.s.community.sessions.get(game.id)
+        active=self.s.installer.active_install(game.id)
+        if session and active and not session.ended and session.transaction['id']==active['id'] and session.verified:
+            route=next((r for r in routes if r.route_id==active['params'].get('_pipeline_route')),None)
+            if route:
+                route.execution_state='execution_verified'
+                route.execution={'session_id':session.id,'process':session.process,'counters':dict(session.last_evidence.counters),
+                    'scope':'Selected game session, distinct from installation eligibility and standalone tests.'}
         # ReShade route components are not interchangeable with generic RenoDX HDR addons.
         return {'game_id':game.id,'game':game.name,'facts':facts,'routes':routes,'dll_inventory':dll_inventory(game),
                 'execution':'Not tested. Installation planning does not prove Neural Rendering.'}
@@ -87,6 +99,7 @@ class PipelineService:
             destination=safe_relative(motion.get('destination','reshade-shaders/Shaders/'+Path(motion['path']).name))
             if not destination.startswith('reshade-shaders/') or not destination.endswith(('.fx','.fxh')):raise ValueError('Motion provider must use a shader destination.')
             self._component_op(game,plan,destination,motion)
+            for asset in motion.get('assets',[]):self._component_op(game,plan,safe_relative(asset['destination']),asset)
             sr=self.s.runtime_lookup(runtimes.DLSS_RUNTIME)
             verified=runtimes.evaluate(sr['stored_path'],runtimes.DLSS_RUNTIME,verifier=self.s.community.runtimes.verifier)
             if verified.trust.value!='verified':raise PermissionError('Feeder SR runtime is not NVIDIA-authenticated.')
@@ -121,7 +134,7 @@ class PipelineService:
             if op.source and sha256_file(op.source)!=op.expected_sha256:raise PermissionError('Staged component hash mismatch.')
         plan.summary.insert(0,'Rendering pipeline: '+decision.name)
         return PreparedPipeline(game.id,route_id,runtime_sha,plan,plan_digest(plan),self.s.community._environment(game,plan),
-            hashlib.sha256(json.dumps(self.components.records(),sort_keys=True).encode()).hexdigest(),offline,consent)
+            self.component_selection_pin(),offline,consent)
 
     def _component_op(self,game,plan,destination,item):
         existing=Path(game.target_dir)/destination
@@ -138,7 +151,7 @@ class PipelineService:
         virtual=replace(game,upscaler_inputs=['dlss']) if prepared.route_id=='feeder' else game
         self.s.community._check(virtual,candidate,'optiscaler_nr',True,True)
         if self.s.community._environment(game,prepared.plan)!=prepared.environment_pin:raise PermissionError('Game/hardware state changed after preview.')
-        pin=hashlib.sha256(json.dumps(self.components.records(),sort_keys=True).encode()).hexdigest()
+        pin=self.component_selection_pin()
         if pin!=prepared.components_pin:raise PermissionError('Component selection changed after preview.')
         for op in prepared.plan.ops:
             if op.source and sha256_file(op.source)!=op.expected_sha256:raise PermissionError('A pinned pipeline source changed.')

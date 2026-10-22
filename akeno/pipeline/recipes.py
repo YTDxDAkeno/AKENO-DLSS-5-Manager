@@ -29,7 +29,7 @@ RECIPES = (
     Recipe('legacy_bridge', 'Legacy API / 32-bit helper', ('d3d9','d3d11','vulkan','opengl'), ('x86','x64'), False,
            None, ('host64','api_bridge','reshade','motion_provider','dlss_runtime','nr_runtime'), ('shared_color','depth','motion_vectors','host64_transport'),
            'Exact bridge and host contract plus separate NR evaluation in helper. Not generic legacy support.'),
-    Recipe('official_swap', 'Official DLSS component swap', ('d3d11','d3d12','vulkan'), ('x64',), True,
+    Recipe('official_swap', 'Official DLSS component swap', ('d3d11','d3d12','vulkan'), ('x64',), False,
            None, (), ('existing_engine_integration',), 'Matching official family/version loaded. Does not add integration or prove NR.'),
     Recipe('configuration', 'Application graphics settings', ('d3d11','d3d12','vulkan'), ('x64','x86'), True,
            None, (), ('existing_engine_settings',), 'Application-confirmed setting. Preset/DLAA quality changes are independent of NR.'),

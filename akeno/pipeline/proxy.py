@@ -30,7 +30,8 @@ def resolve_proxy(game, managed=(), supported=SUPPORTED, observed=()):
     imports=load_candidates(game)
     # Caller-provided module observations must be from the selected process lifetime.
     proven=imports|{Path(p).name.casefold() for p in observed}
-    existing={p.name.casefold():p for p in Path(game.target_dir or game.install_dir).iterdir()}
+    try:existing={p.name.casefold():p for p in Path(game.target_dir or game.install_dir).iterdir()}
+    except OSError:return None
     owned={n.casefold() for n in managed}
     for name in supported:
         if name.casefold() not in proven:continue

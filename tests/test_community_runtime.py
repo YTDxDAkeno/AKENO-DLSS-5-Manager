@@ -110,7 +110,7 @@ def experiment(db,tmp_path,nr):
     s=AppServices(db=db,catalog=Catalog({'schema':1,'catalog_version':'test','allowed_hosts':['github.com'],'packages':[entry]}),
                   downloads=FakeDownloads({entry['url']:z},tmp_path/'cache'))
     gpu=rtx('NVIDIA GeForce RTX 4080',device=0x2704,vram_gb=16);gpu.driver_version='617.42';s.system=system_with(gpu);s.system.is_64bit=True  # Explicit synthetic Windows x64 platform evidence
-    root=tmp_path/'game';make_pe(root/'Game.exe',['d3d12.dll'],pad=50000)
+    root=tmp_path/'game';make_pe(root/'Game.exe',['d3d12.dll','winmm.dll'],pad=50000)
     make_pe(root/'nvngx_dlss.dll',[],dll=True)
     g=s.library.add_manual(str(root),'Offline Fixture')
     s.select_game(g.id)

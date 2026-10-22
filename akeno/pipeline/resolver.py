@@ -13,6 +13,7 @@ def resolve(facts):
         need('closed', not facts.running, 'Close the game before deployment.')
         need('architecture',facts.architecture in recipe.architectures,'Required architecture: '+', '.join(recipe.architectures))
         need('api',facts.api in recipe.apis,'Supported API: '+', '.join(recipe.apis))
+        if recipe.id=='official_swap':need('observed_component',facts.components.get('observed_official_component') is True,'Observe active component paths for this exact executable before swapping.')
         if recipe.native_calls:
             need('native_calls',facts.native_calls is True,facts.native_evidence)
         if recipe.id not in ('official_swap','configuration'):
@@ -46,5 +47,5 @@ def resolve(facts):
         results.append(RouteResult(recipe.id,recipe.name,state,checks,warnings,recipe.consumer,facts.proxy))
     preferred='native_optiscaler' if facts.native_calls else 'feeder'
     candidate=next((r for r in results if r.route_id==preferred and r.eligible),None)
-    if candidate:candidate.recommended=True
+    if candidate and not (candidate.route_id=='feeder' and facts.components.get('native_dlss_files_present')):candidate.recommended=True
     return results

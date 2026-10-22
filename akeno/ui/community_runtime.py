@@ -149,10 +149,12 @@ class CommunityRuntimeDialog(QDialog):
         controls.addWidget(button(t("Export support ZIP"), "file", on_click=self.export_support))
         controls.addWidget(button(t('Stop monitoring'), 'stop', on_click=lambda: self.stop_monitor()))
         controls.addWidget(self.last_checked, 1); evidence.addLayout(controls)
+        evidence.addWidget(button(t('Open desktop monitoring HUD'),on_click=self.open_hud))
         self.include_excerpts = QCheckBox(t('Include redacted recent log excerpts in support export'))
         evidence.addWidget(self.include_excerpts)
         self.performance = QCheckBox(t("Start automatic performance monitoring (local PresentMon required)"))
         experiment.addWidget(self.performance)
+        self.hud = None
         self.capture_busy = False
         self.capture_token = None
         self.finished.connect(self._closed)
@@ -161,8 +163,14 @@ class CommunityRuntimeDialog(QDialog):
         if ctl.s.offline_bundle.errors:
             self.message.setText('\n'.join(ctl.s.offline_bundle.errors))
 
+    def open_hud(self):
+        from akeno.ui.monitor_hud import MonitorHud
+        if self.hud:self.hud.close()
+        self.hud=MonitorHud(lambda:self.last_report,self);self.hud.show()
+
     def _closed(self, *_):
         self._closing = True
+        if self.hud:self.hud.close()
         self._pending_diagnostic = None
         self.stop_monitor()
 

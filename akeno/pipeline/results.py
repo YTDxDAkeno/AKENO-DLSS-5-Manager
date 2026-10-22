@@ -29,6 +29,8 @@ class RouteResult:
     consumer: str | None = None
     proxy: str | None = None
     recommended: bool = False
+    execution_state: str = 'not_tested'
+    execution: dict = field(default_factory=dict)
 
     @property
     def eligible(self):

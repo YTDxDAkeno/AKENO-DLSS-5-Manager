@@ -42,9 +42,11 @@ def test_db_validation_rejects_entries_without_evidence():
         CompatDatabase.validate({"schema": 2})
 
 
-def test_statuses():
+def test_statuses(monkeypatch):
     db = CompatDatabase.load()
     a = OptiScalerNrAdapter()
+    # This database-policy unit uses no real filesystem; loader proof is tested separately.
+    monkeypatch.setattr(a,"_pick_proxy",lambda *args:"winmm.dll")
     r40 = rtx("NVIDIA GeForce RTX 4070", 0x2786, 12)
     assert evaluate(db, game(), a, ctx(r40)).status == CompatStatus.CONFIRMED
     r30 = rtx()

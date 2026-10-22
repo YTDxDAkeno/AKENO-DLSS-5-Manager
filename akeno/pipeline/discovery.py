@@ -27,9 +27,17 @@ def facts_for(services,game,offline=False,runtime=None,components=None):
     components=dict(components or {})
     imports=load_candidates(game)
     components['reshade_load_route']='dxgi.dll' in imports
+    components['native_dlss_files_present']=any(m.kind=='dlss' and m.name.casefold() not in managed for m in game.existing_mods)
+    evidence=services.db.get_setting('dll_load_evidence:'+game.id,{})
+    from akeno.diagnostics.neural import identity
+    try:
+        components['observed_official_component']=bool(game.exe_path and evidence.get('paths') and evidence.get('exe_path')==str(Path(game.exe_path).resolve())
+            and tuple(evidence.get('exe_metadata',()))==identity(game.exe_path)
+            and any(tuple(evidence.get('path_metadata',{}).get(name,()))==identity(name) for name in evidence['paths']))
+    except (OSError,ValueError):components['observed_official_component']=False
     observed=[]
     session=services.community.sessions.get(game.id)
-    if session and session.observation.executable==str(Path(game.exe_path).resolve()):
+    if session and game.exe_path and session.observation.executable==str(Path(game.exe_path).resolve()):
         from akeno.diagnostics.neural import identity
         pins=dict(session.observation.file_identities)
         try:

@@ -1,13 +1,13 @@
 # AKENO DLSS 5 Manager
 
-**v1.3 community runtime branch:** the existing launcher now includes a separate Community Runtime Manager for local review/import and controlled offline neural experiments. Four trust categories, exact DLL/source pins, explicit consent, backup/rollback and fresh execution evidence preserve the official NVIDIA gate and FiveM restrictions. No RHI model or RTX 4080 success is pre-approved. See [progress](docs/COMMUNITY_RUNTIME_PROGRESS.md), [user guide](docs/COMMUNITY_RUNTIME_GUIDE.md), [source review](docs/COMMUNITY_RUNTIME_REVIEW.md) and [actual fixture screenshots](docs/screenshots/v1.3-community/).
+**v1.5 development branch:** graphical rendering pipeline planning, exact official DLL swaps, isolated runtime/consumer self-tests, source-identified NR counters, interrupted-transaction recovery and PresentMon capture without recurring automatic UAC prompts. Public builds contain no NVIDIA runtimes. See [implementation and limits](docs/AKENO_V1_5_IMPLEMENTATION.md), [19-project source research](docs/AKENO_V1_5_UPSTREAM_RESEARCH.md), and [RTX 5090/4080 hardware procedure](docs/AKENO_V1_5_HARDWARE_TESTS.md). Unreviewed RenoDX NR and legacy bridge combinations remain unavailable; no physical GPU/game success is claimed.
 
 
 A Windows desktop launcher that makes DLSS 5 Neural Rendering community mods easier to understand,
 safer to install and simple to undo — with honest answers about what works on your GPU.
 
-> **Status:** v1.3 integration — original design, official dependencies and FiveM are retained.
-> Exact current test counts and Windows build results are recorded in docs/COMMUNITY_RUNTIME_PROGRESS.md. It has **not** yet been
+> **Status:** v1.5 development — v1.4.1 fixes, official dependencies, restore chains and FiveM restrictions are retained.
+> Current implementation, test/build evidence and incomplete integrations are recorded in [the v1.5 implementation notes](docs/AKENO_V1_5_IMPLEMENTATION.md). It has **not** yet been
 > verified on a physical NVIDIA RTX GPU; what has and has not been verified is listed in
 > [docs/STATUS.md](docs/STATUS.md). Please read it before relying on any feature.
 

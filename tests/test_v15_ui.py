@@ -36,3 +36,13 @@ def test_late_pipeline_worker_cannot_update_closed_dialog(qtbot,experiment,monke
     dialog=PipelineDialog(ctl);qtbot.addWidget(dialog);dialog.close()
     result=jobs[0][0]();jobs[0][1](result)
     assert dialog._closed and not dialog.busy
+
+
+def test_desktop_hud_reuses_report_and_never_infers_nr_or_fps(qtbot):
+    from akeno.ui.monitor_hud import MonitorHud
+    data={'session':{'state':'backend_not_detected'},'neural':{'stages':{'runtime_loaded':True}},
+          'benchmark_groups':{'current_session':[]}}
+    hud=MonitorHud(lambda:data);qtbot.addWidget(hud)
+    for _ in range(100):hud.refresh()
+    assert 'Not measured' in hud.output.text() and '4500' not in hud.output.text()
+    data['session']['ended']=True;hud.refresh();assert not hud.timer.isActive()
