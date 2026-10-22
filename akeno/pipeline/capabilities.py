@@ -30,3 +30,4 @@ class PipelineFacts:
     permitted: bool = False
     running: bool = False
     source: str | None = None
+    runtime_profile: dict = field(default_factory=dict)

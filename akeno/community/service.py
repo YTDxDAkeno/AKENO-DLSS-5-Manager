@@ -114,7 +114,9 @@ class CommunityService:
         rt = {"stored_path": candidate.path, "sha256": candidate.sha256, "version": candidate.version}
         lookup = lambda name: rt if name == runtimes.NR_RUNTIME else self.s.runtime_lookup(name)
         managed = self.s.installer.managed_files(game.id, game.target_dir)
-        ctx = BackendContext(self.s.system, gpu, lookup, staging, managed, strict_conflicts=True)
+        from akeno.pipeline.proxy import observed_loader_paths
+        ctx = BackendContext(self.s.system, gpu, lookup, staging, managed, strict_conflicts=True,
+                             loaded_modules=tuple(observed_loader_paths(self.s,game)))
         compat = self.s.compat_db.entries_for(game, backend_id)
         if any(e["status"] in (CompatStatus.BLOCKED.value, CompatStatus.INCOMPATIBLE.value) for e in compat):
             raise PermissionError(msg("The selected game/backend has a blocking compatibility record."))

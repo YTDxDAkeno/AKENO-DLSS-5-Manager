@@ -173,9 +173,11 @@ class AppServices:
             if adapter:
                 return self.fivem.context(adapter, staging)
         managed = self.installer.managed_files(game.id, game.target_dir) if game.target_dir else set()
+        from akeno.pipeline.proxy import observed_loader_paths
         return BackendContext(system=self.system, gpu=self.selected_gpu(), runtime_lookup=self.runtime_lookup,
                               staging_dir=staging, managed_files=managed, allow_disable=list(allow_disable or []),
-                              strict_conflicts=bool(self.settings.get("block_unknown_conflicts")))
+                              strict_conflicts=bool(self.settings.get("block_unknown_conflicts")),
+                              loaded_modules=tuple(observed_loader_paths(self,game)))
 
     def compatibility(self, game: Game, adapter: BackendAdapter | None = None) -> CompatibilityResult | None:
         adapter = adapter or self.backend_for(game)

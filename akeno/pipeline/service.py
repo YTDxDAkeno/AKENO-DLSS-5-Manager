@@ -38,9 +38,9 @@ class PipelineService:
         result=self.components.records().copy()
         # Inventory is cheap. Full byte validation is at prepare and immediately before deploy.
         opti=self.s.catalog.best_package('optiscaler_nr');feeder=self.s.catalog.best_package('dlss5_feeder')
-        if opti and opti.installable and opti.id=='optiscaler-dlss5-skynizz-1.3.0':
+        if opti and opti.installable and opti.id=='optiscaler-dlss5-skynizz-1.3.0' and opti.version=='1.3.0':
             result.update(optiscaler={'version':opti.version,'package':opti.id},forwarder={'version':opti.version,'package':opti.id})
-        if feeder and feeder.installable and feeder.id=='dlss5-feeder-1.19.0':
+        if feeder and feeder.installable and feeder.id=='dlss5-feeder-1.19.0' and feeder.version=='1.19.0':
             result.update(feeder={'version':feeder.version,'package':feeder.id},shader={'version':feeder.version,'package':feeder.id},host64={'version':feeder.version,'package':feeder.id})
         sr=self.s.runtime_lookup(runtimes.DLSS_RUNTIME)
         if sr:result['dlss_runtime']=sr
@@ -53,7 +53,7 @@ class PipelineService:
         if not game:raise ValueError('Select a game first.')
         saved=self.s.db.get_setting('community-runtime:'+runtime_sha) if runtime_sha else None
         runtime=dict(saved or {})
-        if saved:runtime.update(sha256=runtime_sha,category='community_experimental')
+        if saved:runtime.update(sha256=runtime_sha,category=saved.get('category','community_experimental'))
         facts=facts_for(self.s,game,offline,runtime,self._components(runtime))
         routes=resolve(facts)
         session=self.s.community.sessions.get(game.id)

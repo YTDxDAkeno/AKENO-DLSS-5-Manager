@@ -69,3 +69,26 @@ def test_battlenet_discovery_uses_registered_roots_not_drive_walk(tmp_path):
              ('launcher',{'Publisher':'Blizzard','DisplayName':'Battle.net','InstallLocation':str(game)})]
     found=scan_battlenet(records)
     assert len(found)==1 and found[0].launcher=='battlenet'
+
+
+def test_cached_module_load_route_requires_unchanged_exact_exe_and_module(tmp_path):
+    from types import SimpleNamespace
+    from akeno.diagnostics.neural import begin
+    from akeno.pipeline.proxy import observed_loader_paths
+    exe=make_pe(tmp_path/'Game.exe',['d3d12.dll']);module=make_pe(tmp_path/'winmm.dll',dll=True)
+    g=Game('g','Synthetic game',str(tmp_path),'manual',exe_path=str(exe))
+    observation=begin(g.id,tmp_path,exe,['winmm.dll'])
+    session=SimpleNamespace(observation=observation,modules={'modules':[{'name':'winmm.dll','path':str(module)}]})
+    services=SimpleNamespace(community=SimpleNamespace(sessions={g.id:session}))
+    observed=observed_loader_paths(services,g)
+    assert resolve_proxy(g,{'winmm.dll'},observed=observed)=='winmm.dll'
+    module.write_bytes(module.read_bytes()+b'changed')
+    assert observed_loader_paths(services,g)==[] and resolve_proxy(g,{'winmm.dll'}) is None
+
+
+def test_runtime_profiles_do_not_turn_claimed_generations_into_execution_or_arbitrary_rejection():
+    profile={'schema':3,'backends':['optiscaler_nr'],'apis':['d3d12'],'claimed_generations':['RTX 40'],'validated_generations':[]}
+    assert resolve(facts(runtime_profile=profile,gpu_generation='RTX 50'))[0].eligible
+    assert not resolve(facts(runtime_profile=profile,gpu_generation='RTX 20'))[0].eligible
+    assert not resolve(facts(runtime_profile=profile|{'minimum_driver':'618.00'}))[0].eligible
+    assert not resolve(facts(runtime_profile=profile|{'incompatible_device_ids':[0x2b85]}))[0].eligible

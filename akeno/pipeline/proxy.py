@@ -40,3 +40,22 @@ def resolve_proxy(game, managed=(), supported=SUPPORTED, observed=()):
     if any(m.kind=='asi_loader' and m.name.casefold() in proven for m in game.existing_mods):
         if 'optiscaler.asi' not in existing or 'optiscaler.asi' in owned:return 'OptiScaler.asi'
     return None
+
+
+def observed_loader_paths(services,game):
+    """Reuse path observations only while the selected EXE and observed owned module stay unchanged."""
+    from akeno.diagnostics.neural import identity
+    session=getattr(services,'community',None)
+    session=session.sessions.get(game.id) if session else None
+    if not session or not game.exe_path or not game.target_dir:return []
+    executable=str(Path(game.exe_path).resolve())
+    if session.observation.executable!=executable:return []
+    pins=dict(session.observation.file_identities)
+    try:
+        if identity(executable)!=pins.get(executable):return []
+        root=Path(game.target_dir).resolve();found=[]
+        for module in session.modules.get('modules',[]):
+            path=Path(module['path']).resolve()
+            if path.parent==root and identity(path)==pins.get(str(path)):found.append(str(path))
+        return found
+    except (OSError,ValueError):return []

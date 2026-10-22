@@ -187,7 +187,7 @@ class OptiScalerNrAdapter(BackendAdapter):
             elif m.kind == "dlssg_to_fsr3":
                 f.append(self.finding(W, "fg_mod", "A DLSS-FG to FSR3 mod is installed; OptiScaler bundles its own "
                                       "frame generation handling and the two may conflict."))
-        if self._pick_proxy(game, managed) is None:
+        if self._pick_proxy(game, managed, ctx.loaded_modules) is None:
             f.append(self.finding(B, "no_proxy_name", "No free supported proxy has an evidenced load path. Inspect game imports or the current process modules; a free filename alone is insufficient."))
         runtime_present = any(m.kind == "nvidia_nr_runtime" for m in game.existing_mods)
         if not runtime_present and ctx.runtime_lookup(NR_RUNTIME) is None:
@@ -197,9 +197,9 @@ class OptiScalerNrAdapter(BackendAdapter):
                                   "does not redistribute NVIDIA files)."))
         return f
 
-    def _pick_proxy(self, game: Game, managed: set[str]) -> str | None:
+    def _pick_proxy(self, game: Game, managed: set[str], observed=()) -> str | None:
         from akeno.pipeline.proxy import resolve_proxy
-        return resolve_proxy(game,managed,supported=PROXY_ORDER)
+        return resolve_proxy(game,managed,supported=PROXY_ORDER,observed=observed)
 
     def required_package_files(self, game: Game, package: Package) -> dict[str, str | None]:
         return {n: package.files.get(n) for n in ("OptiScaler.dll", FORWARDER, "OptiScaler.ini")}
@@ -223,7 +223,7 @@ class OptiScalerNrAdapter(BackendAdapter):
     def plan(self, game: Game, package: Package, params: dict[str, Any], ctx: BackendContext) -> InstallPlan:
         if ctx.staging_dir is None or not game.target_dir:
             raise ValueError("plan() needs a staged package and a game executable")
-        proxy = self._pick_proxy(game, ctx.managed_files)
+        proxy = self._pick_proxy(game, ctx.managed_files, ctx.loaded_modules)
         if proxy is None:
             raise ValueError("no free proxy DLL name")
         staged = Path(ctx.staging_dir)

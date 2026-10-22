@@ -20,6 +20,19 @@ def resolve(facts):
             need('rtx',facts.gpu_vendor=='nvidia' and facts.gpu_generation in ('RTX 20','RTX 30','RTX 40','RTX 50'),'Detected NVIDIA RTX GPU; generation alone does not prove NR.')
             need('driver',version(facts.driver) is not None,'Detected exact driver version required.')
             need('runtime_pin',bool(facts.runtime_sha256),'Select an imported exact NR runtime hash.')
+            profile=facts.runtime_profile
+            if profile.get('schema')==3:
+                backend='renodx_nr' if recipe.id=='native_renodx' else ('dlss5_feeder' if recipe.id=='legacy_bridge' else 'optiscaler_nr')
+                need('runtime_profile',backend in profile.get('backends',[]) and facts.api in profile.get('apis',[]),'Runtime profile must cover this exact backend/API.')
+                need('runtime_gpu',facts.gpu_generation not in profile.get('incompatible_generations',[]) and facts.gpu_device_id not in profile.get('incompatible_device_ids',[]) and (facts.gpu_generation not in ('RTX 20','RTX 30') or facts.gpu_generation in profile.get('validated_generations',[])),'Runtime profile must permit this GPU; lower RTX generations require applicable validated profiles.')
+                if profile.get('minimum_driver'):
+                    minimum=version(profile['minimum_driver']);actual=version(facts.driver)
+                    need('runtime_driver',minimum and actual and actual>=minimum,'Runtime minimum driver '+profile['minimum_driver'])
+            elif profile.get('targets'):
+                backend='renodx_nr' if recipe.id=='native_renodx' else ('dlss5_feeder' if recipe.id=='legacy_bridge' else 'optiscaler_nr')
+                targets=[t for t in profile['targets'] if (t.get('generation'),t.get('driver'),t.get('backend'),t.get('api'))==(facts.gpu_generation,facts.driver,backend,facts.api)]
+                need('runtime_profile',targets and all(t.get('status')!='incompatible' for t in targets),'Legacy runtime review must match the exact GPU generation/driver/backend/API.')
+            need('runtime_compatibility',not facts.components.get('runtime_known_incompatible'),'No applicable exact runtime/GPU incompatibility is recorded.')
             need('exclusive_consumer',len(facts.consumers)<=1 and (not recipe.consumer or not facts.consumers or facts.consumers==[recipe.consumer]),'Exactly one compatible neural consumer per process.')
             need('conflicts',not facts.conflicts,'; '.join(facts.conflicts) or 'No conflicting consumer or unknown proxy detected.')
             for role in recipe.components:
@@ -42,6 +55,7 @@ def resolve(facts):
                 need('bridge_contract',False,'No reviewed complete legacy bridge/version contract is shipped yet. D3D9/OpenGL/Vulkan/x86 transport alone is not an install recipe.')
         if any(not c.satisfied for c in checks):state=RouteState.MISSING
         if facts.architecture and facts.architecture not in recipe.architectures or facts.api!='unknown' and facts.api not in recipe.apis:state=RouteState.INCOMPATIBLE
+        if facts.components.get('runtime_known_incompatible') and recipe.id not in ('official_swap','configuration'):state=RouteState.INCOMPATIBLE
         if not facts.permitted:state=RouteState.UNSAFE
         if recipe.id in ('official_swap','configuration') and state==RouteState.EXPERIMENTAL:state=RouteState.COMPATIBLE
         results.append(RouteResult(recipe.id,recipe.name,state,checks,warnings,recipe.consumer,facts.proxy))

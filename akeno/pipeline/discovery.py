@@ -35,22 +35,21 @@ def facts_for(services,game,offline=False,runtime=None,components=None):
             and tuple(evidence.get('exe_metadata',()))==identity(game.exe_path)
             and any(tuple(evidence.get('path_metadata',{}).get(name,()))==identity(name) for name in evidence['paths']))
     except (OSError,ValueError):components['observed_official_component']=False
-    observed=[]
-    session=services.community.sessions.get(game.id)
-    if session and game.exe_path and session.observation.executable==str(Path(game.exe_path).resolve()):
-        from akeno.diagnostics.neural import identity
-        pins=dict(session.observation.file_identities)
-        try:
-            if identity(game.exe_path)==pins.get(str(Path(game.exe_path).resolve())):
-                observed=[m['path'] for m in session.modules.get('modules',[]) if Path(m['path']).resolve().parent==Path(game.target_dir).resolve()]
-        except (OSError,ValueError):pass
+    from .proxy import observed_loader_paths
+    observed=observed_loader_paths(services,game)
     permitted=bool(offline and game.launcher!='fivem' and game.anti_cheat==AntiCheatRisk.NONE_FOUND
         and not services.compat_db.anti_cheat_entry(game) and 'gta online' not in game.name.casefold())
-    return PipelineFacts(game.id,game.api.value,game.architecture,native,why,
+    facts=PipelineFacts(game.id,game.api.value,game.architecture,native,why,
         gpu.vendor.value if gpu else 'unknown',gpu.device_id if gpu else None,gpu.generation if gpu else None,
         gpu.driver_version if gpu else None,(runtime or {}).get('sha256'),(runtime or {}).get('version'),
         (runtime or {}).get('category'),components,consumers,resolve_proxy(game,managed,observed=observed) if game.target_dir else None,
         conflicts,permitted,bool(game.is_running))
+    facts.runtime_profile=(runtime or {}).get('review') or {}
+    if runtime and runtime.get('sha256'):
+        from akeno.hardware.support import runtime_verdict
+        verdict=runtime_verdict(runtime.get('version'),facts.gpu_generation,services.compat_db.nr_runtimes(),build_sha256=runtime['sha256'])
+        facts.components['runtime_known_incompatible']=verdict.state=='fails'
+    return facts
 
 
 def dll_inventory(game):

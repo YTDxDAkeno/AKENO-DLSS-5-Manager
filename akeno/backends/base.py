@@ -98,6 +98,7 @@ class BackendContext:
     managed_files: set[str] = field(default_factory=set)  # lower-case rel paths AKENO installed in this dir
     allow_disable: list[str] = field(default_factory=list)  # user-approved files to rename away
     strict_conflicts: bool = True                    # unknown graphics hooks block installation
+    loaded_modules: tuple[str, ...] = ()             # exact cached observations, not arbitrary filenames
 
 
 class BackendAdapter(ABC):
