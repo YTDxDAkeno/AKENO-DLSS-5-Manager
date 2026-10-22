@@ -66,6 +66,40 @@ def parse_host_result(text,neural_text='',exit_code=None):
     return result
 
 
+def _official_sr_from_inventory(services):
+    """Find an SR imported in Official DLL management, which has a separate store.
+
+    Only called on explicit self-test, not periodic UI refresh. Recheck all
+    source bytes and the NVIDIA signature before trusting a saved inventory row.
+    """
+    rows = services.db.get_setting('official_dll_inventory', {})
+    if not isinstance(rows, dict):
+        return None
+    def version(item):
+        return tuple(int(part) for part in re.findall(r'\d+', str(item.get('version') or '')))
+    matching = [(sha, item) for sha, item in rows.items()
+                if isinstance(item, dict) and item.get('name') == runtimes.DLSS_RUNTIME
+                and item.get('family') == 'super_resolution'
+                and item.get('trust') == 'nvidia_authenticated'
+                and item.get('sha256') == sha]
+    for sha, item in sorted(matching, key=lambda pair: (version(pair[1]), pair[0]), reverse=True):
+        stored_path = item.get('stored_path')
+        if not isinstance(stored_path, str) or not stored_path:
+            continue
+        try:
+            path = Path(stored_path)
+            regular(path)
+            if sha256_file(path) != sha:
+                continue
+            evaluated = runtimes.evaluate(str(path), runtimes.DLSS_RUNTIME,
+                                         verifier=services.community.runtimes.verifier)
+            if evaluated.trust.value == 'verified' and evaluated.sha256 == sha:
+                return item
+        except (OSError, ValueError, TypeError):
+            continue
+    return None
+
+
 class NeuralSelfTest:
     def __init__(self,services):self.s=services
 
@@ -113,7 +147,7 @@ class NeuralSelfTest:
                 shutil.copyfile(src,work/destination)
             config=adapter.config_text((staging/'OptiScaler.ini').read_text(encoding='utf-8-sig'),dummy,adapter.default_params(dummy))
             (work/'OptiScaler.ini').write_text(config,encoding='utf-8')
-            sr=self.s.runtime_lookup(runtimes.DLSS_RUNTIME)
+            sr=self.s.runtime_lookup(runtimes.DLSS_RUNTIME) or _official_sr_from_inventory(self.s)
             if not sr:raise PermissionError('Import an official DLSS Super Resolution runtime for the host contract.')
             checked=runtimes.evaluate(sr['stored_path'],runtimes.DLSS_RUNTIME,verifier=self.s.community.runtimes.verifier)
             if checked.trust.value!='verified':raise PermissionError('Self-test SR runtime is not NVIDIA-authenticated.')
