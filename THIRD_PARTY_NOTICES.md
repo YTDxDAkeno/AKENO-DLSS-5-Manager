@@ -79,3 +79,16 @@ artifact contains source additions and build records, not a runtime bundle. Loca
 and diagnostic manifests declare local permission/provenance, not malware-free certification.
 The pinned Feeder host retains its MIT/component notices; PresentMon remains MIT; ReShade
 and shader import requires separate user-supplied license/permission metadata.
+
+
+## v1.6 diagnostic and research additions
+
+The optional source instrumentation remains GPL-3.0-or-later, based on the exact
+Skynizz/optiscaler-dlss5 GPL source commit fc702f8ca22f97b01bd6a02f3386bffb3484fc35.
+The graphical builder produces private local artifacts and keeps the complete
+checkout/submodule identities; no NVIDIA NR runtime or compiled derivative is
+redistributed in public AKENO builds. The copied bundled header is AKENO's own
+identical GPL addition. The upstream program's dependency notices/licenses still apply.
+FiveM-DLSS5 (MIT wrapper) and official Cfx documentation were research references;
+no third-party installer, proprietary snapshot, NR consumer or motion shader was copied.
+See docs/AKENO_V1_6_OFFICIAL_RUNTIME_RESEARCH.md and AKENO_V1_6_FIVEM_FEASIBILITY.md.

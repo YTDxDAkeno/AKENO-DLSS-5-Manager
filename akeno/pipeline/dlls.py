@@ -42,13 +42,14 @@ class DllService:
 
     def import_official(self,path,permitted=False):
         if permitted is not True:raise PermissionError('Explicit permission for local component reuse is required.')
-        path=Path(path);regular(path);info=pe.parse(path);name,family=identify(info)
+        path=Path(path);regular(path);pin=sha256_file(path);info=pe.parse(path);name,family=identify(info)
         signature=self.verifier(str(path))
+        if sha256_file(path)!=pin:raise PermissionError('Official component changed during signature verification.')
         if not signature.is_nvidia:raise PermissionError('Official component requires a valid NVIDIA Authenticode signature. Community NR uses its separate import workflow.')
-        pin=sha256_file(path);dest=cache_dir()/'official-dlls'/pin/name;dest.parent.mkdir(parents=True,exist_ok=True)
+        dest=cache_dir()/'official-dlls'/pin/name;dest.parent.mkdir(parents=True,exist_ok=True)
         if not dest.exists():shutil.copyfile(path,dest)
         if sha256_file(dest)!=pin:raise ValueError('Changed content-addressed official cache.')
-        record={'name':name,'family':family,'version':info.file_version,'sha256':pin,'stored_path':str(dest),'signer':signature.signer,'trust':'nvidia_authenticated'}
+        record={'name':name,'family':family,'version':info.file_version,'sha256':pin,'stored_path':str(dest),'signer':signature.signer,'trust':'nvidia_authenticated','source':str(path),'local_use_permitted':True,'signature':{'checked':signature.checked,'valid':signature.valid,'is_nvidia':signature.is_nvidia,'signer':signature.signer,'detail':signature.detail},'compatibility':'Signature and family verified; Feature 18 capability/create/evaluate remain untested.'}
         inventory=self.s.db.get_setting('official_dll_inventory',{});inventory[pin]=record;self.s.db.set_setting('official_dll_inventory',inventory)
         return record
 

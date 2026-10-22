@@ -1,3 +1,13 @@
+# v1.6 development status
+
+The executable is an instrumented development manager, not evidence of successful
+physical Neural Rendering. See [v1.6 execution](AKENO_V1_6_NEURAL_EXECUTION.md),
+[FiveM blockers](AKENO_V1_6_FIVEM_FEASIBILITY.md), [runtime research](AKENO_V1_6_OFFICIAL_RUNTIME_RESEARCH.md),
+[hardware acceptance](AKENO_V1_6_HARDWARE_ACCEPTANCE.md) and [known limits](AKENO_V1_6_KNOWN_LIMITATIONS.md).
+The official-SR inventory hotfix is preserved. No A–D hardware milestone is claimed.
+
+The sections below preserve earlier development evidence and are historical.
+
 # Current development status — v1.5
 
 The current branch adds a shared pipeline resolver, controlled native/Feeder plans, official component swaps, isolated self-test, source counter instrumentation, crash recovery, permission-safe performance capture and local A/B reports. **Physical RTX5090/4080/game acceptance remains pending.** RenoDX NR and legacy bridge deployment, programmatic driver overrides and a redistributable diagnostic binary package remain incomplete. See [AKENO_V1_5_IMPLEMENTATION.md](AKENO_V1_5_IMPLEMENTATION.md), [AKENO_V1_5_UPSTREAM_RESEARCH.md](AKENO_V1_5_UPSTREAM_RESEARCH.md) and [AKENO_V1_5_HARDWARE_TESTS.md](AKENO_V1_5_HARDWARE_TESTS.md).

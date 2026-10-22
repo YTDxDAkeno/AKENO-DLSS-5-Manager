@@ -130,13 +130,27 @@ class CommunityService:
             raise PermissionError(msg("An unmanaged neural runtime already exists; inspect it without replacing it."))
         return adapter, ctx
 
+    def runtime_record(self, sha):
+        data=self.s.db.get_setting('community-runtime:'+str(sha))
+        if data:return data
+        item=self.s.db.get_setting('official_dll_inventory',{}).get(sha)
+        if item and item.get('name')==runtimes.NR_RUNTIME and item.get('family')=='neural_rendering' and item.get('trust')=='nvidia_authenticated':
+            return dict(item,path=item['stored_path'],category=Category.OFFICIAL.value,
+                source='Explicitly imported official component; signature rechecked before execution.')
+        for row in self.s.db.runtimes(runtimes.NR_RUNTIME):
+            if row.get('sha256')==sha and row.get('trust')=='verified' and row.get('stored_path'):
+                return dict(row,path=row['stored_path'],category=Category.OFFICIAL.value)
+        return None
+
     def _candidate(self, sha):
-        data = self.s.db.get_setting("community-runtime:" + sha)
+        data = self.runtime_record(sha)
         if not data:
             raise PermissionError(msg("Import the reviewed runtime before planning."))
         result = self.runtimes.inspect(data["path"], data.get("review"))
         if result.sha256 != sha:
             raise PermissionError(msg("The imported runtime changed."))
+        if data.get('category')==Category.OFFICIAL.value and result.category!=Category.OFFICIAL:
+            raise PermissionError('The selected official runtime no longer has an intact NVIDIA signature.')
         return result
 
     def _environment(self, game, plan):
@@ -223,6 +237,34 @@ class CommunityService:
                 result.messages.extend(rollback.messages)
                 result.messages.extend(f.message for f in problems)
         return result
+
+    def launch_test(self, game_id, offline_confirmed=False, consent=False):
+        """Explicit local action: pin observation before asking the normal OS launcher to run."""
+        from akeno.paths import is_windows
+        if not is_windows():raise PermissionError(msg('Game launch testing requires Windows.'))
+        game=self._game(game_id);tx=self.s.installer.active_install(game_id)
+        if not tx or not tx['backend_id'].startswith('community:'):
+            raise PermissionError(msg('Install an experimental plan before starting its observation.'))
+        candidate=self._candidate(tx['params'].get('_community_runtime',''))
+        backend=tx['backend_id'].split(':')[-1]
+        self._check(game,candidate,backend,offline_confirmed,consent)
+        # Signature, driver/profile and file checks run before launch; observation hashes
+        # every installed artifact and records existing log cursors first.
+        report=self.observe(game_id)
+        try:
+            if game.launcher=='steam' and re.fullmatch(r'[0-9]+',str(game.launcher_id or '')):
+                import os
+                os.startfile('steam://rungameid/'+str(game.launcher_id))
+                method='normal_steam_launcher'
+            else:
+                import subprocess
+                subprocess.Popen([str(Path(game.exe_path).resolve())],cwd=str(Path(game.exe_path).parent))
+                method='normal_executable_launch'
+        except Exception:
+            self.stop_observation(game_id)
+            raise
+        return {'launch_requested':True,'method':method,'report':report,
+            'note':'Offline mode must be configured in the game/launcher. A launch request is not NR or gameplay evidence.'}
 
     def observe(self, game_id):
         # One full verification at this explicit session boundary. Polls use cached game/file identities.
@@ -333,11 +375,15 @@ class CommunityService:
             except configparser.Error as error:
                 findings.append({'code':'configuration_parse_error','detail':str(error)})
         if session: session.effective_settings = effective
-        runtime_record = self.s.db.get_setting('community-runtime:' + tx['params'].get('_community_runtime','')) if tx else None
+        runtime_record = self.runtime_record(tx['params'].get('_community_runtime','')) if tx else None
         if runtime_record and runtime_record.get('category') == 'reviewed_community':
             runtime_record = dict(runtime_record, category=Category.COMMUNITY.value,
                 review_scope='Legacy source/consent record; no independent security certification.',
                 independent_security_review_verified=False)
+        if evidence.execution:
+            evidence.execution['gpu']=self.s.selected_gpu().to_dict() if self.s.selected_gpu() else {}
+            if runtime_record:
+                evidence.execution['runtime']={k:runtime_record.get(k) for k in ('sha256','version','category','signature','source','signer')}
         report = {'game': dict(game.to_dict(), is_running=exact_live),
             'gpu': self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
             'driver': self.s.selected_gpu().driver_version if self.s.selected_gpu() else None,
@@ -373,6 +419,7 @@ class CommunityService:
             stable = json.loads(json.dumps(public, default=str)); stable.pop('monitoring_overhead', None)
             stable.get('session', {}).pop('polls', None)
             stable.get('neural', {}).pop('overhead', None)
+            stable.get('neural', {}).get('execution', {}).pop('session_duration_s',None)
             pin = digest(stable)
             if getattr(session, '_saved_pin', None) != pin:
                 temporary = destination.with_suffix('.tmp')

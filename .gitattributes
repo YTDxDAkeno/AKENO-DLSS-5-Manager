@@ -1,0 +1,3 @@
+# Diagnostic source identity uses canonical bytes on every build host.
+diagnostics/optiscaler/AkenoNrDiagnostic.h text eol=lf
+akeno/data/diagnostic_source/AkenoNrDiagnostic.h text eol=lf

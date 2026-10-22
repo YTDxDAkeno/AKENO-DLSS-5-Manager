@@ -1,13 +1,19 @@
 # AKENO DLSS 5 Manager
 
-**v1.5 development branch:** graphical rendering pipeline planning, exact official DLL swaps, isolated runtime/consumer self-tests, source-identified NR counters, interrupted-transaction recovery and PresentMon capture without recurring automatic UAC prompts. Public builds contain no NVIDIA runtimes. See [implementation and limits](docs/AKENO_V1_5_IMPLEMENTATION.md), [19-project source research](docs/AKENO_V1_5_UPSTREAM_RESEARCH.md), and [RTX 5090/4080 hardware procedure](docs/AKENO_V1_5_HARDWARE_TESTS.md). Unreviewed RenoDX NR and legacy bridge combinations remain unavailable; no physical GPU/game success is claimed.
+**v1.6 development:** precise Feature-18 API evidence, SR/NR and secure-loader diagnostics,
+a guided local diagnostic build, monitoring before normal offline game launch, and a
+separate guarded FiveM feasibility workflow. No physical RTX/game success is claimed;
+FiveM NR installation remains blocked without a complete permitted recipe. See
+[execution](docs/AKENO_V1_6_NEURAL_EXECUTION.md), [official runtime research](docs/AKENO_V1_6_OFFICIAL_RUNTIME_RESEARCH.md),
+[FiveM feasibility](docs/AKENO_V1_6_FIVEM_FEASIBILITY.md), [local acceptance](docs/AKENO_V1_6_HARDWARE_ACCEPTANCE.md)
+and [remaining limits](docs/AKENO_V1_6_KNOWN_LIMITATIONS.md). All v1.5 features and the official-SR hotfix are retained.
 
 
 A Windows desktop launcher that makes DLSS 5 Neural Rendering community mods easier to understand,
 safer to install and simple to undo — with honest answers about what works on your GPU.
 
-> **Status:** v1.5 development — v1.4.1 fixes, official dependencies, restore chains and FiveM restrictions are retained.
-> Current implementation, test/build evidence and incomplete integrations are recorded in [the v1.5 implementation notes](docs/AKENO_V1_5_IMPLEMENTATION.md). It has **not** yet been
+> **Status:** v1.6 development — v1.4.1 fixes, official dependencies, restore chains and FiveM restrictions are retained.
+> Current implementation, test/build evidence and incomplete integrations are recorded in [the v1.6 execution notes](docs/AKENO_V1_6_NEURAL_EXECUTION.md). It has **not** yet been
 > verified on a physical NVIDIA RTX GPU; what has and has not been verified is listed in
 > [docs/STATUS.md](docs/STATUS.md). Please read it before relying on any feature.
 

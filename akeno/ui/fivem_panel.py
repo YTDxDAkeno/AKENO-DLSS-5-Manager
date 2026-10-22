@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, Q
 from akeno.fivem.models import ServerPolicy
 from akeno.fivem.messages import describe
 from akeno.diagnostics import neural
+from akeno.diagnostics.privacy import redact
 from akeno.hardware.support import OFFICIAL
 from akeno.i18n import t
 from akeno.ui import theme
@@ -121,6 +122,21 @@ class FiveMPanel(Card):
         self.dev_report = QPlainTextEdit(); self.dev_report.setReadOnly(True); dl.addWidget(self.dev_report)
         dl.addWidget(button(t("Create isolated validation kit"), "file", on_click=self.development_kit))
         self.tabs.addTab(development, t("5. Development validation"))
+        neural_page=QWidget();nl=QVBoxLayout(neural_page)
+        nl.addWidget(label(t('FiveM Neural Rendering requires an observed renderer and a documented compatible plugin method. D3D12 helper modules and server ownership do not establish permission.'),'dim',wrap=True))
+        self.neural_mode=QComboBox()
+        for title,value in [('Offline / singleplayer development','offline_development'),('Authorized server assessment','authorized_server'),('Unsupported / blocked session','blocked_session')]:self.neural_mode.addItem(t(title),value)
+        nl.addWidget(self.neural_mode)
+        nr=QHBoxLayout();nr.addWidget(button(t('Analyze FiveM Neural Rendering'),'search',on_click=self.analyze_neural))
+        nr.addWidget(button(t('Export FiveM feasibility report'),'file',on_click=self.export_neural));nl.addLayout(nr)
+        self.neural_summary=label(t('Not analyzed'),wrap=True);nl.addWidget(self.neural_summary)
+        self.neural_facts=KeyValueGrid(220);nl.addWidget(self.neural_facts)
+        nl.addWidget(button(t('Show technical details'),on_click=lambda:self.neural_technical.setVisible(not self.neural_technical.isVisible())))
+        self.neural_technical=QPlainTextEdit();self.neural_technical.setReadOnly(True);self.neural_technical.hide();nl.addWidget(self.neural_technical)
+        self.neural_details=QPlainTextEdit();self.neural_details.setReadOnly(True);nl.addWidget(self.neural_details,1)
+        self.neural_report=None;self._neural_epoch=0;self._neural_closed=False
+        self.neural_mode.currentIndexChanged.connect(self._invalidate_neural)
+        self.tabs.addTab(neural_page,t('Neural Rendering'))
         for control in (self.server, self.reference):
             control.textChanged.connect(self._invalidate)
         for control in (self.permission, self.pure, self.hook, self.backend):
@@ -131,6 +147,38 @@ class FiveMPanel(Card):
         if compact:
             self.tabs.hide()
             self.body.addWidget(label(t("Open Secure Install for the complete server policy, runtime evidence and backup wizard."), "muted", wrap=True))
+
+    def _invalidate_neural(self,*_):
+        self._neural_epoch+=1;self.neural_report=None
+        self.neural_summary.setText(t('Not analyzed'));self.neural_details.clear();self.neural_technical.clear();self.neural_facts.set_rows([])
+
+    def closeEvent(self,event):
+        self._neural_closed=True;self._neural_epoch+=1
+        super().closeEvent(event)
+
+    def analyze_neural(self):
+        if not self.game:return
+        game=self.game;game_id=game.id;mode=self.neural_mode.currentData();epoch=self._neural_epoch
+        def done(report):
+            if self._neural_closed or epoch!=self._neural_epoch or not self.game or self.game.id!=game_id or self.neural_mode.currentData()!=mode:return
+            self.neural_report=report
+            self.neural_summary.setText(t('Deployment blocked: the exact FiveM renderer, loader and complete NR recipe must be verified first.'))
+            inspected=report['inspection'];process=inspected.get('process') or {};gpu=inspected.get('selected_gpu') or {}
+            self.neural_facts.set_rows([(t('Edition'),inspected.get('edition',t('Unknown'))),
+                (t('Observed client version'),inspected.get('client_version') or t('Unknown')),
+                (t('Actual game renderer'),t('Unknown') if inspected.get('game_renderer')=='unknown' else inspected['game_renderer']),
+                (t('Observed process'),process.get('name',t('Not found'))),
+                (t('GPU'),gpu.get('name',t('Unknown'))),(t('NVIDIA driver'),gpu.get('driver_version') or t('Unknown')),
+                (t('Supported plugin method'),t('Not verified')),(t('Current server policy'),t('Unknown')),
+                (t('Neural consumer'),t('Complete compatible recipe missing'))])
+            self.neural_details.setPlainText('\n\n'.join(t(item) for item in report['blockers']))
+            self.neural_technical.setPlainText(json.dumps(redact(report),indent=2,ensure_ascii=False))
+        self.ctl.run('fivem_neural',lambda:self.s.fivem.neural_feasibility(game,mode),done,self._error)
+
+    def export_neural(self):
+        if not self.neural_report:return
+        path,_=QFileDialog.getSaveFileName(self,t('Export FiveM feasibility report'),'akeno-fivem-neural.json','JSON (*.json)')
+        if path:Path(path).write_text(json.dumps(redact(self.neural_report),indent=2,ensure_ascii=False),encoding='utf-8')
 
     def development_kit(self):
         if not self.game: return
@@ -171,6 +219,7 @@ class FiveMPanel(Card):
         self.context.setText(f"{g.name} · {gpu.name if gpu else t('Unknown')} · {gpu.driver_version if gpu else '—'}\n{i.app_dir}")
         if self._loaded_game_id != g.id:
             self._loaded_game_id = g.id
+            self._invalidate_neural()
             self._invalidate()
             self.observation = None
             p = self.s.fivem.policy(g.id)

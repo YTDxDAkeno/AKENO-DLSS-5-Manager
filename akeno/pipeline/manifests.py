@@ -108,7 +108,7 @@ class ComponentStore:
         if manifest.stat().st_size>1024*1024:raise ValueError('Diagnostic manifest is too large.')
         data=json.loads(manifest.read_text(encoding='utf-8-sig'))
         known=json.loads((resource_dir()/'diagnostic_backend.json').read_text())
-        if any(data.get(k)!=known[k] for k in ('schema','build','source_commit','counter_header_sha256')):raise ValueError('Unknown diagnostic source/build identity.')
+        if not any(all(data.get(k)==build[k] for k in ('schema','build','source_commit','counter_header_sha256')) for build in [known,*known.get('previous_builds',[])]):raise ValueError('Unknown diagnostic source/build identity.')
         if data.get('license')!='GPL-3.0' or not data.get('corresponding_source'):raise ValueError('Corresponding diagnostic source and GPL license metadata are required.')
         files=data.get('binary_files',{})
         if set(files)!={'OptiScaler.dll','nvngx.dll_dlssnr.dll'}:raise ValueError('Diagnostic package must contain only the two expected backend binaries.')
