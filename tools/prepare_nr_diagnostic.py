@@ -11,7 +11,7 @@ import re
 import subprocess
 
 BASE='fc702f8ca22f97b01bd6a02f3386bffb3484fc35'
-BUILD='akeno-fc702f8-v1'
+BUILD='akeno-fc702f8-v2'
 ROOT=Path(__file__).resolve().parents[1]
 
 

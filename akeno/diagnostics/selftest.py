@@ -156,6 +156,7 @@ class NeuralSelfTest:
                 if valid:
                     latest=max(valid,key=lambda c:c['seq'])
                     result.neural_evaluations={'attempted':latest['eval_attempts'],'successful':latest['eval_success'],'failed':latest['eval_fail'],'observed_lower_bound':True}
+                    if latest['eval_fail'] and latest.get('last_error'):result.error_codes=sorted(set(result.error_codes+[latest['last_error']]))
                     result.feature_18_creation='success' if latest['create_success'] else 'not_observed'
                     result.status='fail' if latest['eval_fail'] or latest['create_fail'] else ('pass' if latest['eval_success'] and latest['create_success'] and proc.returncode==0 else 'inconclusive')
             adapter_match=re.search(r'\[host\] device adapter: (.*?)  LUID ([0-9a-fA-F]+:[0-9a-fA-F]+)  PCI ([0-9a-fA-F]+):([0-9a-fA-F]+)  driver ([0-9.]+)',text)

@@ -8,9 +8,10 @@
 #include <Windows.h>
 #endif
 namespace AkenoNrDiagnostic {
-inline constexpr const char* kBuild = "akeno-fc702f8-v1";
+inline constexpr const char* kBuild = "akeno-fc702f8-v2";
 struct Counters {
     std::atomic<uint64_t> create{0}, created{0}, createFailed{0};
+    std::atomic<unsigned> lastError{0};
     std::atomic<uint64_t> attempts{0}, success{0}, failed{0}, sequence{0}, lastTick{0};
 };
 inline Counters counters;
@@ -35,13 +36,14 @@ inline void Summary(unsigned result) {
     if (previous && tick - previous < 5000) return;
     if (!counters.lastTick.compare_exchange_strong(previous, tick, std::memory_order_relaxed)) return;
     Increment(counters.sequence);
-    LOG_INFO("AKENO_NR_V1 build={} pid={} birth={} seq={} create_attempts={} create_success={} create_fail={} eval_attempts={} eval_success={} eval_fail={} last_result=0x{:08X}",
+    LOG_INFO("AKENO_NR_V1 build={} pid={} birth={} seq={} create_attempts={} create_success={} create_fail={} eval_attempts={} eval_success={} eval_fail={} last_result=0x{:08X} last_error=0x{:08X}",
         kBuild, GetCurrentProcessId(), Birth(), counters.sequence.load(), counters.create.load(), counters.created.load(),
-        counters.createFailed.load(), counters.attempts.load(), counters.success.load(), counters.failed.load(), result);
+        counters.createFailed.load(), counters.attempts.load(), counters.success.load(), counters.failed.load(), result, counters.lastError.load());
 #endif
 }
 inline void RecordEvaluate(unsigned result) {
     Increment(counters.attempts);
+    if (result != 1) counters.lastError.store(result, std::memory_order_relaxed);
     Increment(result == 1 ? counters.success : counters.failed);
     Summary(result);
 }

@@ -1,7 +1,7 @@
 """Strict structured counter protocol emitted only by the identified diagnostic backend."""
 import re
 
-BUILD='akeno-fc702f8-v1'
+BUILD='akeno-fc702f8-v2'
 FIELDS=('pid','birth','seq','create_attempts','create_success','create_fail','eval_attempts','eval_success','eval_fail')
 
 
@@ -18,7 +18,9 @@ def parse_counter(line):
     if record['pid']<=0 or record['birth']<=0 or record['seq']<=0:return None
     code=values.get('last_result','')
     if not re.fullmatch(r'0x[0-9a-fA-F]{1,8}',code):return None
-    return record|{'build':BUILD,'last_result':code,'scope':'NR API return results; accepted calls do not prove visual quality or GPU completion.'}
+    last_error=values.get('last_error')
+    if last_error is not None and not re.fullmatch(r'0x[0-9a-fA-F]{1,8}',last_error):return None
+    return record|{'last_error':last_error,'build':BUILD,'last_result':code,'scope':'NR API return results; accepted calls do not prove visual quality or GPU completion.'}
 
 
 def attributed(record,process,allowed_builds):

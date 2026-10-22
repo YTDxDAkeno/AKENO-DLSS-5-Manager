@@ -296,6 +296,8 @@ class NeuralMonitor:
         result.counters = dict(self.counters)
         result.lines = list(self.events); result.raw_excerpts = list(self.excerpts)
         result.error_codes = sorted({code for e in self.events if e['stage'] == 'failed' for code in re.findall(r'0x[0-9a-fA-F]+', e['line'])})
+        if self.counters.get('eval_fail') and self.counters.get('last_error'):
+            result.error_codes=sorted(set(result.error_codes+[self.counters['last_error']]))
         if not result.logs:
             result.detail = 'No backend log found in the bounded game/backend log locations.'
         elif not self.events and all(item['activity'] == 'no_new_content' for item in result.logs):

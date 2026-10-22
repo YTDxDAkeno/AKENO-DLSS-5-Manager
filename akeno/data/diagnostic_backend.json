@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "build": "akeno-fc702f8-v1",
+  "build": "akeno-fc702f8-v2",
   "source_commit": "fc702f8ca22f97b01bd6a02f3386bffb3484fc35",
-  "counter_header_sha256": "cda105662e5e151a119a4bc8dabadbe275d25588a0faba31470c41d7b40f2ee7"
+  "counter_header_sha256": "e8df1aeac7c2ff62c714b1330cf13bb2b8635352a810388fc480db479ce91f62"
 }
