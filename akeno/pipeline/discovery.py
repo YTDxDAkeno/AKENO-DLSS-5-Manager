@@ -2,7 +2,7 @@
 from pathlib import Path
 from .capabilities import PipelineFacts
 from .conflicts import inspect_conflicts
-from .proxy import resolve_proxy
+from .proxy import resolve_proxy,load_candidates
 from akeno.core.models import AntiCheatRisk
 from akeno.games import pe
 
@@ -24,12 +24,24 @@ def facts_for(services,game,offline=False,runtime=None,components=None):
     gpu=services.selected_gpu(); managed=services.installer.managed_files(game.id,game.target_dir) if game.target_dir else set()
     native,why=native_support(game,managed)
     consumers,conflicts=inspect_conflicts(game,managed)
+    components=dict(components or {})
+    imports=load_candidates(game)
+    components['reshade_load_route']='dxgi.dll' in imports
+    observed=[]
+    session=services.community.sessions.get(game.id)
+    if session and session.observation.executable==str(Path(game.exe_path).resolve()):
+        from akeno.diagnostics.neural import identity
+        pins=dict(session.observation.file_identities)
+        try:
+            if identity(game.exe_path)==pins.get(str(Path(game.exe_path).resolve())):
+                observed=[m['path'] for m in session.modules.get('modules',[]) if Path(m['path']).resolve().parent==Path(game.target_dir).resolve()]
+        except (OSError,ValueError):pass
     permitted=bool(offline and game.launcher!='fivem' and game.anti_cheat==AntiCheatRisk.NONE_FOUND
         and not services.compat_db.anti_cheat_entry(game) and 'gta online' not in game.name.casefold())
     return PipelineFacts(game.id,game.api.value,game.architecture,native,why,
         gpu.vendor.value if gpu else 'unknown',gpu.device_id if gpu else None,gpu.generation if gpu else None,
         gpu.driver_version if gpu else None,(runtime or {}).get('sha256'),(runtime or {}).get('version'),
-        (runtime or {}).get('category'),components or {},consumers,resolve_proxy(game,managed) if game.target_dir else None,
+        (runtime or {}).get('category'),components,consumers,resolve_proxy(game,managed,observed=observed) if game.target_dir else None,
         conflicts,permitted,bool(game.is_running))
 
 

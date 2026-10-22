@@ -12,6 +12,9 @@ from test_community_runtime import experiment,nr
 def test_pipeline_dialog_analysis_and_no_implicit_hardware_test(qtbot,experiment,language,monkeypatch):
     s,g,c,root=experiment;i18n.set_language(language)
     monkeypatch.setattr(s.neural_selftest,'run',lambda *a:pytest.fail('Opening a dialog must never run NVIDIA code'))
+    from akeno.ui import theme
+    from PySide6.QtWidgets import QApplication
+    QApplication.instance().setStyleSheet(theme.stylesheet())
     ctl=Controller(s);dialog=PipelineDialog(ctl);qtbot.addWidget(dialog)
     qtbot.waitUntil(lambda:not dialog.busy)
     assert dialog.routes.count()==6 and dialog.tabs.count()==4

@@ -6,7 +6,7 @@ import tempfile
 import shutil
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QTabWidget,QWidget,QComboBox,
-    QCheckBox,QPlainTextEdit,QFileDialog,QLineEdit,QFormLayout,QDialogButtonBox,QScrollArea)
+    QCheckBox,QPlainTextEdit,QFileDialog,QLineEdit,QFormLayout,QDialogButtonBox,QScrollArea,QListWidget)
 from akeno.i18n import t
 from akeno.ui.widgets import button,label,confirm
 from akeno.security.downloads import CancelToken,sha256_file
@@ -42,7 +42,9 @@ class PipelineDialog(QDialog):
         for text,fn in [('Import dependency',self.import_component),('Import private component manifest',self.import_manifest),('Import diagnostic source build',self.import_diagnostic),('Recover interrupted transactions',self.recover)]:deps.addWidget(button(t(text),on_click=fn))
         pipeline.addLayout(deps)
         self.summary=label('',wrap=True);pipeline.addWidget(self.summary)
-        self.plan_view=QPlainTextEdit();self.plan_view.setReadOnly(True);pipeline.addWidget(self.plan_view,1)
+        self.requirements=QListWidget();self.requirements.setWordWrap(True);pipeline.addWidget(self.requirements,1)
+        pipeline.addWidget(button(t('Show technical details / file preview'),on_click=lambda:self.plan_view.setVisible(not self.plan_view.isVisible())))
+        self.plan_view=QPlainTextEdit();self.plan_view.setReadOnly(True);self.plan_view.hide();pipeline.addWidget(self.plan_view,1)
         selftest.addWidget(label(t('This test uses a pinned 64-bit host in an isolated AKENO folder. It changes no game files. A successful standalone test does not prove that a game uses Neural Rendering.'),'dim',wrap=True))
         test_actions=QHBoxLayout();test_actions.addWidget(button(t('Test Neural Rendering Runtime'),'play',on_click=self.start_selftest));test_actions.addWidget(button(t('Stop'),'stop',on_click=self.cancel));test_actions.addWidget(button(t('Export test result'),'file',on_click=self.export_result));selftest.addLayout(test_actions)
         self.test_status=label(t('Not tested'),'dim',wrap=True);selftest.addWidget(self.test_status)
@@ -51,7 +53,7 @@ class PipelineDialog(QDialog):
         dr=QHBoxLayout()
         dr.addWidget(button(t('Import official DLL'),'folder',on_click=self.import_official));dr.addWidget(button(t('Observe active DLL paths'),'search',on_click=self.observe_dlls));dlls.addLayout(dr)
         self.dll_path=QComboBox();self.dll_version=QComboBox();self.dll_path.currentIndexChanged.connect(self.invalidate);self.dll_version.currentIndexChanged.connect(self.invalidate);dlls.addWidget(self.dll_path);dlls.addWidget(self.dll_version)
-        dr2=QHBoxLayout();dr2.addWidget(button(t('Preview DLL swap'),on_click=self.prepare_swap));dr2.addWidget(button(t('Apply DLL swap with backup'),on_click=self.install_swap));dr2.addWidget(button(t('Restore latest transaction'),on_click=self.restore));dlls.addLayout(dr2)
+        dr2=QHBoxLayout();dr2.addWidget(button(t('Preview DLL swap'),on_click=self.prepare_swap));dr2.addWidget(button(t('Preview bulk game update'),on_click=self.prepare_bulk));dr2.addWidget(button(t('Apply DLL swap with backup'),on_click=self.install_swap));dr2.addWidget(button(t('Restore latest transaction'),on_click=self.restore));dlls.addLayout(dr2)
         self.dll_output=QPlainTextEdit();self.dll_output.setReadOnly(True);dlls.addWidget(self.dll_output,1)
         ab.addWidget(label(t('Use the same camera, scene, resolution and settings for NR off/on. Import real screenshots captured by the game or a permitted backend; AKENO does not inject a screenshot hook.'),'dim',wrap=True))
         self.ab_conditions={};form=QFormLayout()
@@ -121,12 +123,26 @@ class PipelineDialog(QDialog):
         route=next((r for r in self.analysis['routes'] if r.route_id==self.routes.currentData()),None)
         if not route:return
         self.summary.setText(t('Ready to preview') if route.eligible else t('Prerequisites are missing or this route is not permitted. Details are listed below.'))
+        titles={'permission':t('Confirm an eligible offline test'),'closed':t('Close the game before installing'),
+                'architecture':t('Game architecture matches this route'),'api':t('Selected renderer matches this route'),
+                'native_calls':t('Native engine DLSS integration is established'),'rtx':t('Detected NVIDIA RTX hardware'),
+                'driver':t('Exact NVIDIA driver is known'),'runtime_pin':t('Imported exact neural runtime selected'),
+                'exclusive_consumer':t('Only one neural consumer'),'conflicts':t('No conflicting unmanaged graphics hooks'),
+                'proxy':t('A free supported loader path is evidenced'),'consumer':t('A compatible neural consumer is selected'),
+                'feeder_api':t('Reviewed Feeder transport for this renderer'),'bridge_contract':t('A complete reviewed legacy bridge is available')}
+        self.requirements.clear()
+        for check in route.requirements:
+            text=titles.get(check.code)
+            if text is None:
+                role=check.code.split(':',1)[-1]
+                text=t('Compatible pinned component: {component}',component=role)
+            self.requirements.addItem(('✓ ' if check.satisfied else '○ ')+text)
         self.plan_view.setPlainText(json.dumps(redact(route.to_dict()),indent=2,ensure_ascii=False))
     def prepare(self):
         if not self.game:return
         gid,route,pin=self.game.id,self.routes.currentData(),self.runtime.currentData();offline,consent=self.offline.isChecked(),self.consent.isChecked()
         def done(prepared):
-            self.prepared=prepared;self.plan_view.setPlainText('\n'.join(t(x) for x in prepared.plan.summary)+'\n\n'+json.dumps(self.s.pipelines.diff(prepared),indent=2));self.status.setText(t('Preview ready. No game files changed.'))
+            self.prepared=prepared;self.plan_view.show();self.plan_view.setPlainText('\n'.join(t(x) for x in prepared.plan.summary)+'\n\n'+json.dumps(self.s.pipelines.diff(prepared),indent=2));self.status.setText(t('Preview ready. No game files changed.'))
         self.run('prepare',lambda:self.s.pipelines.prepare(gid,route,pin,offline,consent),done)
     def install(self):
         if not self.offline.isChecked() or not self.consent.isChecked():self.invalidate();return
@@ -197,13 +213,47 @@ class PipelineDialog(QDialog):
     def prepare_swap(self):
         if not self.game or not self.dll_path.currentData() or not self.dll_version.currentData():return
         replacements={self.dll_path.currentData():self.dll_version.currentData()};offline=self.offline.isChecked()
+        selected=self.s.db.get_setting('official_dll_inventory',{}).get(self.dll_version.currentData(),{})
+        if selected.get('family')=='streamline':
+            folder=Path(self.dll_path.currentData()).parent;replacements={}
+            for path in folder.glob('sl.*.dll'):
+                matches=[(pin,item) for pin,item in self.s.db.get_setting('official_dll_inventory',{}).items() if item['name']==path.name.casefold() and item['version']==selected['version']]
+                if len(matches)!=1:self.status.setText(t('Import one unambiguous complete Streamline set at the selected version.'));return
+                replacements[str(path)]=matches[0][0]
         def done(result):self.swap=result;self.dll_output.setPlainText(json.dumps(self.s.pipelines.diff(result),indent=2));self.status.setText(t('Preview ready. No game files changed.'))
         self.run('swap_preview',lambda:self.s.dlls.prepare(self.game.id,replacements,offline),done)
+    def prepare_bulk(self):
+        from PySide6.QtWidgets import QListWidgetItem
+        pin=self.dll_version.currentData();item=self.s.db.get_setting('official_dll_inventory',{}).get(pin)
+        if not item:return
+        dialog=QDialog(self);dialog.setWindowTitle(t('Select games for the displayed DLL version'));layout=QVBoxLayout(dialog)
+        choices=QListWidget();layout.addWidget(choices)
+        for game in self.s.library.games():
+            evidence=self.s.db.get_setting('dll_load_evidence:'+game.id,{})
+            paths=[name for name in evidence.get('paths',{}) if Path(name).name.casefold()==item['name']]
+            if paths:
+                row=QListWidgetItem(game.name);row.setData(Qt.ItemDataRole.UserRole,(game.id,paths));row.setFlags(row.flags()|Qt.ItemFlag.ItemIsUserCheckable);row.setCheckState(Qt.CheckState.Unchecked);choices.addItem(row)
+        buttons=QDialogButtonBox(QDialogButtonBox.StandardButton.Ok|QDialogButtonBox.StandardButton.Cancel);buttons.accepted.connect(dialog.accept);buttons.rejected.connect(dialog.reject);layout.addWidget(buttons)
+        if dialog.exec()!=QDialog.DialogCode.Accepted:return
+        selected=[choices.item(i).data(Qt.ItemDataRole.UserRole) for i in range(choices.count()) if choices.item(i).checkState()==Qt.CheckState.Checked]
+        if not selected:return
+        offline=self.offline.isChecked()
+        def work():return [self.s.dlls.prepare(gid,{path:pin for path in paths},offline) for gid,paths in selected]
+        def done(prepared):
+            self.swap=prepared
+            self.dll_output.setPlainText(json.dumps([{'game_id':p.game_id,'files':self.s.pipelines.diff(p)} for p in prepared],indent=2));self.status.setText(t('Review every game before applying. Each game has a separate reversible transaction.'))
+        self.run('bulk_preview',work,done)
+
     def install_swap(self):
         if not self.offline.isChecked() or not self.consent.isChecked():self.invalidate();return
         if not self.swap:return
         if confirm(self,t('Apply DLL swap with backup'),t('Replace only the displayed observed DLL paths and keep verified originals?'),ok_text=t('Apply')):
-            prepared=self.swap;self.swap=None;self.run('swap',lambda:self.s.dlls.install(prepared),self.install_done)
+            prepared=self.swap;self.swap=None
+            if isinstance(prepared,list):
+                def done(results):
+                    self.status.setText('\n'.join(gid+': '+'; '.join(t(x) for x in result.messages) for gid,result in results));self.ctl.installs_changed.emit();self.invalidate()
+                self.run('bulk_swap',lambda:self.s.dlls.bulk_install(prepared),done)
+            else:self.run('swap',lambda:self.s.dlls.install(prepared),self.install_done)
     def restore(self):
         tx=self.s.installer.active_install(self.game.id) if self.game else None
         if tx and confirm(self,t('Restore latest transaction'),t('Restore the recorded original files after checking for later modifications?'),ok_text=t('Restore')):

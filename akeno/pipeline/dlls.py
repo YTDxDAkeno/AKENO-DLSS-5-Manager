@@ -80,7 +80,9 @@ class DllService:
         if not replacements:raise ValueError('Select at least one observed component path.')
         for original,pin in replacements.items():
             path=Path(original);regular(path)
-            if not path.resolve().is_relative_to(root) or evidence.get('paths',{}).get(str(path.resolve()))!=sha256_file(path):raise PermissionError('Active component path is unobserved or changed.')
+            directly_observed=evidence.get('paths',{}).get(str(path.resolve()))==sha256_file(path)
+            streamline_set=path.name.casefold().startswith('sl.') and any(Path(name).parent==path.resolve().parent and Path(name).name.casefold().startswith('sl.') and Path(name).is_file() and sha256_file(name)==old_pin for name,old_pin in evidence.get('paths',{}).items())
+            if not path.resolve().is_relative_to(root) or not (directly_observed or streamline_set):raise PermissionError('Active component path is unobserved or changed.')
             item=inventory.get(pin)
             if not item or path.name.casefold()!=item['name']:raise ValueError('Replacement is a different DLL family.')
             src=Path(item['stored_path']);regular(src)
@@ -110,4 +112,10 @@ class DllService:
 
     def bulk_install(self,prepared_swaps):
         # Each game is a separate recoverable transaction; failures are explicit, never a global success.
-        return [(p.game_id,self.install(p)) for p in prepared_swaps]
+        from akeno.install.transaction import TxResult
+        results=[]
+        for prepared in prepared_swaps:
+            try:result=self.install(prepared)
+            except (OSError,ValueError,PermissionError) as error:result=TxResult(False,None,'failed',[str(error)])
+            results.append((prepared.game_id,result))
+        return results
