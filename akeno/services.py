@@ -86,8 +86,12 @@ class AppServices:
             self.offline_bundle.errors.append(str(exc))
         from akeno.pipeline.service import PipelineService
         self.pipelines = PipelineService(self)
+        from akeno.pipeline.dlls import DllService
+        self.dlls = DllService(self)
         from akeno.diagnostics.selftest import NeuralSelfTest
         self.neural_selftest = NeuralSelfTest(self)
+        from akeno.quality.comparison import VisualComparisons
+        self.visual_comparisons = VisualComparisons(self)
         self.system: SystemInfo | None = None
         cached = self.db.get_setting("_last_system")
         if cached:

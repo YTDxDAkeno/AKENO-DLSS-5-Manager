@@ -28,7 +28,7 @@ def digest(value) -> str:
 
 def plan_digest(plan: InstallPlan) -> str:
     return digest({"backend": plan.backend_id, "package": asdict(plan.package) if plan.package else None,
-        "target": plan.target_dir, "kind": plan.kind, "params": plan.params, "renames": plan.rename_away,
+        "target": plan.target_dir, "kind": plan.kind, "params": plan.params, "expected_originals": plan.expected_originals, "renames": plan.rename_away,
         "ops": [(o.rel_path, str(o.source), o.expected_sha256,
                  hashlib.sha256(o.content).hexdigest() if o.content is not None else None, o.kind) for o in plan.ops]})
 

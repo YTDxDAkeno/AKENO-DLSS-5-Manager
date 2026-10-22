@@ -84,7 +84,8 @@ class InstallPlan:
     rename_away: list[str] = field(default_factory=list)  # existing files renamed to *.akeno-disabled
     params: dict[str, Any] = field(default_factory=dict)
     summary: list[str] = field(default_factory=list)
-    kind: str = "install"                             # install | configure
+    kind: str = "install"                             # install | configure | swap
+    expected_originals: dict[str, str] = field(default_factory=dict)  # explicit reviewed swap preconditions
 
 
 @dataclass

@@ -17,7 +17,7 @@ from akeno.ui.pages.dashboard import COMPAT_TEXT
 from akeno.ui.widgets import (Card, Clickable, EmptyState, KeyValueGrid, Spinner, StatusPill, button, clear_layout,
                               confirm, info, label, scaled)
 
-LAUNCHERS = {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "ubisoft": "Ubisoft Connect", "ea": "EA app",
+LAUNCHERS = {"battlenet": "Battle.net", "steam": "Steam", "epic": "Epic Games", "gog": "GOG", "ubisoft": "Ubisoft Connect", "ea": "EA app",
              "xbox": "Xbox / Microsoft Store", "manual": "Added manually", "fivem": "FiveM"}
 
 

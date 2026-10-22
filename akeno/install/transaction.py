@@ -15,6 +15,9 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import hashlib
+import threading
+from functools import wraps
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -52,7 +55,12 @@ class TxResult:
 
 def _safe_join(base: str, rel: str) -> Path:
     base_p = Path(base).resolve()
-    target = (base_p / rel.replace("\\", "/")).resolve()
+    raw = base_p / rel.replace("\\", "/")
+    for item in (raw,*raw.parents):
+        if item==base_p:break
+        if item.is_symlink() or (hasattr(item,'is_junction') and item.is_junction()):
+            raise InstallError('Linked transaction paths are not permitted: '+rel)
+    target = raw.resolve()
     if base_p != target and base_p not in target.parents:
         raise InstallError(f"Refusing to write outside the game folder: {rel}")
     return target
@@ -71,9 +79,17 @@ def _atomic_write(target: Path, source: Path | None, content: bytes | None) -> N
     os.replace(tmp, target)
 
 
+def _serialized(method):
+    @wraps(method)
+    def run(self,*args,**kwargs):
+        with self._mutation_lock:return method(self,*args,**kwargs)
+    return run
+
+
 class Installer:
     def __init__(self, db: Database, backup_root: Path | None = None,
                  running_check: Callable[[str], list] | None = None):
+        self._mutation_lock=threading.RLock()
         self.db = db
         self.backup_root = Path(backup_root or backups_dir())
         self.running_check = running_check or (lambda d: processes.processes_in_dir(d))
@@ -81,7 +97,7 @@ class Installer:
     # -- queries -------------------------------------------------------------------------------
     def active_install(self, game_id: str, backend_id: str | None = None) -> dict | None:
         for t in self.db.transactions(game_id):
-            if t["kind"] == "install" and t["state"] == "installed" and (backend_id is None or t["backend_id"] == backend_id):
+            if t["kind"] in ("install", "swap") and t["state"] == "installed" and (backend_id is None or t["backend_id"] == backend_id):
                 return t
         return None
 
@@ -93,6 +109,7 @@ class Installer:
         return out
 
     # -- apply ---------------------------------------------------------------------------------
+    @_serialized
     def apply(self, game: Game, plan: InstallPlan, log_cb: Callable[[str], None] | None = None,
               fail_after: int | None = None) -> TxResult:
         """Apply a confirmed plan. ``fail_after`` injects a failure after N writes (tests only)."""
@@ -115,12 +132,16 @@ class Installer:
                 "Installation blocked: AKENO cannot write to the game folder. AKENO does not request administrator "
                 "rights for game folders; move the game to a user-writable library or adjust folder permissions."])
 
-        prior = self.active_install(game.id, plan.backend_id) if plan.kind == "install" else None
+        prior = self.active_install(game.id, plan.backend_id) if plan.kind in ("install","swap") else None
         managed = self.managed_files(game.id, target_dir)
         # Refuse to overwrite anything AKENO did not install, unless it is renamed away by approval.
         for op in plan.ops:
             dst = _safe_join(target_dir, op.rel_path)
-            if dst.exists() and op.rel_path.lower() not in managed:
+            explicit_swap=(plan.kind=='swap' and op.rel_path in plan.expected_originals and dst.is_file()
+                           and not dst.is_symlink() and sha256_file(dst)==plan.expected_originals[op.rel_path])
+            if plan.kind=='swap' and op.rel_path in plan.expected_originals and not explicit_swap:
+                return TxResult(False,None,'failed',['Original DLL changed after the swap preview: '+op.rel_path])
+            if dst.exists() and op.rel_path.lower() not in managed and not explicit_swap:
                 return TxResult(False, None, "failed", [
                     msg("Installation blocked: {rel_path} already exists and was not installed by AKENO. AKENO never "
                         "overwrites files from other tools.", rel_path=op.rel_path)])
@@ -183,10 +204,13 @@ class Installer:
                 if fail_after is not None and i >= fail_after:
                     raise InstallError("Injected failure (test)")
                 dst = _safe_join(target_dir, op.rel_path)
+                expected=op.expected_sha256 or hashlib.sha256(op.content or b'').hexdigest()
+                # Journal intended bytes BEFORE atomic replacement, closing the crash window.
+                self.db.set_tx_file_installed(tx, op.rel_path, expected)
                 _atomic_write(dst, op.source, op.content)
                 written.append(op.rel_path)
                 sha = sha256_file(dst)
-                self.db.set_tx_file_installed(tx, op.rel_path, sha)
+                if sha!=expected:raise InstallError('Post-copy hash mismatch: '+op.rel_path)
                 self.db.append_tx_log(tx, f"Wrote {op.rel_path} ({op.description})")
                 say(f"Installed {op.rel_path}")
             # 3. supersede the previous install of the same backend (its backups stay the restore point)
@@ -280,6 +304,7 @@ class Installer:
                     out.append(RestoreConflict(rel, "backup file is damaged"))
         return out
 
+    @_serialized
     def restore(self, tx_id: int, force: bool = False, game_running_dir: str | None = None) -> TxResult:
         tx = self.db.get_transaction(tx_id)
         if not tx:
@@ -335,6 +360,48 @@ class Installer:
             self.db.update_transaction(t["id"], state="restored" if ok else "failed", finished_at=_now())
             self.db.append_tx_log(t["id"], "Restored original files." if ok else "Restore incomplete.")
         return TxResult(ok, tx_id, "restored" if ok else "failed", messages)
+
+    def interrupted(self):
+        return [t for t in self.db.transactions() if t['state'] in ('planned','backing_up','applying')]
+
+    @_serialized
+    def recover(self,tx_id):
+        """Validate every known byte before undoing an interrupted transaction. No forced guesses."""
+        tx=self.db.get_transaction(tx_id)
+        if not tx or tx['state'] not in ('planned','backing_up','applying'):
+            return TxResult(False,tx_id,'failed',['No interrupted transaction selected.'])
+        if self.running_check(tx['target_dir']):return TxResult(False,tx_id,tx['state'],['Close the game before recovery.'])
+        operations=[];conflicts=[]
+        for record in self.db.tx_files(tx_id):
+            rel=record['rel_path'];path=_safe_join(tx['target_dir'],rel)
+            actual=sha256_file(path) if path.is_file() and not path.is_symlink() else None
+            original=record['original_sha256'];installed=record['installed_sha256']
+            if record['action']=='replace':
+                backup=Path(record['backup_path']) if record['backup_path'] else None
+                if not backup or not backup.is_file() or backup.is_symlink() or sha256_file(backup)!=original:
+                    conflicts.append(RestoreConflict(rel,'Original backup missing or damaged.'));continue
+                if actual==original:continue
+                if installed and actual==installed:operations.append(('restore',path,backup))
+                else:conflicts.append(RestoreConflict(rel,'Current bytes have no established transaction ownership.'))
+            elif record['action']=='create':
+                if not path.exists():continue
+                if installed and actual==installed:operations.append(('delete',path,None))
+                else:conflicts.append(RestoreConflict(rel,'Created path has unknown or modified bytes.'))
+            elif record['action']=='rename_away':
+                disabled=path.with_name(path.name+DISABLED_SUFFIX)
+                if actual==original and not disabled.exists():continue
+                if not path.exists() and disabled.is_file() and not disabled.is_symlink() and sha256_file(disabled)==original:operations.append(('rename',path,disabled))
+                else:conflicts.append(RestoreConflict(rel,'Renamed mod ownership is unresolved.'))
+        if conflicts:return TxResult(False,tx_id,tx['state'],['Recovery needs review; no files were changed.'],conflicts)
+        try:
+            for action,path,source in operations:
+                if action=='restore':_atomic_write(path,source,None)
+                elif action=='delete':path.unlink()
+                else:os.replace(source,path)
+            self.db.update_transaction(tx_id,state='rolled_back',finished_at=_now())
+            self.db.append_tx_log(tx_id,'Interrupted transaction recovered after exact ownership/backup verification.')
+            return TxResult(True,tx_id,'rolled_back',['Interrupted transaction safely recovered.'])
+        except OSError as error:return TxResult(False,tx_id,tx['state'],[str(error)])
 
     # -- manual snapshots ------------------------------------------------------------------------
     def snapshot(self, game: Game, target_dir: str, rel_paths: list[str], note: str = "") -> TxResult:

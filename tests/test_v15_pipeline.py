@@ -60,3 +60,12 @@ def test_copied_dlss_never_establishes_native_integration(tmp_path):
     assert consumer_id('renodx-dlss5-4.7.addon64')=='renodx_nr'
     g.existing_mods=[DetectedFile(n,str(tmp_path/n),'neural_consumer') for n in ['renodx-dlss5-4.7.addon64','renodx-dlss5-6.1.addon64']]
     assert len(inspect_conflicts(g)[0])==2
+
+
+def test_battlenet_discovery_uses_registered_roots_not_drive_walk(tmp_path):
+    from akeno.games.launchers import scan_battlenet
+    game=tmp_path/'Registered Game';game.mkdir()
+    records=[('game',{'Publisher':'Blizzard Entertainment','DisplayName':'Synthetic game','InstallLocation':str(game)}),
+             ('launcher',{'Publisher':'Blizzard','DisplayName':'Battle.net','InstallLocation':str(game)})]
+    found=scan_battlenet(records)
+    assert len(found)==1 and found[0].launcher=='battlenet'
