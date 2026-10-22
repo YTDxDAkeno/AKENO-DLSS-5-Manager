@@ -6,7 +6,7 @@ import os
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QSpinBox, QTableWidget, QLineEdit,
-                               QTableWidgetItem, QVBoxLayout, QWidget, QAbstractItemView)
+                               QTableWidgetItem, QVBoxLayout, QWidget, QAbstractItemView, QCheckBox)
 
 from akeno.benchmark.stats import consistency_label
 from akeno.core import processes
@@ -80,6 +80,9 @@ class BenchmarkPage(QWidget):
             row2.addWidget(w)
         row2.addWidget(self.status, 1)
         run.body.addLayout(row2)
+        self.allow_elevation = QCheckBox(t('Request administrator permission for this capture only'))
+        run.body.addWidget(self.allow_elevation)
+        run.body.addWidget(label(t('ETW capture needs an elevated token or Performance Log Users membership. Denial stops FPS capture; neural log diagnostics remain available.'), 'muted', wrap=True))
         run.body.addWidget(label(t("Baseline: restore original files and capture a repeatable scene. Experimental: install the selected runtime and repeat the same scene and settings. Select both measured sessions below to compare performance; assess visual quality separately."), "muted", wrap=True))
         lay.addWidget(run)
         self.sessions_card = Card(t("Sessions"), "chart", theme.BLUE)
@@ -249,6 +252,10 @@ class BenchmarkPage(QWidget):
                                                "performance events.", g=game.name, d=dur, w=delay),
                        ok_text=t("Start")):
             return
+        elevated=self.allow_elevation.isChecked()
+        self.allow_elevation.setChecked(False)
+        if elevated and not confirm(self,t('PresentMon permission'),t('Request Windows administrator permission once for this capture? Automatic monitoring never requests elevation.'),ok_text=t('Request permission')):
+            return
         self.token = CancelToken()
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
@@ -264,7 +271,7 @@ class BenchmarkPage(QWidget):
             from akeno.hardware.sensors import sample
             self.s.benchmarks.runner.ensure(token=self.token)
             return self.s.benchmarks.run(game.id, proc, lbl, meta, dur, delay, on_status=emit, token=self.token, process_id=running[0].pid if len(running) == 1 else None, sensor_sampler=lambda: sample(gpu),
-                context_provider=lambda: self.s.community.capture_context(game.id, running[0].pid if len(running) == 1 else None), swapchain=swapchain)
+                context_provider=lambda: self.s.community.capture_context(game.id, running[0].pid if len(running) == 1 else None), swapchain=swapchain, allow_elevation=elevated)
 
         def done(sess):
             self._finish()

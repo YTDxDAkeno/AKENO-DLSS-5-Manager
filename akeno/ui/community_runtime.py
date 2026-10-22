@@ -195,6 +195,11 @@ class CommunityRuntimeDialog(QDialog):
             text = t('Automatic FPS monitoring needs a locally verified PresentMon executable.')
             if self.message.text() != text: self.message.setText(text)
             return
+        permission=runner.permission_status()
+        if permission['state'] in ('denied','permission_required','unavailable'):
+            self.performance.setChecked(False)
+            self.message.setText(t('FPS capture unavailable. Neural log diagnostics continue.')+' '+permission['detail'])
+            return
         from akeno.security.downloads import CancelToken
         self.capture_busy = True; self.capture_token = CancelToken()
         game, gpu, token = self.game, self.ctl.s.selected_gpu(), self.capture_token
@@ -213,7 +218,9 @@ class CommunityRuntimeDialog(QDialog):
             if not self._closing: self.ctl.benchmarks_changed.emit()
         def failed(error):
             self.capture_busy = False
-            if not self._closing and not token.cancelled: self.message.setText(t(str(error)))
+            if not self._closing and not token.cancelled:
+                self.performance.setChecked(False)
+                self.message.setText(t('FPS capture stopped. Enable it explicitly to retry.')+' '+t(str(error)))
         if not self.ctl.run('community_performance', work, done, failed, silent=True): self.capture_busy = False
 
     def toggle_monitor(self, enabled):
