@@ -27,6 +27,7 @@ def facts_for(services,game,offline=False,runtime=None,components=None):
     components=dict(components or {})
     imports=load_candidates(game)
     components['reshade_load_route']='dxgi.dll' in imports
+    components['blocked_backends']={backend:any(row['status'] in ('blocked','incompatible') for row in services.compat_db.entries_for(game,backend)) for backend in ('optiscaler_nr','dlss5_feeder')}
     components['native_dlss_files_present']=any(m.kind=='dlss' and m.name.casefold() not in managed for m in game.existing_mods)
     evidence=services.db.get_setting('dll_load_evidence:'+game.id,{})
     from akeno.diagnostics.neural import identity

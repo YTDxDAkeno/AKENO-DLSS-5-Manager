@@ -33,6 +33,8 @@ def resolve(facts):
                 targets=[t for t in profile['targets'] if (t.get('generation'),t.get('driver'),t.get('backend'),t.get('api'))==(facts.gpu_generation,facts.driver,backend,facts.api)]
                 need('runtime_profile',targets and all(t.get('status')!='incompatible' for t in targets),'Legacy runtime review must match the exact GPU generation/driver/backend/API.')
             need('runtime_compatibility',not facts.components.get('runtime_known_incompatible'),'No applicable exact runtime/GPU incompatibility is recorded.')
+            consumer_backend='dlss5_feeder' if recipe.id=='legacy_bridge' else 'optiscaler_nr'
+            need('backend_compatibility',not facts.components.get('blocked_backends',{}).get(consumer_backend),'No blocking game/backend compatibility record applies.')
             need('exclusive_consumer',len(facts.consumers)<=1 and (not recipe.consumer or not facts.consumers or facts.consumers==[recipe.consumer]),'Exactly one compatible neural consumer per process.')
             need('conflicts',not facts.conflicts,'; '.join(facts.conflicts) or 'No conflicting consumer or unknown proxy detected.')
             for role in recipe.components:

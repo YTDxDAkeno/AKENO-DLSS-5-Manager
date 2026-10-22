@@ -37,7 +37,9 @@ class PipelineService:
     def _components(self,runtime):
         result=self.components.records().copy()
         # Inventory is cheap. Full byte validation is at prepare and immediately before deploy.
-        opti=self.s.catalog.best_package('optiscaler_nr');feeder=self.s.catalog.best_package('dlss5_feeder')
+        opti_adapter=self.s.registry.get('optiscaler_nr');feeder_adapter=self.s.registry.get('dlss5_feeder')
+        opti=self.s.package_for(opti_adapter) if opti_adapter else None
+        feeder=self.s.package_for(feeder_adapter) if feeder_adapter else None
         if opti and opti.installable and opti.id=='optiscaler-dlss5-skynizz-1.3.0' and opti.version=='1.3.0':
             result.update(optiscaler={'version':opti.version,'package':opti.id},forwarder={'version':opti.version,'package':opti.id})
         if feeder and feeder.installable and feeder.id=='dlss5-feeder-1.19.0' and feeder.version=='1.19.0':
@@ -150,7 +152,8 @@ class PipelineService:
         if not decision.eligible:raise PermissionError('Rendering eligibility changed. Prepare again.')
         candidate=self.s.community._candidate(prepared.runtime_sha256)
         virtual=replace(game,upscaler_inputs=['dlss']) if prepared.route_id=='feeder' else game
-        self.s.community._check(virtual,candidate,'optiscaler_nr',True,True)
+        adapter,_=self.s.community._check(virtual,candidate,'optiscaler_nr',True,True)
+        if self.s.package_for(adapter)!=prepared.plan.package:raise PermissionError('Selected backend package changed after preview.')
         if self.s.community._environment(game,prepared.plan)!=prepared.environment_pin:raise PermissionError('Game/hardware state changed after preview.')
         pin=self.component_selection_pin()
         if pin!=prepared.components_pin:raise PermissionError('Component selection changed after preview.')
