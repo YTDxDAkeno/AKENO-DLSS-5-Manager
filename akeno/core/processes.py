@@ -95,3 +95,68 @@ def find_by_exe(exe_path: str, procs: list[ProcessInfo] | None = None) -> list[P
     procs = list_processes() if procs is None else procs
     return [p for p in procs if (p.path and os.path.normcase(os.path.abspath(p.path)) == target)
             or (not p.path and p.name.lower() == name)]
+
+
+def creation_identity(pid: int) -> str | None:
+    """Stable process birth identity, read-only. None means attribution is unresolved."""
+    if not is_windows():
+        try:
+            # /proc stat starttime is field 22; the command in parentheses may contain spaces.
+            fields = open(f'/proc/{pid}/stat').read().rsplit(')', 1)[1].split()
+            return 'procfs:' + fields[19]
+        except (OSError, IndexError):
+            return None
+    import ctypes
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.GetProcessTimes.argtypes = [wintypes.HANDLE, *([ctypes.POINTER(wintypes.FILETIME)] * 4)]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.OpenProcess(0x1000, False, pid)
+    if not handle:
+        return None
+    try:
+        values = [wintypes.FILETIME() for _ in range(4)]
+        if kernel.GetProcessTimes(handle, *(ctypes.byref(v) for v in values)):
+            return 'filetime:' + str((values[0].dwHighDateTime << 32) | values[0].dwLowDateTime)
+    finally:
+        kernel.CloseHandle(handle)
+    return None
+
+
+def module_inventory(pid: int, expected_birth: str | None = None) -> dict:
+    """Toolhelp module snapshot. Does not open/inject/execute remote code."""
+    if not is_windows():
+        return {'state': 'unavailable', 'modules': [], 'detail': 'Windows module inspection is unavailable.'}
+    if not expected_birth or creation_identity(pid) != expected_birth:
+        return {'state': 'unavailable', 'modules': [], 'detail': 'Process identity could not be confirmed.'}
+    import ctypes
+    from ctypes import wintypes
+    class MODULEENTRY32W(ctypes.Structure):
+        _fields_ = [('dwSize', wintypes.DWORD), ('th32ModuleID', wintypes.DWORD),
+            ('th32ProcessID', wintypes.DWORD), ('GlblcntUsage', wintypes.DWORD),
+            ('ProccntUsage', wintypes.DWORD), ('modBaseAddr', ctypes.c_void_p),
+            ('modBaseSize', wintypes.DWORD), ('hModule', wintypes.HMODULE),
+            ('szModule', wintypes.WCHAR * 256), ('szExePath', wintypes.WCHAR * 260)]
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel.Module32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MODULEENTRY32W)]
+    kernel.Module32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(MODULEENTRY32W)]
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+    handle = kernel.CreateToolhelp32Snapshot(0x8 | 0x10, pid)
+    if not handle or handle == ctypes.c_void_p(-1).value:
+        return {'state': 'unavailable', 'modules': [], 'detail': f'Module snapshot unavailable (Windows error {ctypes.get_last_error()}).'}
+    modules = []
+    try:
+        entry = MODULEENTRY32W(); entry.dwSize = ctypes.sizeof(entry)
+        ok = kernel.Module32FirstW(handle, ctypes.byref(entry))
+        while ok and len(modules) < 512:
+            modules.append({'name': entry.szModule, 'path': entry.szExePath})
+            ok = kernel.Module32NextW(handle, ctypes.byref(entry))
+    finally:
+        kernel.CloseHandle(handle)
+    if creation_identity(pid) != expected_birth:
+        return {'state': 'unavailable', 'modules': [], 'detail': 'The process changed during the module snapshot.'}
+    return {'state': 'observed', 'modules': modules, 'detail': 'Read-only Toolhelp snapshot; module presence is not Feature 18 evaluation.'}

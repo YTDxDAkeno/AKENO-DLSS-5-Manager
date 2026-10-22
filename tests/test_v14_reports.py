@@ -31,7 +31,7 @@ def test_measurement_reports_redact_paths_escape_html_and_flag_unknown_condition
 def test_comparison_requires_same_capture_conditions(db):
     svc = BenchmarkService(db, None)
     meta = {'gpu': 'RTX 5090', 'driver': '617.42', 'resolution': '3840x2160',
-        'neural_config': {'capture_conditions': {'game_version':'1', 'workload':'scene A', 'settings':'High'}}}
+        'neural_config': {'measurement': {'reliable': True}, 'attribution': {'confirmed': True}, 'capture_conditions': {'game_version':'1', 'workload':'scene A', 'settings':'High', 'dlss_mode':'Quality', 'frame_generation':'Off', 'renderer':'d3d12', 'scene_type':'gameplay'}}}
     svc.record('game','baseline',[10.0]*100,meta,'fixture',None)
     svc.record('game','experimental',[11.0]*100,meta,'fixture',None)
     sessions = svc.sessions('game')
@@ -93,7 +93,7 @@ def test_comparison_never_invents_vram_and_frame_export_keeps_selected_process(d
     assert metrics['vram_used_mib']['difference'] is None
     assert metrics['avg_fps']['difference'] == -50.0
     assert metrics['avg_fps']['reference_label'] == 'baseline'
-    assert a.stats.median_fps == 100.0 and a.stats.frame_spikes == 0
+    assert a.stats.median_fps is None and a.stats.frame_spikes == 0  # Missing stream identity must not certify a gameplay median.
     output = tmp_path/'frames.csv'; svc.export_frame_csv([sessions[1]], output)
     assert len(output.read_text().splitlines()) == 41
     with pytest.raises(CsvError): svc.import_csv('game', str(path), 'wrong-process', {}, process_name='absent.exe')

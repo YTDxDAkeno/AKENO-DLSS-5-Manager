@@ -211,7 +211,7 @@ def test_v14_dialog_and_benchmark_conditions_remain_accessible(qtbot, experiment
         page = BenchmarkPage(controller, None); qtbot.addWidget(page)
         page.resize(1000, 760); page.show(); qtbot.wait(50)
         assert page.width() == 1000  # German export actions must fit the content area.
-        assert set(page.conditions) == {'game_version', 'workload', 'resolution', 'settings'}
+        assert {'game_version', 'workload', 'resolution', 'settings', 'dlss_mode', 'frame_generation', 'renderer', 'scene_type'} == set(page.conditions)
         assert page._meta(game)['resolution'] is None
         if capture: page.grab().save(str(target / f'benchmark-{language}-fixture.png'))
     finally:

@@ -156,8 +156,8 @@ def evidence_findings(installation: FiveMInstallation, ctx: BackendContext,
     for name in sorted(needed):
         record = ctx.runtime_lookup(name)
         # Existing files are not trusted merely because their names match.
-        expected_trust = "reviewed_community" if community and name == runtimes.NR_RUNTIME else TrustState.VERIFIED.value
-        if not record or record.get("trust") != expected_trust:
+        expected_trust = ("community_experimental", "reviewed_community") if community and name == runtimes.NR_RUNTIME else (TrustState.VERIFIED.value,)
+        if not record or record.get("trust") not in expected_trust:
             block("fivem_runtime_trust", f"Import and verify your legally obtained {name}; proprietary downloads are never performed.")
             continue
         path = Path(record.get("stored_path") or "")

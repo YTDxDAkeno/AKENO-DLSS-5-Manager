@@ -9,6 +9,7 @@ exists only if PresentMon (or an imported CSV) produced frame times.
 from __future__ import annotations
 
 import csv
+from datetime import datetime, timezone
 import html
 import re
 import uuid
@@ -74,7 +75,7 @@ class PresentMonRunner:
         selection = ['--process_id', str(process_id)] if process_id else ['--process_name', process_name]
         return [*selection, "--output_file", str(csv_path), "--timed", str(duration),
                 "--delay", str(delay), "--terminate_after_timed", "--no_console_stats",
-                "--session_name", SESSION_NAME, "--stop_existing_session"]
+                "--session_name", SESSION_NAME, "--stop_existing_session", "--track_frame_type"]
 
     def capture(self, process_name: str, duration: int, delay: int, csv_path: Path,
                 on_status: Callable[[str], None] | None = None, token: CancelToken | None = None, process_id: int | None = None) -> Path:
@@ -148,8 +149,18 @@ class BenchmarkService:
         self.runner = runner
 
     def record(self, game_id: str, label: str, frametimes: list[float], meta: dict[str, Any],
-               source: str, csv_path: str | None) -> BenchmarkSession:
+               source: str, csv_path: str | None, parsed=None) -> BenchmarkSession:
         stats = st.compute(frametimes)
+        if parsed is not None:
+            measurement = dict(parsed.quality, column=parsed.column,
+                stutter_method='Frames above max(2x median, median+8ms, 33.33ms); adjacent spikes form one episode.')
+            meta = dict(meta, neural_config=dict(meta.get('neural_config') or {}, measurement=measurement))
+            if not parsed.quality.get('reliable'):
+                stats.median_fps = None
+            stats.application_rendered_fps = stats.avg_fps if parsed.quality.get('rendered_fps_available') else None
+            display = parsed.displayed_frametimes_ms
+            stats.displayed_fps = round(len(display)*1000/sum(display),2) if display else None
+            stats.generated_frame_share = parsed.quality.get('generated_frame_share')
         session = BenchmarkSession(id=None, game_id=game_id, label=label, started_at=meta.get("started_at", now_iso()),
                                    stats=stats, gpu=meta.get("gpu"), driver=meta.get("driver"),
                                    resolution=meta.get("resolution"), backend_id=meta.get("backend_id"),
@@ -162,13 +173,15 @@ class BenchmarkService:
         return session
 
     def run(self, game_id: str, process_name: str, label: str, meta: dict[str, Any], duration: int, delay: int,
-            on_status=None, token=None, process_id=None, sensor_sampler=None) -> BenchmarkSession:
+            on_status=None, token=None, process_id=None, sensor_sampler=None, context_provider=None, swapchain=None) -> BenchmarkSession:
         if self.runner is None:
             raise BenchmarkError("PresentMon is not configured.")
         safe_game = re.sub(r'[^A-Za-z0-9_-]', '_', game_id)[:80]
         safe_label = re.sub(r'[^A-Za-z0-9_-]', '_', label)[:40]
         out = benchmarks_dir() / f"{safe_game}-{safe_label}-{uuid.uuid4().hex}.csv"
         meta = dict(meta, started_at=now_iso(), process_name=process_name)
+        attribution = context_provider() if context_provider else {'confirmed': False}
+        attribution = dict(attribution, capture_started_at=meta['started_at'])
         kwargs = {'process_id': process_id} if process_id is not None else {}
         stopped = threading.Event()
         samples = []
@@ -191,19 +204,28 @@ class BenchmarkService:
                 sampler.join(timeout=4)
         if samples:
             meta = dict(meta, neural_config=dict(meta.get('neural_config') or {}, sensor_samples=list(samples)))
-        parsed = st.parse_presentmon_csv(out.read_text(encoding="utf-8", errors="replace"), process_name)
+        end_context = context_provider() if context_provider else None
+        attribution['capture_ended_at'] = now_iso()
+        attribution['end_configuration_matches'] = bool(end_context and
+            {k:v for k,v in attribution.items() if k not in ('capture_started_at','capture_ended_at','end_configuration_matches')} == end_context)
+        meta = dict(meta, neural_config=dict(meta.get('neural_config') or {}, attribution=attribution))
+        parsed = st.parse_presentmon_csv(out.read_text(encoding="utf-8", errors="replace"), process_name, process_id, swapchain)
         if len(parsed.frametimes_ms) < 30:
             raise BenchmarkError("Too few frames were captured. Keep the game in the foreground while measuring.")
-        return self.record(game_id, label, parsed.frametimes_ms, meta, "presentmon", str(out))
+        return self.record(game_id, label, parsed.frametimes_ms, meta, "presentmon", str(out), parsed)
 
     def import_csv(self, game_id: str, path: str, label: str, meta: dict[str, Any],
-                   process_name: str | None = None) -> BenchmarkSession:
+                   process_name: str | None = None, swapchain=None) -> BenchmarkSession:
+        if Path(path).stat().st_size > 256 * 1024 * 1024:
+            raise st.CsvError('CSV exceeds the 256-MiB import limit.')
         text = Path(path).read_text(encoding="utf-8", errors="replace")
-        parsed = st.parse_presentmon_csv(text, process_name)
+        parsed = st.parse_presentmon_csv(text, process_name, swapchain=swapchain)
         if len(parsed.frametimes_ms) < 30:
             raise st.CsvError("The CSV contains fewer than 30 usable frames.")
-        return self.record(game_id, label, parsed.frametimes_ms, dict(meta, process_name=", ".join(parsed.process_names)),
-                           "csv-import", path)
+        return self.record(game_id, label, parsed.frametimes_ms, dict(meta, backend_id=None, process_name=", ".join(parsed.process_names),
+                neural_config={'capture_conditions': (meta.get('neural_config') or {}).get('capture_conditions', {}),
+                    'attribution': {'confirmed': False, 'reason': 'Imported CSV has no verified capture-time installation context.'}}),
+                           "csv-import", path, parsed)
 
     def rotate_automatic(self, max_sessions=100, max_bytes=100 * 1024 * 1024):
         """Bound only AKENO automatic captures; never delete imported user CSVs."""
@@ -221,6 +243,41 @@ class BenchmarkService:
 
     def sessions(self, game_id: str | None = None) -> list[dict[str, Any]]:
         return self.db.benchmarks(game_id)
+
+    @staticmethod
+    def attributed_groups(sessions, transaction, observation_id=None):
+        groups = {'current_installation': [], 'current_session': [], 'historical_installations': [],
+            'baseline': [], 'unconfirmed': []}
+        def timestamp(value):
+            try:
+                parsed = datetime.fromisoformat(value.replace('Z','+00:00'))
+                return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed
+            except (ValueError, TypeError, AttributeError): return None
+        boundary = timestamp(transaction['created_at']) if transaction else None
+        for session in sessions:
+            attribution = session.get('neural_config', {}).get('attribution', {})
+            start = timestamp(attribution.get('capture_started_at'))
+            end = timestamp(attribution.get('capture_ended_at'))
+            process = attribution.get('process') or {}
+            confirmed = bool(attribution.get('confirmed') and attribution.get('end_configuration_matches')
+                and attribution.get('observation_id') and process.get('pid') and process.get('created_at')
+                and process.get('executable_sha256') and start and end and end >= start)
+            if session.get('label') == 'baseline':
+                groups['baseline'].append(session); continue
+            current = bool(confirmed and transaction and attribution.get('transaction_id') == transaction['id']
+                and attribution.get('runtime_sha256') == transaction['params'].get('_community_runtime')
+                and attribution.get('package_id') == transaction.get('package_id')
+                and attribution.get('package_version') == transaction.get('package_version')
+                and attribution.get('backend_id') == transaction['backend_id'] and boundary and start >= boundary)
+            if current:
+                groups['current_installation'].append(session)
+                if observation_id and attribution.get('observation_id') == observation_id:
+                    groups['current_session'].append(session)
+            elif (confirmed and attribution.get('transaction_id')) or (boundary and timestamp(session.get('started_at')) and timestamp(session.get('started_at')) < boundary):
+                groups['historical_installations'].append(session)
+            else:
+                groups['unconfirmed'].append(session)
+        return groups
 
     @staticmethod
     def stats_of(session: dict[str, Any]) -> FrameStats:
@@ -244,6 +301,17 @@ class BenchmarkService:
         for key in ('game_version', 'workload', 'settings'):
             if not ac.get(key) or not bc.get(key) or ac[key] != bc[key]:
                 out.append('uncontrolled: different or unknown ' + key)
+        for session in (a,b):
+            measurement = session.get('neural_config', {}).get('measurement', {})
+            if not measurement.get('reliable'):
+                out.append('uncontrolled: unvalidated frame stream (' + session.get('label','') + ')')
+            if session.get('label') != 'baseline' and not session.get('neural_config', {}).get('attribution', {}).get('confirmed'):
+                out.append('uncontrolled: installation attribution is unconfirmed')
+        for key in ('dlss_mode', 'frame_generation', 'renderer', 'scene_type'):
+            if not ac.get(key) or not bc.get(key) or ac[key] != bc[key]:
+                out.append('uncontrolled: different or unknown ' + key)
+        if ac.get('scene_type','').casefold() in ('menu','loading') or bc.get('scene_type','').casefold() in ('menu','loading'):
+            out.append('menu/loading capture: not a gameplay performance conclusion')
         if abs((a["stats"]["duration_s"]) - (b["stats"]["duration_s"])) > max(a["stats"]["duration_s"], 1) * 0.5:
             out.append("very different capture durations")
         return out
@@ -282,6 +350,7 @@ class BenchmarkService:
 
     def export_html(self, sessions, path):
         from akeno.diagnostics.privacy import redact
+        sessions = redact(sessions)
         rows = []
         for session in sessions:
             stats = session['stats']
@@ -325,6 +394,8 @@ class BenchmarkService:
             return []
         try:
             return st.parse_presentmon_csv(Path(p).read_text(encoding="utf-8", errors="replace"),
-                                           session.get("process_name")).frametimes_ms
+                                           session.get("process_name"),
+                                           process_id=(session.get('neural_config', {}).get('measurement', {}).get('selected_stream') or {}).get('pid') or None,
+                                           swapchain=(session.get('neural_config', {}).get('measurement', {}).get('selected_stream') or {}).get('swapchain') or None).frametimes_ms
         except st.CsvError:
             return []

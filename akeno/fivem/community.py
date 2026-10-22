@@ -16,7 +16,7 @@ def verify_runtime(path, record, recipe, inspector, gpu):
     expected = dict(recipe.runtime_hashes).get('nvngx_dlssnr.dll')
     if not candidate or expected != candidate.sha256 or not inspector or not record or not gpu:
         raise ValueError("A named, pinned Bandukids runtime and independent review inspection are required")
-    if record.get('trust') != Category.COMMUNITY.value or not isinstance(record.get('review'), dict):
+    if record.get('trust') not in (Category.COMMUNITY.value, 'reviewed_community') or not isinstance(record.get('review'), dict):
         raise ValueError("A completed separate community runtime review is required")
     review = record['review']
     if (review.get('schema') != 2 or review.get('candidate_id') != candidate.id

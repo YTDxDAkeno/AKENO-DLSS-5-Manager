@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass
 import hashlib
 import json
 import re
+import time
+import threading
 from pathlib import Path
 
 from akeno.backends import runtimes
@@ -48,6 +50,9 @@ class CommunityService:
         self.runtimes = manager or RuntimeManager(services.db)
         self.observations = {}
         self.seen_live = set()
+        self.sessions = {}
+        self.session_history = {}
+        self._monitor_lock = threading.RLock()
 
     def _game(self, game_id):
         game = self.s.library.reanalyze(game_id)
@@ -217,46 +222,130 @@ class CommunityService:
         return result
 
     def observe(self, game_id):
+        # One full verification at this explicit session boundary. Polls use cached game/file identities.
         game = self._game(game_id)
         tx = self.s.installer.active_install(game.id)
         if not tx or not tx["backend_id"].startswith("community:"):
             raise PermissionError(msg("Install an experimental plan before starting its observation."))
-        names = [f["rel_path"] for f in self.s.db.tx_files(tx["id"]) if f["action"] != "rename_away"]
-        self.seen_live.discard(game_id)
-        self.observations[game_id] = neural.begin(game.id, game.target_dir, game.exe_path, names)
+        files = [f for f in self.s.db.tx_files(tx['id']) if f['action'] != 'rename_away']
+        expected = {f['rel_path']: f['installed_sha256'] for f in files}
+        observation = neural.begin(game.id, game.target_dir, game.exe_path, list(expected), expected)
+        from akeno.diagnostics.session import VerificationSession
+        with self._monitor_lock:
+            previous = self.sessions.get(game_id)
+            if previous:
+                self.session_history.setdefault(game_id, []).append(previous.summary())
+                self.session_history[game_id] = self.session_history[game_id][-10:]
+            live = processes.processes_in_dir(game.install_dir)
+            exact = [p for p in live if p.path and str(Path(p.path).resolve()) == observation.executable]
+            self.sessions[game_id] = VerificationSession(observation, tx, bool(exact))
+            self.observations[game_id] = observation
+            self.seen_live.discard(game_id)
         return self.report(game_id)
 
-    def report(self, game_id):
-        game = self._game(game_id)
-        observation = self.observations.get(game_id)
-        live = [p.path for p in processes.processes_in_dir(game.install_dir) if p.path]
-        evidence = neural.inspect(game.target_dir, observation, game.id, live)
-        exact_live = bool(game.exe_path and str(Path(game.exe_path).resolve()) in {str(Path(p).resolve()) for p in live})
-        if exact_live:
-            self.seen_live.add(game.id)
-        stability = "process_observed" if exact_live else ("process_exit_observed" if game.id in self.seen_live else "not_observed")
-        sessions = self.s.benchmarks.sessions(game.id)
-        tx = self.s.installer.active_install(game.id)
-        report = {"game": game.to_dict(), "gpu": self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
-            "driver": self.s.selected_gpu().driver_version if self.s.selected_gpu() else None,
-            "renderer": game.api.value, "transaction": tx, "neural": asdict(evidence),
-            "runtime": self.s.db.get_setting("community-runtime:" + tx["params"].get("_community_runtime", "")) if tx else None,
-            "observation": asdict(observation) if observation else None, "measured_sessions": sessions,
-            "measurement_attribution": "Historical sessions for this game; not automatically matched to this runtime hash or NR state.",
-            "stability": {"state": stability, "crash_verified": False,
-                "errors": [line for line in evidence.lines if line["stage"] == "failed"],
-                "note": "A process exit alone is not a crash; no stability duration or VRAM measurement is inferred."},
-            "limitations": ["User offline attestation is not live session detection.",
-                "Log attribution is not cryptographic GPU execution proof.",
-                "No absence of errors, file install, SR or FG success proves neural evaluation."]}
+    def stop_observation(self, game_id):
+        with self._monitor_lock:
+            session = self.sessions.get(game_id)
+            if session and not session.ended:
+                session.state = 'stopped'; session.ended = True
+        return self.report(game_id)
 
+    def capture_context(self, game_id, pid=None):
+        """Snapshot only what is known at capture time, never retrofit it to old CSVs."""
+        game = self.s.library.get(game_id)
+        tx = self.s.installer.active_install(game_id)
+        session = self.sessions.get(game_id)
+        identity = session.process if session and not session.ended else None
+        unchanged = False
+        if session:
+            try:
+                unchanged = all(neural.identity(name) == expected for name, expected in session.observation.file_identities)
+                if identity and processes.creation_identity(identity['pid']) != identity['created_at']:
+                    identity = None
+            except (OSError, ValueError): pass
+        if pid is not None and (not identity or identity['pid'] != pid):
+            identity = None
+        return {'game_id': game_id, 'transaction_id': tx['id'] if tx else None,
+            'transaction_created_at': tx['created_at'] if tx else None,
+            'runtime_sha256': tx['params'].get('_community_runtime') if tx else None,
+            'backend_id': tx['backend_id'] if tx else None,
+            'package_id': tx.get('package_id') if tx else None,
+            'package_version': tx.get('package_version') if tx else None,
+            'observation_id': session.id if session and not session.ended else None,
+            'process': identity, 'renderer': game.api.value if game else None,
+            'confirmed': bool(session and identity and identity.get('created_at') and not session.ended
+                and unchanged and session.monitor.stale is None and tx and session.transaction['id'] == tx['id'])}
+
+    def report(self, game_id):
+        started = time.perf_counter()
+        with self._monitor_lock:
+            return self._report_locked(game_id, started)
+
+    def _report_locked(self, game_id, started):
+        # Deliberately do not call reanalyze(): no PE parsing, library walk or runtime hashing per tick.
+        game = self.s.library.get(game_id)
+        if game is None:
+            raise PermissionError(msg("Select an existing analyzed game."))
+        tx = self.s.installer.active_install(game.id)
+        observation = self.observations.get(game_id)
+        session = self.sessions.get(game_id)
+        live = processes.processes_in_dir(game.install_dir) if not session or not session.ended else []
+        if session:
+            evidence = session.poll(live, tx) or neural.NeuralEvidence('stale', detail='Installation changed.')
+        else:
+            evidence = neural.inspect(game.target_dir)
+        exact_live = bool(session and session.process and not session.ended) if session else any(p.path and str(Path(p.path).resolve()) == str(Path(game.exe_path).resolve()) for p in live)
+        if exact_live: self.seen_live.add(game.id)
+        stability = 'process_exit_observed' if session and session.state in ('game_exited','game_restarted') else ('process_observed' if exact_live else ('process_exit_observed' if game.id in self.seen_live else 'not_observed'))
+        sessions = self.s.benchmarks.sessions(game.id)
+        groups = self.s.benchmarks.attributed_groups(sessions, tx, session.id if session else None)
+        current_ids = [s['id'] for s in groups['current_installation']]
+        # Diagnostics read only the small effective configuration, never load any binary.
+        config = None
+        cfg = Path(game.target_dir) / 'OptiScaler.ini'
+        try:
+            if cfg.is_file() and not cfg.is_symlink() and cfg.stat().st_size <= 64 * 1024:
+                config = cfg.read_text(encoding='utf-8-sig', errors='replace')
+        except OSError:
+            pass
+        report = {'game': dict(game.to_dict(), is_running=exact_live),
+            'gpu': self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
+            'driver': self.s.selected_gpu().driver_version if self.s.selected_gpu() else None,
+            'renderer': game.api.value, 'transaction': tx, 'neural': asdict(evidence),
+            'runtime': self.s.db.get_setting('community-runtime:' + tx['params'].get('_community_runtime','')) if tx else None,
+            'observation': asdict(observation) if observation else None,
+            'session': session.summary() if session else {'state':'ready', 'monitoring_active':False},
+            'historical_observations': self.session_history.get(game_id, []),
+            'measured_sessions': groups['current_installation'], 'benchmark_groups': groups,
+            'current_session_benchmark_ids': [s['id'] for s in groups['current_session']],
+            'current_installation_benchmark_ids': current_ids,
+            'benchmark_status': 'Current installation measurements available.' if current_ids else 'No benchmark has been captured for the current installation.',
+            'measurement_attribution': 'Historical benchmarks are not automatically matched to the current installation; baseline and unconfirmed captures are separated.',
+            'installed_files': [{'name': n, 'sha256': h, 'verification': 'fully hashed at session start; metadata watched thereafter'} for n,h in observation.artifacts] if observation else [],
+            'backend_configuration': config,
+            'expected_proxy': next((n for n,h in observation.artifacts if n.lower() in ('winmm.dll','dxgi.dll','version.dll','optiscaler.asi')), None) if observation else None,
+            'missing_events': [k for k,v in evidence.stages.items() if not v],
+            'stability': {'state': stability, 'crash_verified': False,
+                'errors': [line for line in evidence.lines if line['stage'] == 'failed'],
+                'note': 'A process exit is not a verified crash.'},
+            'monitoring_overhead': dict(evidence.overhead, report_ms=round((time.perf_counter()-started)*1000,3)),
+            'limitations': ['Cached metadata checks are not fresh cryptographic verification.',
+                'No actual GPU execution is inferred from installed files or FPS.',
+                'Read-only module enumeration can be unavailable due to process permissions.',
+                'Skynizz OptiScaler 1.3.0 default DX12 success path does not emit an explicit per-frame evaluation success log; absence of a recognized success event is inconclusive.']}
         if observation:
-            from akeno.diagnostics.privacy import redact
+            from akeno.diagnostics.support import safe_report
             from akeno.paths import sub
-            folder = sub('reports')
-            destination = folder / ('experiment-' + digest(game.id)[:16] + '.json')
-            public = redact(dict(report, measured_sessions=report['measured_sessions'][:100]))
-            temporary = destination.with_suffix('.tmp')
-            temporary.write_text(json.dumps(public, indent=2, default=str), encoding='utf-8')
-            temporary.replace(destination)
+            destination = sub('reports') / ('experiment-' + digest(game.id)[:16] + '.json')
+            public = safe_report(report)
+            # Unchanged evidence does not rewrite the report every three seconds.
+            stable = json.loads(json.dumps(public, default=str)); stable.pop('monitoring_overhead', None)
+            stable.get('session', {}).pop('polls', None)
+            stable.get('neural', {}).pop('overhead', None)
+            pin = digest(stable)
+            if getattr(session, '_saved_pin', None) != pin:
+                temporary = destination.with_suffix('.tmp')
+                temporary.write_text(json.dumps(public, indent=2, default=str), encoding='utf-8')
+                temporary.replace(destination)
+                if session: session._saved_pin = pin
         return report
