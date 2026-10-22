@@ -41,6 +41,9 @@ class SelfTestResult:
     neural_evaluations: dict = field(default_factory=dict)
     error_codes: list = field(default_factory=list)
     limitations: list = field(default_factory=list)
+    execution: dict = field(default_factory=dict)
+    phases: dict = field(default_factory=dict)
+    next_action: str = ''
 
 
 def parse_host_result(text,neural_text='',exit_code=None):
@@ -128,7 +131,9 @@ class NeuralSelfTest:
         root=app_home()/'self-tests'/uuid.uuid4().hex;root.mkdir(parents=True)
         result=SelfTestResult(root.name,gpu=gpu.to_dict(),runtime={'sha256':candidate.sha256,'version':candidate.version,'category':candidate.category.value},
                               consumer={'id':'optiscaler_nr','version':opti.version,'host_version':package.version})
-        started=time.monotonic()
+        result.runtime.update(signature=candidate.signature,source=candidate.source,
+            authentication='nvidia_authenticated' if candidate.category==Category.OFFICIAL else 'not_nvidia_authenticated')
+        started=time.monotonic();text='';neural='';authorized_counter={}
         try:
             source=self.s.offline_bundle.backend_archive(package)
             if source is None:
@@ -179,7 +184,8 @@ class NeuralSelfTest:
                         proc.terminate()
                         try:proc.wait(timeout=5)
                         except subprocess.TimeoutExpired:proc.kill();proc.wait(timeout=3)
-            text=self._log(work/'dlss5-feed-host.log')
+                output.seek(0);captured=output.read(4*1024*1024).decode('utf-8',errors='replace')
+            text=self._log(work/'dlss5-feed-host.log')+'\n'+captured
             neural='\n'.join(self._log(p) for p in work.glob('OptiScaler*.log'))
             parsed=parse_host_result(text,neural,proc.returncode)
             for key,value in parsed.items():setattr(result,key,value)
@@ -188,7 +194,11 @@ class NeuralSelfTest:
                 records=[parse_counter(line) for line in neural.splitlines()]
                 valid=[c for c in records if attributed(c,result.process,[diagnostic['build']])]
                 if valid:
-                    latest=max(valid,key=lambda c:c['seq'])
+                    # Reject a reset/decreasing stream rather than selecting a convenient high total.
+                    from akeno.diagnostics.counters import monotonic_records
+                    latest=monotonic_records(valid)
+                    authorized_counter=latest
+
                     result.neural_evaluations={'attempted':latest['eval_attempts'],'successful':latest['eval_success'],'failed':latest['eval_fail'],'observed_lower_bound':True}
                     if latest['eval_fail'] and latest.get('last_error'):result.error_codes=sorted(set(result.error_codes+[latest['last_error']]))
                     result.feature_18_creation='success' if latest['create_success'] else 'not_observed'
@@ -212,14 +222,43 @@ class NeuralSelfTest:
             for name,pin in result.consumer['file_pins'].items():
                 if name=='OptiScaler.ini':continue # legitimate overlay configuration changes are separate
                 if not (work/name).is_file() or sha256_file(work/name)!=pin:raise ValueError('An isolated test binary changed during execution.')
+            from akeno.diagnostics.execution import diagnose,contract
+            from akeno.diagnostics.neural import discover_logs
+            auxiliary='\n'.join(self._log(p)[:256*1024] for p in discover_logs(work))[-4*1024*1024:]
+            health=diagnose(text+'\n'+neural+'\n'+auxiliary)
+            result.error_codes=sorted(set(result.error_codes+health['error_codes']))
+            if health['stability_incidents']:result.status='fail'
+            bound=bool(model_loaded and (not diagnostic or diagnostic_loaded) and result.host_adapter
+                and result.host_adapter['vendor_id']==gpu.vendor_id and result.host_adapter['device_id']==gpu.device_id
+                and result.host_adapter['driver']==gpu.driver_version
+                and (not gpu.luid or result.host_adapter['luid'].casefold()==gpu.luid.casefold()))
+            result.execution=contract(process=result.process,runtime=result.runtime,consumer=result.consumer,gpu=result.gpu,
+                counters=authorized_counter if bound else {},diagnostics=health,duration_s=time.monotonic()-started,
+                shutdown='process_exit_'+str(proc.returncode)+'; NR shutdown result not instrumented',scope='standalone_only',
+                stages={'runtime_loaded':model_loaded,'ngx_initialized':result.ngx_initialization=='success',
+                    'feature_18_created':result.feature_18_creation=='success',
+                    'feature_evaluated':result.status=='pass','evaluations_attributed_to_game':bound and bool(authorized_counter or result.status=='pass')})
             result.completion='completed';result.consumer['exit_code']=proc.returncode
+
             if not result.neural_evaluations:result.limitations.append('300 successful DLAA/SR calls do not prove Feature 18. Stock OptiScaler normal DX12 success may not be logged; use a source-identified diagnostic build for counts.')
         except Exception as error:
             result.completion='cancelled' if isinstance(error,InterruptedError) else ('timeout' if isinstance(error,TimeoutError) else 'setup_or_execution_error')
             result.status='inconclusive';result.limitations.append(str(error))
         finally:
             result.duration_s=round(time.monotonic()-started,3)
+            if not result.execution:
+                from akeno.diagnostics.execution import diagnose,contract
+                result.execution=contract(process=result.process,runtime=result.runtime,consumer=result.consumer,
+                    gpu=result.gpu,diagnostics=diagnose(text+'\n'+neural),duration_s=result.duration_s,scope='standalone_only')
+            result.next_action=result.execution['next_action']
+            result.phases={'super_resolution':{'ngx_initialization':result.ngx_initialization,'evaluations':result.dlss_evaluations},
+                'neural_rendering':result.execution}
             payload=redact(asdict(result));(root/'result.json').write_text(json.dumps(payload,indent=2),encoding='utf-8')
+            # Local report archive contains JSON only: no binaries, source logs or automatic upload.
+            from zipfile import ZipFile,ZIP_DEFLATED
+            with ZipFile(root/'result.zip','w',ZIP_DEFLATED) as package:
+                package.writestr('result.json',json.dumps(payload,indent=2))
+
             self.s.db.set_setting('last_neural_selftest',payload)
             import hashlib
             axes={'device_id':gpu.device_id,'driver':gpu.driver_version,'runtime_sha256':candidate.sha256,

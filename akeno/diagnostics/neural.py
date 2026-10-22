@@ -121,6 +121,7 @@ class NeuralEvidence:
     integrity: str = 'not_checked'
     overhead: dict = field(default_factory=dict)
     counters: dict = field(default_factory=dict)
+    execution: dict = field(default_factory=dict)
 
 
 def begin(game_id, target, executable, artifacts, expected_hashes=None, diagnostic_builds=(), diagnostic_modules=()):
@@ -166,7 +167,7 @@ def classify(line):
             if re.search(r'succeed|success|\bok\b|(?:result|returned)\s*[:=]?\s*0x1\b', low):
                 return 'running'
             return 'evaluation_attempted'
-    if re.search(r'pass \d+ built at|feature\s*18\s*(?:was )?created|neural model \(feature 18\) loaded|dlss-nr \(proxy\): feature created at|dlss-nr vulkan: feature up at', low):
+    if re.search(r'pass \d+ built at|feature\s*18\s*(?:was )?created|dlss-nr \(proxy\): feature created at|dlss-nr vulkan: feature up at', low):
         return 'initialized'
     if re.search(r'creat(?:e|ion|ing).*feature\s*18|feature\s*18.*creat(?:e|ion|ing)', low):
         return 'creation_attempted'
@@ -192,6 +193,8 @@ class NeuralMonitor:
         self.bytes_read = 0
         self.stale = None
         self.counters = {}
+        from akeno.diagnostics.execution import diagnose
+        self.health = diagnose('')
         for name, cursor in observation.cursors:
             self.streams[name] = {'offset': cursor.size, 'identity': cursor.file_identity,
                 'anchor': cursor.prefix_sha256, 'partial': b'', 'state': 'none', 'created': False,
@@ -241,12 +244,23 @@ class NeuralMonitor:
             for raw in (lines if content else []):
                 line = raw.decode('utf-8', errors='replace')[:1000]
                 self.excerpts.append({'file': name, 'line': line})
+                from akeno.diagnostics.execution import diagnose
+                health=diagnose(line)
+                for key in ('secure_loader','feature_18_requirements_query','consumer_fallback'):
+                    if health[key] not in ('not_observed','unknown'):self.health[key]=health[key]
+                for key in ('query_observations','error_codes','stability_incidents','dispatch_observations'):
+                    for item in health[key]:
+                        if item not in self.health[key]:self.health[key].append(item)
+                    self.health[key]=self.health[key][-24:]
+                self.health['dred_observed'] |= health['dred_observed']
+                if health['ngx_evaluate_max_ms'] is not None:self.health['ngx_evaluate_max_ms']=max(self.health['ngx_evaluate_max_ms'] or 0,health['ngx_evaluate_max_ms'])
                 from akeno.diagnostics.counters import parse_counter, attributed
                 counter=parse_counter(line)
+                if 'AKENO_NR_V1 ' in line and counter is None:continue
                 if counter:
                     if not diagnostic_loaded or not attributed(counter,process_identity,o.diagnostic_builds):continue
                     previous=self.counters
-                    if previous and (counter['seq']<=previous['seq'] or any(counter[k]<previous[k] for k in ('create_attempts','create_success','eval_attempts','eval_success','eval_fail'))):continue
+                    if previous and (counter['seq']<=previous['seq'] or any(counter[k]<previous[k] for k in ('create_attempts','create_success','create_fail','eval_attempts','eval_success','eval_fail'))):continue
                     self.counters=counter
                     stream['created']=counter['create_success']>0
                     stream['evaluated']=counter['eval_success']>0
@@ -280,7 +294,7 @@ class NeuralMonitor:
         evaluated = any(s['evaluated'] for s in self.streams.values())
         live = o.executable in {str(Path(p).resolve()) for p in process_paths if p}
         states = [s['state'] for s in self.streams.values()]
-        if 'failed' in states:
+        if self.health['stability_incidents'] or 'failed' in states:
             result.state = 'failed'
         elif o.artifacts and any(s['created'] and s['evaluated'] for s in self.streams.values()) and live and attribution_allowed:
             result.state = 'verified'
@@ -297,6 +311,7 @@ class NeuralMonitor:
         result.counters = dict(self.counters)
         result.lines = list(self.events); result.raw_excerpts = list(self.excerpts)
         result.error_codes = sorted({code for e in self.events if e['stage'] == 'failed' for code in re.findall(r'0x[0-9a-fA-F]+', e['line'])})
+        result.error_codes=sorted(set(result.error_codes+self.health['error_codes']))
         if self.counters.get('eval_fail') and self.counters.get('last_error'):
             result.error_codes=sorted(set(result.error_codes+[self.counters['last_error']]))
         if not result.logs:
@@ -311,6 +326,9 @@ class NeuralMonitor:
         result.overhead = {'poll_ms': round((time.perf_counter()-started)*1000, 3), 'log_bytes_read': read_bytes,
             'total_log_bytes_read': self.bytes_read, 'full_file_hashes_this_poll': 0,
             'integrity_limitation': 'Metadata checks reuse hashes verified at session start; they are not fresh cryptographic verification.'}
+        from akeno.diagnostics.execution import contract
+        result.execution=contract(process=process_identity,stages=dict(result.stages,evaluations_attributed_to_game=bool(live and attribution_allowed and (self.counters or result.state=='verified'))),counters=result.counters,
+            diagnostics=dict(self.health),duration_s=time.time()-o.started_at)
         return result
 
 

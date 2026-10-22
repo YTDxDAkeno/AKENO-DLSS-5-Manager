@@ -46,7 +46,7 @@ def test_fivem_first_test_does_not_require_prior_nr_success(installation, tmp_pa
     p = ServerPolicy('private-server', True, 'operator approval for exact plugin', True, 0, False,
         frozenset({'dlss5_feeder'}), experimental_consent=True)
     report = validation_plan(i, p, rtx(), 'dlss5_feeder', 'https://example.org/documented-fixture-interface', True, True)
-    assert report['first_test_eligible'] and not report['production_approved']
+    assert report['operator_prerequisites_declared'] and not report['first_test_eligible'] and not report['production_approved']
     assert not report['neural_execution_verified']
     before = {str(f): f.read_bytes() for f in root.rglob('*') if f.is_file()}
     kit = write_kit(tmp_path/'isolated-kit', report)

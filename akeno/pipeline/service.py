@@ -53,7 +53,7 @@ class PipelineService:
     def analyze(self,game_id,offline=False,runtime_sha=None):
         game=self.s.library.get(game_id)
         if not game:raise ValueError('Select a game first.')
-        saved=self.s.db.get_setting('community-runtime:'+runtime_sha) if runtime_sha else None
+        saved=self.s.community.runtime_record(runtime_sha) if runtime_sha else None
         runtime=dict(saved or {})
         if saved:runtime.update(sha256=runtime_sha,category=saved.get('category','community_experimental'))
         facts=facts_for(self.s,game,offline,runtime,self._components(runtime))

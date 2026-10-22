@@ -120,9 +120,10 @@ class CommunityRuntimeDialog(QDialog):
             (t("Neural feature evaluation"), t("Not verified")), (t("Current installation attribution"), t("Not verified"))])
         evidence.addWidget(self.evidence_grid)
         self.evidence_output = QPlainTextEdit(); self.evidence_output.setReadOnly(True); evidence.addWidget(self.evidence_output, 1)
-        evidence.addWidget(label(t("Installed → Backend loaded → Neural initialized → Neural evaluated → Attributed working. Installing files alone is not success."), "dim", wrap=True))
+        evidence.addWidget(label(t("Installed → Backend loaded → Feature 18 created → API evaluation succeeded. GPU completion, display contribution and stable gameplay require separate evidence."), "dim", wrap=True))
         actions = QHBoxLayout()
         actions.addWidget(button(t("Start DLSS 5 Verification Session"), "clock", on_click=self.observe))
+        actions.addWidget(button(t("Launch offline game test"), "play", on_click=self.launch_test))
         actions.addWidget(button(t("Check execution evidence"), "search", on_click=self.verify))
         actions.addWidget(button(t("Restore experiment"), "database", on_click=self.restore))
         actions.addWidget(button(t("Export experiment report"), "file", on_click=self.export))
@@ -476,6 +477,8 @@ class CommunityRuntimeDialog(QDialog):
                 (t('NGX initialized'), t('Yes') if stages.get('ngx_initialized') else t('Not verified')),
                 (t('Feature 18 created'), t('Yes') if stages.get('feature_18_created') else t('Not verified')),
                 (t('Successful NR API evaluations'), str(report['neural'].get('counters', {}).get('eval_success', t('Not measured')))),
+                (t('GPU execution completed'), t('Not verified')),
+                (t('Display contribution'), t('Not verified')),
                 (t('Neural feature evaluation'), t('Yes') if stages.get('feature_evaluated') else t('Not verified')),
                 (t('FPS monitoring'), t('Active') if self.capture_busy else (t('Ready') if self.performance.isChecked() and not session.get('ended') else t('Off'))),
                 (t('Current benchmark'), t(report.get('benchmark_status', 'Not verified')))])
@@ -489,7 +492,7 @@ class CommunityRuntimeDialog(QDialog):
             elif state == 'stopped': text = t('Monitoring stopped. The last report is preserved.')
             elif state == 'neural_evaluation_detected':
                 count=report['neural'].get('counters',{}).get('eval_success')
-                text = t('Neural Rendering working — {count} successful API evaluations recorded',count=count) if count is not None else t('Neural Rendering active — evaluation evidence detected')
+                text = t('Feature 18: {count} successful API returns; GPU completion unconfirmed',count=count) if count is not None else t('Feature 18 API evaluation evidence detected; display contribution unconfirmed')
             elif state == 'neural_evaluation_failed': text = t('Neural Rendering reported a failure: {codes}', codes=', '.join(report['neural'].get('error_codes', [])) or t('View diagnostic details'))
             elif state == 'backend_not_detected': text = t('{game} was detected, but OptiScaler Neural Rendering activity was not confirmed. View diagnostic details.', game=self.game.name)
             elif state == 'neural_initialization_pending': text = t('Backend loaded. Waiting for fresh Neural Rendering initialization and evaluation evidence.')
@@ -501,6 +504,18 @@ class CommunityRuntimeDialog(QDialog):
         if session.get('ended'):
             self.monitor.blockSignals(True); self.monitor.setChecked(False); self.monitor.blockSignals(False)
             self.stop_monitor(save=False)
+
+    def launch_test(self):
+        if not self.game:return
+        if not self.offline.isChecked() or not self.consent.isChecked():
+            self.message.setText(t('Confirm an eligible offline test and experimental consent first.'));return
+        if not confirm(self,t('Launch offline game test'),t('Configure offline mode in your game and launcher first. Start process-bound monitoring, then launch this selected game normally?'),ok_text=t('Launch test')):return
+        game_id=self.game.id
+        def done(result):
+            self.report_done(result['report'],True)
+            self.tabs.setCurrentIndex(2)
+            self.monitor.setChecked(True)
+        self.run('launch_test',lambda:self.service.launch_test(game_id,True,True),done)
 
     def observe(self):
         self._request_diagnostics(start=True, manual=True)

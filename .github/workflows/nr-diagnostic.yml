@@ -1,8 +1,8 @@
 name: Source-identified NR diagnostic backend
 on:
   push:
-    branches: [codex/akeno-v1.5-universal-dlss-engine]
-    paths: ['diagnostics/**', 'tools/prepare_nr_diagnostic.py', '.github/workflows/nr-diagnostic.yml']
+    branches: [codex/akeno-v1.5-universal-dlss-engine, codex/akeno-v1.6-playable-nr-fivem]
+    paths: ['diagnostics/**', 'akeno/diagnostics/source_build.py', 'akeno/data/diagnostic_source/**', 'tools/prepare_nr_diagnostic.py', '.github/workflows/nr-diagnostic.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -40,5 +40,7 @@ jobs:
           path: |
             diagnostics/optiscaler/*
             tools/prepare_nr_diagnostic.py
+            akeno/diagnostics/source_build.py
+            akeno/data/diagnostic_source/*
             diagnostic-upstream/AKENO_DIAGNOSTIC_SOURCE.json
             nr-build.log

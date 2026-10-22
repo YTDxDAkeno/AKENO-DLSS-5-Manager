@@ -112,7 +112,7 @@ def runtime_verdict(version: str | None, generation: str | None, data: list[dict
 # -- verification from game logs -----------------------------------------------------------------------
 LOG_FILES = ("OptiScaler.log", "dlss5-feed.log", "ReShade.log", os.path.join("host64", "dlss5-feed-host.log"),
              os.path.join("host64", "ReShade.log"))
-SUCCESS_MARKERS = ("neural model (feature 18) loaded", "inline feature 18 evaluation succeeded", "feature 18 created")
+SUCCESS_MARKERS = ( "inline feature 18 evaluation succeeded", "feature 18 created")
 FAILURE_MARKERS = ("feature 18 create failed", "0xbad00001", "neural model not created",
                    "the driver answered the ngx probe", "not a dlss-nr fork")
 MAX_LOG_BYTES = 8 * 1024 * 1024

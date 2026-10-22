@@ -117,6 +117,15 @@ class FiveMService:
                 "neural": asdict(neural.inspect(target)),
                 "note": "Local inventory is not a redistribution license or proof of neural execution. No files were imported or replaced."}
 
+    def neural_feasibility(self, game, mode='offline_development'):
+        from .neural import inspect_client, assess
+        installation=inspect_installation(game.install_dir)
+        if not installation:raise ValueError('FiveM installation is unavailable.')
+        inspection=inspect_client(installation,live=self.process_reader())
+        gpu=self.services.selected_gpu()
+        inspection['selected_gpu']=gpu.to_dict() if gpu else None
+        return assess(installation,self.policy(game.id),inspection,mode=mode)
+
     def policy(self, game_id: str) -> ServerPolicy:
         value = self.services.db.get_setting("fivem_policy:" + game_id) or {}
         try:

@@ -22,6 +22,7 @@ class VerificationSession:
         self.last_evidence = None
         self.verified = False
         self.polls = 0
+        self.started = time.monotonic()
 
     def poll(self, live, transaction):
         if self.ended:
@@ -67,6 +68,14 @@ class VerificationSession:
         elif self.verified: self.state = 'neural_evaluation_detected'
         elif evidence.stages.get('backend_loaded'): self.state = 'neural_initialization_pending'
         else: self.state = 'backend_not_detected'
+        if evidence.execution:
+            evidence.execution['stages']['runtime_module_loaded']=evidence.stages.get('runtime_loaded',False)
+            evidence.execution['session_duration_s']=round(time.monotonic()-self.started,3)
+            evidence.execution['artifact_sha256']=dict(self.observation.artifacts)
+            evidence.execution['executable_sha256']=self.observation.executable_sha256
+            evidence.execution['consumer']={'diagnostic_builds':list(self.observation.diagnostic_builds),
+                'module_sha256':{name:pin for name,pin in self.observation.artifacts if name in self.observation.diagnostic_modules}}
+            evidence.execution['runtime']={'sha256':dict(self.observation.artifacts).get('nvngx_dlssnr.dll')}
         self.last_evidence = evidence
         return evidence
 

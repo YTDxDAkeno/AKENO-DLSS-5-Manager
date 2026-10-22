@@ -51,7 +51,7 @@ def test_verification_requires_explicit_success_lines(tmp_path):
     _write(tmp_path / "OptiScaler.log", "[info] OptiScaler loaded\n[info] DLSS upscaler created\n")
     assert support.verify_from_logs(str(tmp_path)).state == "none", "an upscaler running is not Neural Rendering"
     _write(tmp_path / "dlss5-feed.log", "NGX calls are routed through OptiScaler DLSS-NR (winmm.dll)\n"
-                                         "neural model (feature 18) loaded\n")
+                                         "feature 18 created\n")
     v = support.verify_from_logs(str(tmp_path))
     assert v.state == "initialized" and v.file == "dlss5-feed.log" and "feature 18" in v.line
 

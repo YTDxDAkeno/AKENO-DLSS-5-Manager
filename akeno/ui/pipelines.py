@@ -36,7 +36,11 @@ class PipelineDialog(QDialog):
         pipeline,selftest,dlls,ab=layouts
         self.routes=QComboBox();self.routes.setAccessibleName(t('Rendering route'));pipeline.addWidget(self.routes)
         actions=QHBoxLayout()
-        for text,fn in [('Analyze pipelines',self.analyze),('Preview installation',self.prepare),('Install with backup',self.install),('Open game verification',self.open_runtime)]:actions.addWidget(button(t(text),on_click=fn))
+        self.preview_button=None;self.install_button=None
+        for text,fn in [('Analyze pipelines',self.analyze),('Preview installation',self.prepare),('Install with backup',self.install),('Open game verification',self.open_runtime)]:
+            item=button(t(text),on_click=fn);actions.addWidget(item)
+            if fn==self.prepare:self.preview_button=item
+            if fn==self.install:self.install_button=item;item.setEnabled(False)
         pipeline.addLayout(actions)
         deps=QHBoxLayout()
         for text,fn in [('Import dependency',self.import_component),('Import private component manifest',self.import_manifest),('Import diagnostic source build',self.import_diagnostic),('Recover interrupted transactions',self.recover)]:deps.addWidget(button(t(text),on_click=fn))
@@ -46,6 +50,7 @@ class PipelineDialog(QDialog):
         pipeline.addWidget(button(t('Show technical details / file preview'),on_click=lambda:self.plan_view.setVisible(not self.plan_view.isVisible())))
         self.plan_view=QPlainTextEdit();self.plan_view.setReadOnly(True);self.plan_view.hide();pipeline.addWidget(self.plan_view,1)
         selftest.addWidget(label(t('This test uses a pinned 64-bit host in an isolated AKENO folder. It changes no game files. A successful standalone test does not prove that a game uses Neural Rendering.'),'dim',wrap=True))
+        selftest.addWidget(button(t('Build optional diagnostic backend locally'),on_click=self.build_diagnostic))
         selftest.addWidget(label(t('Test consumer: OptiScaler NR 1.3.0. Host: Feeder 1.19.0. An imported diagnostic build replaces only the identified consumer.'),'dim',wrap=True))
         test_actions=QHBoxLayout();test_actions.addWidget(button(t('Test Neural Rendering Runtime'),'play',on_click=self.start_selftest));test_actions.addWidget(button(t('Stop'),'stop',on_click=self.cancel));test_actions.addWidget(button(t('Export test result'),'file',on_click=self.export_result));selftest.addLayout(test_actions)
         self.test_status=label(t('Not tested'),'dim',wrap=True);selftest.addWidget(self.test_status)
@@ -82,7 +87,9 @@ class PipelineDialog(QDialog):
     def closed(self,*_):self._closed=True;self.cancel()
     def cancel(self):
         if self.token:self.token.cancel()
-    def invalidate(self,*_):self.prepared=None;self.swap=None;self.revision+=1
+    def invalidate(self,*_):
+        self.prepared=None;self.swap=None;self.revision+=1
+        self.install_button.setEnabled(False)
     def run(self,key,work,done):
         if self.busy or self._closed:return
         self.busy=True;revision=self.revision;self.status.setText(t('Working…'))
@@ -99,7 +106,15 @@ class PipelineDialog(QDialog):
         self.runtime.addItem(t('Select an imported runtime'),None)
         for key,value in self.s.db.all_settings().items():
             if key.startswith('community-runtime:'):
-                pin=key.split(':',1)[1];self.runtime.addItem(f"{value.get('version') or t('Unknown')} · {pin[:16]} · {t('Experimental')}",pin)
+                pin=key.split(':',1)[1]
+                if not isinstance(value,dict):continue
+                trust=t('NVIDIA signature verified') if value.get('category')=='official' else t('Experimental')
+                self.runtime.addItem(f"{value.get('version') or t('Unknown')} · {pin[:16]} · {trust}",pin)
+        official={pin:item for pin,item in self.s.db.get_setting('official_dll_inventory',{}).items()
+            if item.get('name')=='nvngx_dlssnr.dll' and item.get('family')=='neural_rendering' and item.get('trust')=='nvidia_authenticated'}
+        official.update({row['sha256']:row for row in self.s.db.runtimes('nvngx_dlssnr.dll') if row.get('trust')=='verified' and row.get('stored_path')})
+        for pin,item in official.items():
+            if self.runtime.findData(pin)<0:self.runtime.addItem(f"{item.get('version') or t('Unknown')} · {pin[:16]} · {t('NVIDIA signature verified')}",pin)
         index=self.runtime.findData(selected)
         if index>=0:self.runtime.setCurrentIndex(index)
         self.runtime.blockSignals(False)
@@ -121,9 +136,11 @@ class PipelineDialog(QDialog):
         self.run('analyze',lambda:self.s.pipelines.analyze(game_id,offline,pin),done)
     def show_route(self,*_):
         self.prepared=None
+        self.install_button.setEnabled(False)
         if not self.analysis:return
         route=next((r for r in self.analysis['routes'] if r.route_id==self.routes.currentData()),None)
         if not route:return
+        self.preview_button.setEnabled(route.eligible)
         self.summary.setText(t('Ready to preview') if route.eligible else t('Prerequisites are missing or this route is not permitted. Details are listed below.'))
         titles={'permission':t('Confirm an eligible offline test'),'closed':t('Close the game before installing'),
                 'architecture':t('Game architecture matches this route'),'api':t('Selected renderer matches this route'),
@@ -151,13 +168,13 @@ class PipelineDialog(QDialog):
             self.tabs.setCurrentIndex(2);self.status.setText(t('Choose an observed active path and an imported official version.'));return
         gid,route,pin=self.game.id,route,self.runtime.currentData();offline,consent=self.offline.isChecked(),self.consent.isChecked()
         def done(prepared):
-            self.prepared=prepared;self.plan_view.show();self.plan_view.setPlainText('\n'.join(t(x) for x in prepared.plan.summary)+'\n\n'+json.dumps(self.s.pipelines.diff(prepared),indent=2));self.status.setText(t('Preview ready. No game files changed.'))
+            self.prepared=prepared;self.install_button.setEnabled(True);self.plan_view.show();self.plan_view.setPlainText('\n'.join(t(x) for x in prepared.plan.summary)+'\n\n'+json.dumps(self.s.pipelines.diff(prepared),indent=2));self.status.setText(t('Preview ready. No game files changed.'))
         self.run('prepare',lambda:self.s.pipelines.prepare(gid,route,pin,offline,consent),done)
     def install(self):
         if not self.offline.isChecked() or not self.consent.isChecked():self.invalidate();return
         if not self.prepared:self.status.setText(t('Prepare a current installation preview first.'));return
         if not confirm(self,t('Install with backup'),t('Apply the displayed experimental pipeline with verified backups? This does not prove execution.'),ok_text=t('Install')):return
-        prepared=self.prepared;self.prepared=None
+        prepared=self.prepared;self.prepared=None;self.install_button.setEnabled(False)
         self.run('install',lambda:self.s.pipelines.install(prepared),self.install_done)
     def install_done(self,result):self.status.setText('\n'.join(t(x) for x in result.messages));self.ctl.installs_changed.emit();self.invalidate()
     def import_manifest(self):
@@ -193,6 +210,18 @@ class PipelineDialog(QDialog):
                 (root/'manifest.json').write_text(json.dumps({'schema':1,'distribution':'private-local-use','components':[item]}))
                 return self.s.pipelines.components.import_manifest(root/'manifest.json',permitted)
         self.run('component',work,lambda _:self.status.setText(t('Local components imported. Analyze again.')))
+    def build_diagnostic(self):
+        from akeno.diagnostics.localbuild import prerequisites,build
+        req=prerequisites()
+        if not req['ready']:
+            self.test_status.setText(t('Missing local build tools: {tools}',tools=', '.join(req['missing'])));return
+        if not confirm(self,t('Build optional diagnostic backend locally'),t('Download the pinned open-source OptiScaler 1.3.0 sources and compile with your installed Visual Studio tools? No NVIDIA runtime is downloaded and no game files are changed.'),ok_text=t('Build locally')):return
+        self.token=CancelToken();token=self.token
+        def done(result):
+            self.test_output.setPlainText(json.dumps(result,indent=2,ensure_ascii=False))
+            self.test_status.setText(t('Local diagnostic build complete. Import diagnostic-manifest.json to select it.') if result['status']=='built' else t('Local diagnostic build failed or was cancelled. Inspect the recorded build log.'))
+        self.run('localbuild',lambda:build(True,token),done)
+
     def start_selftest(self):
         pin=self.runtime.currentData()
         if not pin or not self.consent.isChecked():self.status.setText(t('Select an imported runtime and confirm experimental consent.'));return
@@ -200,8 +229,10 @@ class PipelineDialog(QDialog):
         self.token=CancelToken();token=self.token
         def done(result):
             self.result=result;self.test_output.setPlainText(json.dumps(result,indent=2,ensure_ascii=False))
-            self.test_status.setText(t('Runtime/consumer self-test successful.') if result['status']=='pass' else t('Runtime self-test: {status}',status=t(result['status'])))
-            self.status.setText(t('Standalone result saved locally; game integration remains separate.'))
+            sr=result.get('dlss_evaluations',{}).get('successful',t('Not measured'))
+            nr=result.get('neural_evaluations',{}).get('successful',t('Not measured'))
+            self.test_status.setText(t('SR successful calls: {sr}. NR successful API returns: {nr}. GPU completion and display contribution: unconfirmed.',sr=sr,nr=nr)+'\n'+t('Runtime self-test: {status}',status=t(result['status'])))
+            self.status.setText(t(result.get('next_action') or 'Standalone result saved locally; game integration remains separate.'))
         self.run('selftest',lambda:self.s.neural_selftest.run(pin,True,token),done)
     def export_result(self):
         if not self.result:return
