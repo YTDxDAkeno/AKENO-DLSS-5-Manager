@@ -24,10 +24,16 @@ from akeno.security.downloads import sha256_file
 
 class Category(str, Enum):
     OFFICIAL = "official"
-    COMMUNITY = "reviewed_community"
+    COMMUNITY = "community_experimental"
     UNKNOWN = "unreviewed"
     ADVANCED = "advanced_local"
     REJECTED = "rejected"
+
+    @classmethod
+    def _missing_(cls, value):
+        if value == 'reviewed_community':
+            return cls.COMMUNITY
+        return None
 
 
 LABELS = {
@@ -134,7 +140,10 @@ class Evaluation:
         d["category"] = self.category.value
         d["trust_label"] = LABELS[self.category]
         d["execution_verified"] = False
-        d["review_scope"] = "User-selected local review; not an AKENO endorsement or malware-free certificate."
+        d['review_scope'] = 'Source/hash identity and local-use consent; no independent security certification.'
+        d['trust_evidence'] = {'known_candidate_hash_match': bool(self.named_candidate),
+            'local_use_permitted': bool(self.review and self.review.get('local_use_permitted')),
+            'independent_security_review_verified': False, 'gpu_game_execution_verified': False}
         return d
 
 
@@ -228,4 +237,4 @@ class RuntimeManager:
         return result
 
     def imported(self) -> list[dict]:
-        return [v for k, v in self.db.all_settings().items() if k.startswith("community-runtime:")]
+        return [dict(v, category=Category(v['category']).value) for k,v in self.db.all_settings().items() if k.startswith('community-runtime:')]

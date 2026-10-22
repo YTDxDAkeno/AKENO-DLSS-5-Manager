@@ -240,6 +240,9 @@ class FrameStats:
     median_fps: float | None = None
     stutter_events_per_minute: float | None = None
     frame_spikes: int | None = None
+    application_rendered_fps: float | None = None
+    displayed_fps: float | None = None
+    generated_frame_share: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

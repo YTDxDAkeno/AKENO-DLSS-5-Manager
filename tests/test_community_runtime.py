@@ -88,7 +88,7 @@ def test_import_requires_consent_and_keeps_official_store_clean(db,nr):
     c=m.import_local(str(nr),reviewed(nr),True)
     assert Path(c.path).read_bytes()==nr.read_bytes()
     assert runtimes.best_runtime(db,runtimes.NR_RUNTIME) is None
-    assert m.imported()[0]['category']=='reviewed_community'
+    assert m.imported()[0]['category']=='community_experimental'
 
 
 def test_import_rejects_source_changed_during_signature_inspection(db,nr):

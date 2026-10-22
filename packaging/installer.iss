@@ -4,7 +4,7 @@
 ; can still be restored with a later AKENO installation.
 
 #ifndef AppVersion
-  #define AppVersion "1.4.0"
+  #define AppVersion "1.4.1"
 #endif
 
 #ifndef SourceDir

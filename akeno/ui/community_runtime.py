@@ -18,6 +18,12 @@ class CommunityRuntimeDialog(QDialog):
     def __init__(self, ctl, parent=None):
         super().__init__(parent)
         self.ctl, self.service = ctl, ctl.s.community
+        self._closing = False
+        self._monitor_epoch = 0
+        self._diagnostic_busy = False
+        self._pending_diagnostic = None
+        self._last_view = None
+        self._last_status = None
         self.game = ctl.s.selected_game()
         self.review = self.evaluation = self.prepared = self.last_report = None
         self.revision = 0
@@ -116,7 +122,7 @@ class CommunityRuntimeDialog(QDialog):
         self.evidence_output = QPlainTextEdit(); self.evidence_output.setReadOnly(True); evidence.addWidget(self.evidence_output, 1)
         evidence.addWidget(label(t("Installed → Backend loaded → Neural initialized → Neural evaluated → Attributed working. Installing files alone is not success."), "dim", wrap=True))
         actions = QHBoxLayout()
-        actions.addWidget(button(t("Start fresh observation"), "clock", on_click=self.observe))
+        actions.addWidget(button(t("Start DLSS 5 Verification Session"), "clock", on_click=self.observe))
         actions.addWidget(button(t("Check execution evidence"), "search", on_click=self.verify))
         actions.addWidget(button(t("Restore experiment"), "database", on_click=self.restore))
         actions.addWidget(button(t("Export experiment report"), "file", on_click=self.export))
@@ -136,56 +142,79 @@ class CommunityRuntimeDialog(QDialog):
         self.monitor = QCheckBox(t("Collect local diagnostics automatically while the game runs"))
         evidence.addWidget(self.monitor)
         self.monitor.toggled.connect(self.toggle_monitor)
+        controls = QHBoxLayout()
+        self.monitor_indicator = StatusPill(t('Monitoring stopped'), 'pending')
+        self.last_checked = label('', 'muted')
+        controls.addWidget(self.monitor_indicator)
+        controls.addWidget(button(t("Export support ZIP"), "file", on_click=self.export_support))
+        controls.addWidget(button(t('Stop monitoring'), 'stop', on_click=lambda: self.stop_monitor()))
+        controls.addWidget(self.last_checked, 1); evidence.addLayout(controls)
+        self.include_excerpts = QCheckBox(t('Include redacted recent log excerpts in support export'))
+        evidence.addWidget(self.include_excerpts)
         self.performance = QCheckBox(t("Start automatic performance monitoring (local PresentMon required)"))
         experiment.addWidget(self.performance)
         self.capture_busy = False
         self.capture_token = None
-        self.finished.connect(lambda _: self.stop_monitor())
+        self.finished.connect(self._closed)
         if self.copies.count() == 2:
             self.copies.setCurrentIndex(1)
         if ctl.s.offline_bundle.errors:
             self.message.setText('\n'.join(ctl.s.offline_bundle.errors))
 
-    def stop_monitor(self):
+    def _closed(self, *_):
+        self._closing = True
+        self._pending_diagnostic = None
+        self.stop_monitor()
+
+    def stop_monitor(self, save=True):
+        self._monitor_epoch += 1
+        self._pending_diagnostic = None
         self.monitor_timer.stop()
+        self.monitor.blockSignals(True); self.monitor.setChecked(False); self.monitor.blockSignals(False)
         if self.capture_token:
             self.capture_token.cancel()
+        if not self._closing:
+            self.monitor_indicator.set(t('Monitoring stopped'), 'pending')
+            if save: self.message.setText(t('Monitoring stopped. The last report is preserved.'))
+        if save and self.game:
+            game_id = self.game.id
+            self.ctl.run('community_stop', lambda: self.service.stop_observation(game_id),
+                lambda report: self.report_done(report, force=True) if not self._closing else None)
 
     def monitor_tick(self):
-        self.verify()
-        if not self.performance.isChecked() or self.capture_busy or not self.game or self.ctl.is_busy("benchmark"):
+        self._request_diagnostics(manual=False)
+        if self._closing or not self.performance.isChecked() or self.capture_busy or not self.game or self.ctl.is_busy('benchmark'):
             return
-        from akeno.core import processes
-        from akeno.security.downloads import CancelToken
-        running = processes.find_by_exe(self.game.exe_path)
-        if len(running) != 1:
+        session = (self.last_report or {}).get('session', {})
+        process = session.get('process')
+        if not process or session.get('ended') or not process.get('created_at'):
             return
         runner = self.ctl.s.benchmarks.runner
         if not runner or not runner.available():
-            self.message.setText(t("Automatic FPS monitoring needs a locally verified PresentMon executable."))
+            # Stable warning; do not repeat a busy notification on every tick.
+            text = t('Automatic FPS monitoring needs a locally verified PresentMon executable.')
+            if self.message.text() != text: self.message.setText(text)
             return
-        self.capture_busy = True
-        self.capture_token = CancelToken()
+        from akeno.security.downloads import CancelToken
+        self.capture_busy = True; self.capture_token = CancelToken()
         game, gpu, token = self.game, self.ctl.s.selected_gpu(), self.capture_token
-        tx = self.ctl.s.installer.active_install(game.id)
+        pid = process['pid']
         def work():
             from akeno.hardware.sensors import sample
             meta = {'gpu': gpu.name if gpu else None, 'driver': gpu.driver_version if gpu else None,
-                'backend_id': tx['backend_id'] if tx else None,
-                'neural_config': {'runtime_sha256': tx['params'].get('_community_runtime') if tx else None,
-                    'backend_configuration': tx['params'] if tx else {},
-                    'sensors_at_capture_start': sample(gpu),
-                    'capture_conditions': {}, 'automatic_monitoring': True}}
-            session = self.ctl.s.benchmarks.run(game.id, Path(game.exe_path).name, 'automatic', meta, 30, 0, token=token, process_id=running[0].pid, sensor_sampler=lambda: sample(gpu))
+                'neural_config': {'capture_conditions': {}, 'automatic_monitoring': True}}
+            result = self.ctl.s.benchmarks.run(game.id, Path(game.exe_path).name, 'automatic', meta, 30, 0,
+                token=token, process_id=pid, sensor_sampler=lambda: sample(gpu),
+                context_provider=lambda: self.service.capture_context(game.id, pid))
             self.ctl.s.benchmarks.rotate_automatic()
-            return session
+            return result
         def done(_):
             self.capture_busy = False
-            self.ctl.benchmarks_changed.emit()
+            if not self._closing: self.ctl.benchmarks_changed.emit()
         def failed(error):
             self.capture_busy = False
-            self.message.setText(str(error))
-        self.ctl.run('community_performance', work, done, failed)
+            if not self._closing and not token.cancelled: self.message.setText(t(str(error)))
+        if not self.ctl.run('community_performance', work, done, failed, silent=True): self.capture_busy = False
 
     def toggle_monitor(self, enabled):
         if enabled:
@@ -194,10 +223,49 @@ class CommunityRuntimeDialog(QDialog):
                 self.monitor.setChecked(False)
                 self.message.setText(t('Install an experimental runtime before enabling automatic monitoring.'))
                 return
-            self.observe()
-            self.monitor_timer.start()
+            self._request_diagnostics(start=True, manual=True)
         else:
             self.stop_monitor()
+
+    def _request_diagnostics(self, start=False, manual=False):
+        if self._closing or not self.game: return
+        if self._diagnostic_busy:
+            # One pending request; a new observation takes precedence over periodic polls.
+            previous = self._pending_diagnostic or (False, False)
+            self._pending_diagnostic = (start or previous[0], manual or previous[1])
+            return
+        self._diagnostic_busy = True
+        if manual: self.message.setText(t('Working…'))
+        game_id = self.game.id
+        epoch = self._monitor_epoch
+        def work():
+            report = self.service.observe(game_id) if start else self.service.report(game_id)
+            if self._closing or epoch != self._monitor_epoch:
+                self.service.stop_observation(game_id)
+            return report
+        def done(report):
+            self._diagnostic_busy = False
+            if self._closing or epoch != self._monitor_epoch: return
+            self.report_done(report, force=manual)
+            if start and not report.get('session', {}).get('ended'):
+                self.monitor.blockSignals(True); self.monitor.setChecked(True); self.monitor.blockSignals(False)
+                self.monitor_indicator.set(t('Monitoring active'), 'ok')
+                self.monitor_timer.start()
+            self._drain_diagnostic()
+        def failed(error):
+            self._diagnostic_busy = False
+            if self._closing or epoch != self._monitor_epoch: return
+            text = t(str(error))
+            if self.message.text() != text: self.message.setText(text)
+            if start: self.monitor.setChecked(False)
+            self._drain_diagnostic()
+        if not self.ctl.run('community_diagnostics', work, done, failed, silent=not manual):
+            self._diagnostic_busy = False
+
+    def _drain_diagnostic(self):
+        pending, self._pending_diagnostic = self._pending_diagnostic, None
+        if pending and not self._closing:
+            QTimer.singleShot(0, lambda: self._request_diagnostics(start=pending[0], manual=pending[1]))
 
     def candidate_changed(self, *_):
         candidate = candidates.by_id(self.candidate_choice.currentData())
@@ -230,8 +298,13 @@ class CommunityRuntimeDialog(QDialog):
         self.invalidate()
 
     def run(self, key, work, done):
-        self.message.setText(t("Working…"))
-        self.ctl.run('community_' + key, work, done, lambda e: self.message.setText(t(str(e))))
+        if self._closing: return
+        def completed(result):
+            if not self._closing: done(result)
+        def failed(error):
+            if not self._closing: self.message.setText(t(str(error)))
+        if self.ctl.run('community_' + key, work, completed, failed):
+            self.message.setText(t('Working…'))
 
     def choose_runtime(self):
         path, _ = QFileDialog.getOpenFileName(self, t("Select local runtime"), "", "Runtime (*.dll *.bin)")
@@ -361,27 +434,72 @@ class CommunityRuntimeDialog(QDialog):
             if result.ok and self.performance.isChecked(): self.monitor.setChecked(True)
         self.run('install', lambda: self.service.install(prepared, offline, consent), done)
 
-    def report_done(self, report):
+    def report_done(self, report, force=False):
+        if self._closing: return
+        from datetime import datetime
         self.last_report = report
-        state = report['neural']['state']
-        self.evidence_output.setPlainText(json.dumps(report, indent=2, ensure_ascii=False, default=str))
+        session = report.get('session', {})
+        state = session.get('state', 'ready')
+        state_labels = {'ready':t('Ready'), 'waiting_for_game':t('Waiting for game'),
+            'backend_not_detected':t('Backend not detected'), 'neural_initialization_pending':t('Neural initialization pending'),
+            'neural_evaluation_detected':t('Neural evaluation detected'), 'neural_evaluation_failed':t('Neural evaluation failed'),
+            'game_exited':t('Game exited'), 'game_restarted':t('Game restarted — start a new session'),
+            'installation_changed':t('Installation changed'), 'integrity_changed':t('Watched file changed'), 'stopped':t('Stopped')}
         stages = report['neural'].get('stages', {})
-        self.evidence_grid.set_rows([(t('Runtime present'), t('Yes') if stages.get('runtime_present') else t('Not verified')),
-            (t('Runtime loaded'), t('Yes') if stages.get('runtime_loaded') else t('Not verified')),
-            (t('NGX initialized'), t('Yes') if stages.get('ngx_initialized') else t('Not verified')),
-            (t('Feature 18 created'), t('Yes') if stages.get('feature_18_created') else t('Not verified')),
-            (t('Neural feature evaluation'), t('Yes') if stages.get('feature_evaluated') else t('Not verified')),
-            (t('Current installation attribution'), t('Verified') if stages.get('evaluations_attributed_to_game') else t('Not verified'))])
-        self.message.setText(t("Neural Rendering active — evaluation evidence detected") if state == 'verified' else
-            t("Runtime installed — execution not yet verified"))
-        if report.get('stability', {}).get('state') == 'process_exit_observed':
-            self.monitor.setChecked(False)
+        status = (state, report['neural']['state'], report['neural'].get('detail'), tuple(report['neural'].get('error_codes', [])))
+        view = json.dumps([session.get('process'), state, stages, report['neural'].get('lines'),
+            report['neural'].get('logs'), report.get('current_session_benchmark_ids'), report.get('benchmark_status'), self.capture_busy, self.performance.isChecked()], sort_keys=True, default=str)
+        # No repaint/scroll reset when only counters or polling durations change.
+        if view != self._last_view:
+            self._last_view = view
+            self.evidence_output.setPlainText(json.dumps(report, indent=2, ensure_ascii=False, default=str))
+            self.evidence_grid.set_rows([
+                (t('Installation'), t('Installed') if report.get('transaction') else t('Not verified')),
+                (t('Game session'), state_labels.get(state, state)),
+                (t('OptiScaler / backend'), t('Yes') if stages.get('backend_loaded') else t('Not verified')),
+                (t('Runtime loaded'), t('Yes') if stages.get('runtime_loaded') else t('Not verified')),
+                (t('NGX initialized'), t('Yes') if stages.get('ngx_initialized') else t('Not verified')),
+                (t('Feature 18 created'), t('Yes') if stages.get('feature_18_created') else t('Not verified')),
+                (t('Neural feature evaluation'), t('Yes') if stages.get('feature_evaluated') else t('Not verified')),
+                (t('FPS monitoring'), t('Active') if self.capture_busy else (t('Ready') if self.performance.isChecked() and not session.get('ended') else t('Off'))),
+                (t('Current benchmark'), t(report.get('benchmark_status', 'Not verified')))])
+        if force or status != self._last_status:
+            self._last_status = status
+            if state == 'waiting_for_game': text = t('DLSS 5 files installed. Waiting for {game} to start.', game=self.game.name)
+            elif state in ('game_exited','game_restarted'):
+                text = t('Game exited. Verification session complete; the last report is preserved.')
+                if not stages.get('evaluations_attributed_to_game'):
+                    text += ' ' + t('No conclusive Neural Rendering evaluation evidence was captured.')
+            elif state == 'stopped': text = t('Monitoring stopped. The last report is preserved.')
+            elif state == 'neural_evaluation_detected': text = t('Neural Rendering active — evaluation evidence detected')
+            elif state == 'neural_evaluation_failed': text = t('Neural Rendering reported a failure: {codes}', codes=', '.join(report['neural'].get('error_codes', [])) or t('View diagnostic details'))
+            elif state == 'backend_not_detected': text = t('{game} was detected, but OptiScaler Neural Rendering activity was not confirmed. View diagnostic details.', game=self.game.name)
+            elif state == 'neural_initialization_pending': text = t('Backend loaded. Waiting for fresh Neural Rendering initialization and evaluation evidence.')
+            else: text = t(report['neural'].get('detail') or 'Runtime installed — execution not yet verified')
+            if session.get('started_after_game_launch'):
+                text += ' ' + t('Monitoring started after game launch. Restart the game to capture initialization if needed.')
+            if self.message.text() != text: self.message.setText(text)
+        self.last_checked.setText(t('Last checked: {time}', time=datetime.now().strftime('%H:%M:%S')))
+        if session.get('ended'):
+            self.monitor.blockSignals(True); self.monitor.setChecked(False); self.monitor.blockSignals(False)
+            self.stop_monitor(save=False)
 
     def observe(self):
-        if self.game: self.run('observe', lambda: self.service.observe(self.game.id), self.report_done)
+        self._request_diagnostics(start=True, manual=True)
 
     def verify(self):
-        if self.game: self.run('verify', lambda: self.service.report(self.game.id), self.report_done)
+        self._request_diagnostics(manual=True)
+
+    def export_support(self):
+        if not self.last_report: return
+        path, _ = QFileDialog.getSaveFileName(self, t('Export support ZIP'), 'akeno-support.zip', 'ZIP (*.zip)')
+        if not path: return
+        include = self.include_excerpts.isChecked()
+        if include and not confirm(self, t('Export support ZIP'), t('Export redacted recent log excerpts? Review the resulting archive before sharing.')): return
+        from akeno.diagnostics.support import export_support_zip
+        report = self.last_report
+        self.run('support_export', lambda: export_support_zip(report, path, include, include),
+            lambda _: self.message.setText(t('Support ZIP saved locally. No files were uploaded.')))
 
     def restore(self):
         if not self.game: return
@@ -394,5 +512,5 @@ class CommunityRuntimeDialog(QDialog):
         if not self.last_report: return
         path, _ = QFileDialog.getSaveFileName(self, t("Export experiment report"), 'akeno-community-report.json', 'JSON (*.json)')
         if path:
-            from akeno.diagnostics.privacy import redact
-            Path(path).write_text(json.dumps(redact(self.last_report), indent=2, ensure_ascii=False, default=str), encoding='utf-8')
+            from akeno.diagnostics.support import safe_report
+            Path(path).write_text(json.dumps(safe_report(self.last_report), indent=2, ensure_ascii=False, default=str), encoding='utf-8')

@@ -59,6 +59,16 @@ class BenchmarkPage(QWidget):
             edit = QLineEdit(); edit.setPlaceholderText(t(title))
             edit.setAccessibleName(t(title)); self.conditions[key] = edit; conditions.addWidget(edit)
         run.body.addLayout(conditions)
+        advanced_conditions = QHBoxLayout()
+        for key, title in [('dlss_mode', 'DLSS mode'), ('frame_generation', 'Frame generation mode'),
+                           ('renderer', 'Renderer'), ('scene_type', 'Scene type: gameplay / menu / loading')]:
+            edit = QLineEdit(); edit.setPlaceholderText(t(title)); edit.setAccessibleName(t(title))
+            self.conditions[key] = edit; advanced_conditions.addWidget(edit)
+        run.body.addLayout(advanced_conditions)
+        stream_row = QHBoxLayout()
+        stream_row.addWidget(label(t('Swapchain selection (optional)'), 'dim'))
+        self.swapchain = QLineEdit(); self.swapchain.setPlaceholderText(t('Exact swapchain address from diagnostic CSV; blank selects dominant stream with warnings'))
+        stream_row.addWidget(self.swapchain, 1); run.body.addLayout(stream_row)
         row2 = QHBoxLayout()
         self.btn_start = button(t("Start Benchmark"), "play", "primary", on_click=self._start)
         self.btn_stop = button(t("Stop"), "stop", on_click=self._stop)
@@ -74,7 +84,7 @@ class BenchmarkPage(QWidget):
         lay.addWidget(run)
         self.sessions_card = Card(t("Sessions"), "chart", theme.BLUE)
         self.table = QTableWidget(0, 9)
-        self.table.setHorizontalHeaderLabels([t("Game"), t("Configuration"), t("Avg FPS"), t("1% low"), t("0.1% low"),
+        self.table.setHorizontalHeaderLabels([t("Game"), t("Configuration"), t("Selected stream FPS"), t("1% low"), t("0.1% low"),
                                               t("Median ms"), t("P99 ms"), t("Source"), t("Date")])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.table.verticalHeader().setVisible(False)
@@ -166,11 +176,22 @@ class BenchmarkPage(QWidget):
                                for i, s in enumerate(sel)])
         rows = []
         for s in sel:
+            measurement = s.get('neural_config', {}).get('measurement', {})
+            warnings = measurement.get('warnings') or ([] if measurement.get('reliable') else ['Legacy/unvalidated frame stream; gameplay performance is not established.'])
+            if warnings: rows.append((t('Measurement limitations'), '; '.join(warnings)))
+            attribution = s.get('neural_config', {}).get('attribution', {})
+            rows.append((t('Capture attribution'), t('Confirmed') if attribution.get('confirmed') and attribution.get('end_configuration_matches') else t('Unconfirmed / historical context')))
             st = s["stats"]
+            for key, title in [('application_rendered_fps', t('Application-rendered FPS')),
+                               ('displayed_fps', t('Displayed FPS')),
+                               ('generated_frame_share', t('Generated-frame share'))]:
+                value = st.get(key)
+                rows.append((title, f"{value*100:.1f}%" if key == 'generated_frame_share' and value is not None else
+                    (f"{value:.2f}" if value is not None else t('Not measured'))))
             rows.append((f"{s['label']} #{s['id']}",
                          t("{f} FPS avg · 1% low {l} · median {m} ms · consistency {c} · {n} frames in {d} s",
                            f=f"{st['avg_fps']:.1f}", l=f"{st['low_1pct_fps']:.1f}", m=f"{st['median_frametime_ms']:.2f}",
-                           c=t(consistency_label(self.s.benchmarks.stats_of(s))), n=st["frames"], d=f"{st['duration_s']:.0f}")))
+                           c=t(consistency_label(self.s.benchmarks.stats_of(s))) if measurement.get('reliable') else t('Unconfirmed'), n=st["frames"], d=f"{st['duration_s']:.0f}")))
             rows.append((t("Recorded with"), " · ".join(x for x in (s.get("gpu"), s.get("driver") and
                                                                       f"{t('driver')} {s.get('driver')}",
                                                                       s.get("resolution"), s.get("backend_id"))
@@ -196,7 +217,7 @@ class BenchmarkPage(QWidget):
         return {"gpu": gpu.name if gpu else None, "driver": gpu.driver_version if gpu else None,
                 "resolution": self.conditions["resolution"].text().strip() or None,
                 "backend_id": active["backend_id"] if active else None,
-                "neural_config": dict(active["params"] if active else {},
+                "neural_config": dict(declared_installation_parameters=active["params"] if active else {},
                     capture_conditions={k: v.text().strip() for k, v in self.conditions.items()})}
 
     def _start(self) -> None:
@@ -238,10 +259,12 @@ class BenchmarkPage(QWidget):
         proc = os.path.basename(game.exe_path)
 
         gpu = self.s.selected_gpu()
+        swapchain = self.swapchain.text().strip() or None
         def work(emit):
             from akeno.hardware.sensors import sample
             self.s.benchmarks.runner.ensure(token=self.token)
-            return self.s.benchmarks.run(game.id, proc, lbl, meta, dur, delay, on_status=emit, token=self.token, process_id=running[0].pid if len(running) == 1 else None, sensor_sampler=lambda: sample(gpu))
+            return self.s.benchmarks.run(game.id, proc, lbl, meta, dur, delay, on_status=emit, token=self.token, process_id=running[0].pid if len(running) == 1 else None, sensor_sampler=lambda: sample(gpu),
+                context_provider=lambda: self.s.community.capture_context(game.id, running[0].pid if len(running) == 1 else None), swapchain=swapchain)
 
         def done(sess):
             self._finish()
@@ -277,7 +300,7 @@ class BenchmarkPage(QWidget):
         lbl = self.label_combo.currentData() or "custom"
         try:
             sess = self.s.benchmarks.import_csv(game.id, path, lbl, self._meta(game),
-                                                os.path.basename(game.exe_path) if game.exe_path else None)
+                                                os.path.basename(game.exe_path) if game.exe_path else None, swapchain=self.swapchain.text().strip() or None)
         except Exception as exc:
             info(self, t("Import PresentMon CSV"), str(exc), error=True)
             return

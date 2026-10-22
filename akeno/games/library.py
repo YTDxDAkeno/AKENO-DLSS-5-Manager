@@ -35,7 +35,13 @@ class GameLibrary:
     def get(self, game_id: str | None) -> Game | None:
         if not game_id:
             return None
-        return next((g for g in self.games() if g.id == game_id), None)
+        rows = self.db.query('SELECT data FROM games WHERE id=?', (game_id,))
+        if not rows: return None
+        try:
+            import json
+            return Game.from_dict(json.loads(rows[0]['data']))
+        except (TypeError, ValueError, KeyError):
+            return None
 
     def manual_dirs(self) -> list[str]:
         return [d["install_dir"] if not d.get("exe_path") else d["exe_path"]
