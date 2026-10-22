@@ -32,7 +32,7 @@ def live(monkeypatch):
     return value
 
 
-def test_large_unchanged_inputs_are_hashed_once_and_idle_logs_never_reread(tmp_path, monkeypatch, record_property):
+def test_large_unchanged_inputs_are_hashed_once_and_idle_logs_never_reread(tmp_path, monkeypatch):
     exe = tmp_path/'Borderlands4.exe'; model = tmp_path/'nvngx_dlssnr.dll'
     for p,size in ((exe,771*1024**2),(model,158*1024**2)):
         with p.open('wb') as out: out.truncate(size)  # sparse inert fixture; never executed
@@ -48,7 +48,8 @@ def test_large_unchanged_inputs_are_hashed_once_and_idle_logs_never_reread(tmp_p
         assert result.overhead['log_bytes_read'] == 0
         assert result.overhead['full_file_hashes_this_poll'] == 0
         assert result.logs[0]['activity'] == 'no_new_content'
-    record_property('idle_poll_ms', (time.perf_counter()-before)*1000/300)
+    measured_ms = (time.perf_counter()-before)*1000/300
+    (tmp_path/'monitor-overhead.json').write_text(json.dumps({'idle_poll_ms':measured_ms,'polls':300,'initial_full_hashes':len(calls),'repeated_full_hashes':0,'idle_log_body_bytes':0}))
     assert calls == [str(model),str(exe)]
     model.write_bytes(b'changed')
     assert monitor.poll().state == 'stale'
@@ -61,10 +62,11 @@ def test_incremental_log_reads_and_no_duplicate_events(tmp_path):
     log=tmp_path/'OptiScaler_123.log'
     log.write_text('DLSS-NR forwarder loaded from fixture\nfeature 18 created\n')
     first=monitor.poll([str(exe)])
+    previous_size = log.stat().st_size
     with log.open('a') as out: out.write('inline feature 18 evaluation succeeded\n')
     second=monitor.poll([str(exe)])
     assert second.state == 'verified' if observation.artifacts else second.stages['feature_evaluated']
-    assert second.overhead['log_bytes_read'] == len('inline feature 18 evaluation succeeded\n')
+    assert second.overhead['log_bytes_read'] == log.stat().st_size - previous_size
     for _ in range(100):
         result=monitor.poll([str(exe)])
         assert result.lines == second.lines
@@ -195,3 +197,42 @@ def test_windows_process_birth_and_module_snapshot_are_read_only():
         assert processes.module_inventory(child.pid,'wrong-birth')['state']=='unavailable'
     finally:
         child.terminate();child.wait(timeout=5)
+
+
+def test_unchanged_log_and_fresh_non_nr_content_are_distinct(tmp_path):
+    exe=tmp_path/'game.exe';exe.write_bytes(b'fixture')
+    log=tmp_path/'OptiScaler.log';log.write_text('historical header\n')
+    monitor=neural.NeuralMonitor(neural.begin('g',tmp_path,exe,[]))
+    assert 'no fresh content' in monitor.poll().detail
+    with log.open('a') as out:out.write('DLSS Super Resolution initialized successfully\n')
+    result=monitor.poll()
+    assert 'Fresh backend log content' in result.detail
+    assert not result.stages['feature_evaluated']
+
+
+def test_sr_module_presence_is_not_nr_model_or_backend_load(installed,live,monkeypatch):
+    s,g,r,root=installed;live.append(ProcessInfo(42,'Game.exe',g.exe_path))
+    monkeypatch.setattr('akeno.core.processes.module_inventory',lambda *a:{'state':'observed','modules':[{'name':'nvngx_dlss.dll','path':str(root/'nvngx_dlss.dll')}], 'detail':'synthetic module snapshot'})
+    report=s.community.observe(g.id)
+    assert not report['neural']['stages']['runtime_loaded']
+    assert not report['neural']['stages']['backend_loaded']
+
+
+def test_partial_success_line_is_not_evaluated_until_complete(tmp_path):
+    exe=tmp_path/'game.exe';exe.write_bytes(b'fixture')
+    monitor=neural.NeuralMonitor(neural.begin('g',tmp_path,exe,[]))
+    log=tmp_path/'OptiScaler.log';log.write_text('feature 18 created\ninline feature 18 evaluation succeeded')
+    assert not monitor.poll().stages['feature_evaluated']
+    with log.open('a') as out:out.write('\n')
+    assert monitor.poll().stages['feature_evaluated']
+
+
+def test_effective_config_can_be_observed_without_relaxing_binary_integrity(installed):
+    s,g,r,root=installed
+    (root/'OptiScaler.ini').write_text('[DlssNr]\nEnabled=false\n[Log]\nLogToFile=false\n')
+    report=s.community.observe(g.id)
+    assert {f['code'] for f in report['diagnostic_findings']}=={'nr_disabled_in_config','backend_file_logging_disabled'}
+    config=next(f for f in report['installed_files'] if f['name']=='OptiScaler.ini')
+    assert not config['matches_installation']
+    (root/'nvngx_dlssnr.dll').write_bytes(b'changed binary')
+    with pytest.raises(ValueError,match='transaction hash'):s.community.observe(g.id)

@@ -31,32 +31,32 @@ class Controller(QObject):
         self.busy: set[str] = set()
 
     # -- helpers -------------------------------------------------------------------------------
-    def _start(self, key: str) -> bool:
+    def _start(self, key: str, silent=False) -> bool:
         if key in self.busy:
             return False
         self.busy.add(key)
-        self.busy_changed.emit(key, True)
+        if not silent: self.busy_changed.emit(key, True)
         return True
 
-    def _end(self, key: str) -> None:
+    def _end(self, key: str, silent=False) -> None:
         self.busy.discard(key)
-        self.busy_changed.emit(key, False)
+        if not silent: self.busy_changed.emit(key, False)
 
     def is_busy(self, key: str) -> bool:
         return key in self.busy
 
-    def run(self, key: str, fn, on_done=None, on_error=None, on_progress=None) -> bool:
-        if not self._start(key):
+    def run(self, key: str, fn, on_done=None, on_error=None, on_progress=None, silent=False) -> bool:
+        if not self._start(key, silent):
             return False
 
         def done(res):
-            self._end(key)
+            self._end(key, silent)
             if on_done:
                 _safe_call(on_done, res)
 
         def err(exc):
-            self._end(key)
-            self.status.emit(f"{exc}")
+            self._end(key, silent)
+            if not silent: self.status.emit(f"{exc}")
             if on_error:
                 _safe_call(on_error, exc)
 

@@ -31,7 +31,7 @@ def test_measurement_reports_redact_paths_escape_html_and_flag_unknown_condition
 def test_comparison_requires_same_capture_conditions(db):
     svc = BenchmarkService(db, None)
     meta = {'gpu': 'RTX 5090', 'driver': '617.42', 'resolution': '3840x2160',
-        'neural_config': {'measurement': {'reliable': True}, 'attribution': {'confirmed': True}, 'capture_conditions': {'game_version':'1', 'workload':'scene A', 'settings':'High', 'dlss_mode':'Quality', 'frame_generation':'Off', 'renderer':'d3d12', 'scene_type':'gameplay'}}}
+        'neural_config': {'measurement': {'reliable': True}, 'attribution': {'confirmed': True, 'end_configuration_matches': True}, 'capture_conditions': {'game_version':'1', 'workload':'scene A', 'settings':'High', 'dlss_mode':'Quality', 'frame_generation':'Off', 'renderer':'d3d12', 'scene_type':'gameplay'}}}
     svc.record('game','baseline',[10.0]*100,meta,'fixture',None)
     svc.record('game','experimental',[11.0]*100,meta,'fixture',None)
     sessions = svc.sessions('game')

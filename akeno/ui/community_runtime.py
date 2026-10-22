@@ -175,6 +175,7 @@ class CommunityRuntimeDialog(QDialog):
             self.capture_token.cancel()
         if not self._closing:
             self.monitor_indicator.set(t('Monitoring stopped'), 'pending')
+            if save: self.message.setText(t('Monitoring stopped. The last report is preserved.'))
         if save and self.game:
             game_id = self.game.id
             self.ctl.run('community_stop', lambda: self.service.stop_observation(game_id),
@@ -212,8 +213,8 @@ class CommunityRuntimeDialog(QDialog):
             if not self._closing: self.ctl.benchmarks_changed.emit()
         def failed(error):
             self.capture_busy = False
-            if not self._closing: self.message.setText(t(str(error)))
-        if not self.ctl.run('community_performance', work, done, failed): self.capture_busy = False
+            if not self._closing and not token.cancelled: self.message.setText(t(str(error)))
+        if not self.ctl.run('community_performance', work, done, failed, silent=True): self.capture_busy = False
 
     def toggle_monitor(self, enabled):
         if enabled:
@@ -258,7 +259,7 @@ class CommunityRuntimeDialog(QDialog):
             if self.message.text() != text: self.message.setText(text)
             if start: self.monitor.setChecked(False)
             self._drain_diagnostic()
-        if not self.ctl.run('community_diagnostics', work, done, failed):
+        if not self.ctl.run('community_diagnostics', work, done, failed, silent=not manual):
             self._diagnostic_busy = False
 
     def _drain_diagnostic(self):
@@ -447,7 +448,7 @@ class CommunityRuntimeDialog(QDialog):
         stages = report['neural'].get('stages', {})
         status = (state, report['neural']['state'], report['neural'].get('detail'), tuple(report['neural'].get('error_codes', [])))
         view = json.dumps([session.get('process'), state, stages, report['neural'].get('lines'),
-            report['neural'].get('logs'), report.get('current_session_benchmark_ids'), report.get('benchmark_status')], sort_keys=True, default=str)
+            report['neural'].get('logs'), report.get('current_session_benchmark_ids'), report.get('benchmark_status'), self.capture_busy, self.performance.isChecked()], sort_keys=True, default=str)
         # No repaint/scroll reset when only counters or polling durations change.
         if view != self._last_view:
             self._last_view = view
@@ -460,6 +461,7 @@ class CommunityRuntimeDialog(QDialog):
                 (t('NGX initialized'), t('Yes') if stages.get('ngx_initialized') else t('Not verified')),
                 (t('Feature 18 created'), t('Yes') if stages.get('feature_18_created') else t('Not verified')),
                 (t('Neural feature evaluation'), t('Yes') if stages.get('feature_evaluated') else t('Not verified')),
+                (t('FPS monitoring'), t('Active') if self.capture_busy else (t('Ready') if self.performance.isChecked() and not session.get('ended') else t('Off'))),
                 (t('Current benchmark'), t(report.get('benchmark_status', 'Not verified')))])
         if force or status != self._last_status:
             self._last_status = status

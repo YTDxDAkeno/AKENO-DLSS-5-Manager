@@ -4,6 +4,7 @@ from akeno.i18n import msg
 
 from dataclasses import asdict, dataclass
 import hashlib
+import configparser
 import json
 import re
 import time
@@ -229,7 +230,10 @@ class CommunityService:
             raise PermissionError(msg("Install an experimental plan before starting its observation."))
         files = [f for f in self.s.db.tx_files(tx['id']) if f['action'] != 'rename_away']
         expected = {f['rel_path']: f['installed_sha256'] for f in files}
-        observation = neural.begin(game.id, game.target_dir, game.exe_path, list(expected), expected)
+        # A game's overlay may legitimately save INI settings. Hash and report the effective config,
+        # but keep binary/marker pins mandatory. Deployment and restore policies are unchanged.
+        binary_pins = {name: pin for name,pin in expected.items() if name.casefold() != 'optiscaler.ini'}
+        observation = neural.begin(game.id, game.target_dir, game.exe_path, list(expected), binary_pins)
         from akeno.diagnostics.session import VerificationSession
         with self._monitor_lock:
             previous = self.sessions.get(game_id)
@@ -239,6 +243,7 @@ class CommunityService:
             live = processes.processes_in_dir(game.install_dir)
             exact = [p for p in live if p.path and str(Path(p.path).resolve()) == observation.executable]
             self.sessions[game_id] = VerificationSession(observation, tx, bool(exact))
+            self.sessions[game_id].installation_hashes = expected
             self.observations[game_id] = observation
             self.seen_live.discard(game_id)
         return self.report(game_id)
@@ -273,6 +278,9 @@ class CommunityService:
             'package_version': tx.get('package_version') if tx else None,
             'observation_id': session.id if session and not session.ended else None,
             'process': identity, 'renderer': game.api.value if game else None,
+            'gpu': self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
+            'effective_backend_settings': getattr(session, 'effective_settings', {}),
+            'artifact_hashes_at_session_start': dict(session.observation.artifacts) if session else {},
             'confirmed': bool(session and identity and identity.get('created_at') and not session.ended
                 and unchanged and session.monitor.stale is None and tx and session.transaction['id'] == tx['id'])}
 
@@ -308,11 +316,30 @@ class CommunityService:
                 config = cfg.read_text(encoding='utf-8-sig', errors='replace')
         except OSError:
             pass
+        findings, effective = [], {}
+        if config is not None:
+            try:
+                parsed = configparser.ConfigParser(interpolation=None, strict=False)
+                parsed.read_string(config)
+                for section, key in (('DlssNr','Enabled'), ('DlssNr','PreSr'), ('Upscalers','Dx12Upscaler'), ('Log','LogToFile'), ('Log','LogFileName')):
+                    if parsed.has_option(section,key): effective[section+'.'+key] = parsed.get(section,key)
+                if effective.get('DlssNr.Enabled','').casefold() in ('false','0','no'):
+                    findings.append({'code':'nr_disabled_in_config', 'detail':'The effective [DlssNr] Enabled value is false; no NR evaluation is expected.'})
+                if effective.get('Log.LogToFile','').casefold() in ('false','0','no'):
+                    findings.append({'code':'backend_file_logging_disabled', 'detail':'The effective configuration disables file logging; log-based verification may be unavailable.'})
+            except configparser.Error as error:
+                findings.append({'code':'configuration_parse_error','detail':str(error)})
+        if session: session.effective_settings = effective
+        runtime_record = self.s.db.get_setting('community-runtime:' + tx['params'].get('_community_runtime','')) if tx else None
+        if runtime_record and runtime_record.get('category') == 'reviewed_community':
+            runtime_record = dict(runtime_record, category=Category.COMMUNITY.value,
+                review_scope='Legacy source/consent record; no independent security certification.',
+                independent_security_review_verified=False)
         report = {'game': dict(game.to_dict(), is_running=exact_live),
             'gpu': self.s.selected_gpu().to_dict() if self.s.selected_gpu() else None,
             'driver': self.s.selected_gpu().driver_version if self.s.selected_gpu() else None,
             'renderer': game.api.value, 'transaction': tx, 'neural': asdict(evidence),
-            'runtime': self.s.db.get_setting('community-runtime:' + tx['params'].get('_community_runtime','')) if tx else None,
+            'runtime': runtime_record,
             'observation': asdict(observation) if observation else None,
             'session': session.summary() if session else {'state':'ready', 'monitoring_active':False},
             'historical_observations': self.session_history.get(game_id, []),
@@ -321,14 +348,15 @@ class CommunityService:
             'current_installation_benchmark_ids': current_ids,
             'benchmark_status': 'Current installation measurements available.' if current_ids else 'No benchmark has been captured for the current installation.',
             'measurement_attribution': 'Historical benchmarks are not automatically matched to the current installation; baseline and unconfirmed captures are separated.',
-            'installed_files': [{'name': n, 'sha256': h, 'verification': 'fully hashed at session start; metadata watched thereafter'} for n,h in observation.artifacts] if observation else [],
-            'backend_configuration': config,
+            'installed_files': [{'name': n, 'sha256': h,
+                'matches_installation': h == getattr(session, 'installation_hashes', {}).get(n), 'verification': 'fully hashed at session start; metadata watched thereafter'} for n,h in observation.artifacts] if observation else [],
+            'backend_configuration': config, 'effective_settings': effective, 'diagnostic_findings': findings,
             'expected_proxy': next((n for n,h in observation.artifacts if n.lower() in ('winmm.dll','dxgi.dll','version.dll','optiscaler.asi')), None) if observation else None,
             'missing_events': [k for k,v in evidence.stages.items() if not v],
             'stability': {'state': stability, 'crash_verified': False,
                 'errors': [line for line in evidence.lines if line['stage'] == 'failed'],
                 'note': 'A process exit is not a verified crash.'},
-            'monitoring_overhead': dict(evidence.overhead, report_ms=round((time.perf_counter()-started)*1000,3)),
+            'monitoring_overhead': dict(evidence.overhead, collection_ms=round((time.perf_counter()-started)*1000,3)),
             'limitations': ['Cached metadata checks are not fresh cryptographic verification.',
                 'No actual GPU execution is inferred from installed files or FPS.',
                 'Read-only module enumeration can be unavailable due to process permissions.',
@@ -348,4 +376,5 @@ class CommunityService:
                 temporary.write_text(json.dumps(public, indent=2, default=str), encoding='utf-8')
                 temporary.replace(destination)
                 if session: session._saved_pin = pin
+        report['monitoring_overhead']['report_ms'] = round((time.perf_counter()-started)*1000,3)
         return report

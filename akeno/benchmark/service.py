@@ -209,6 +209,9 @@ class BenchmarkService:
         attribution['end_configuration_matches'] = bool(end_context and
             {k:v for k,v in attribution.items() if k not in ('capture_started_at','capture_ended_at','end_configuration_matches')} == end_context)
         meta = dict(meta, neural_config=dict(meta.get('neural_config') or {}, attribution=attribution))
+        if out.stat().st_size > 256 * 1024 * 1024:
+            out.unlink()  # Only this capture's own newly created output.
+            raise BenchmarkError('Captured CSV exceeds the bounded 256-MiB capture limit.')
         parsed = st.parse_presentmon_csv(out.read_text(encoding="utf-8", errors="replace"), process_name, process_id, swapchain)
         if len(parsed.frametimes_ms) < 30:
             raise BenchmarkError("Too few frames were captured. Keep the game in the foreground while measuring.")
@@ -242,7 +245,17 @@ class BenchmarkService:
                 self.db.delete_benchmark(session['id'])
 
     def sessions(self, game_id: str | None = None) -> list[dict[str, Any]]:
-        return self.db.benchmarks(game_id)
+        sessions = self.db.benchmarks(game_id)
+        for row in sessions:
+            config = row.get('neural_config') or {}
+            if not config.get('measurement'):
+                raw = dict(row['stats'])
+                row['stats'] = dict(raw, median_fps=None, frame_spikes=None, stutter_events_per_minute=None)
+                row['neural_config'] = dict(config, measurement={
+                    'reliable':False, 'metric_kind':'legacy_unvalidated',
+                    'legacy_raw_statistics':raw,
+                    'warnings':['Historical capture has no validated PID/swapchain/frame-type selection. Original mixed-stream median and stutter counts are not confirmed gameplay measurements.']})
+        return sessions
 
     @staticmethod
     def attributed_groups(sessions, transaction, observation_id=None):
@@ -305,7 +318,7 @@ class BenchmarkService:
             measurement = session.get('neural_config', {}).get('measurement', {})
             if not measurement.get('reliable'):
                 out.append('uncontrolled: unvalidated frame stream (' + session.get('label','') + ')')
-            if session.get('label') != 'baseline' and not session.get('neural_config', {}).get('attribution', {}).get('confirmed'):
+            if session.get('label') != 'baseline' and not (session.get('neural_config', {}).get('attribution', {}).get('confirmed') and session.get('neural_config', {}).get('attribution', {}).get('end_configuration_matches')):
                 out.append('uncontrolled: installation attribution is unconfirmed')
         for key in ('dlss_mode', 'frame_generation', 'renderer', 'scene_type'):
             if not ac.get(key) or not bc.get(key) or ac[key] != bc[key]:

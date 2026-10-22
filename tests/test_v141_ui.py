@@ -51,10 +51,13 @@ def test_hundreds_of_polls_are_silent_coalesced_and_do_not_repaint(qtbot,experim
 def test_diagnostics_status_panel_screenshot_and_exit_preservation(qtbot,experiment,language):
     from akeno.ui import theme
     from PySide6.QtWidgets import QApplication
+    from helpers import rtx
     s,g,r,root=experiment;i18n.set_language(language)
+    s.system.gpus[0] = rtx('NVIDIA GeForce RTX 5090', device=0x2b85, vram_gb=32)
     QApplication.instance().setStyleSheet(theme.stylesheet())
     ctl=Controller(s);dialog=CommunityRuntimeDialog(ctl);qtbot.addWidget(dialog)
     qtbot.waitUntil(lambda:not ctl.busy)
+    dialog.game.name = 'Borderlands 4 (synthetic fixture)'
     dialog.resize(1100,800);dialog.show();dialog.tabs.setCurrentIndex(2)
     data=report();dialog.report_done(data);qtbot.wait(20)
     capture=os.environ.get('AKENO_V14_SCREENSHOTS')
@@ -66,3 +69,28 @@ def test_diagnostics_status_panel_screenshot_and_exit_preservation(qtbot,experim
     assert dialog.last_report is data
     assert not dialog.monitor_timer.isActive()
     dialog.close();i18n.set_language('en')
+
+
+def test_silent_controller_errors_do_not_emit_global_notifications(qtbot,experiment):
+    s,*_=experiment;ctl=Controller(s);notifications=[];busy=[];errors=[]
+    ctl.status.connect(notifications.append);ctl.busy_changed.connect(lambda *args:busy.append(args))
+    def fail():raise ValueError('unchanged background finding')
+    assert ctl.run('diagnostic_fixture',fail,on_error=errors.append,silent=True)
+    qtbot.waitUntil(lambda:bool(errors))
+    assert not notifications and not busy
+    assert not ctl.busy
+
+
+def test_stop_during_start_ignores_late_result_and_clears_busy_message(qtbot,experiment,monkeypatch):
+    from akeno.i18n import t
+    s,*_=experiment;ctl=Controller(s);dialog=CommunityRuntimeDialog(ctl);qtbot.addWidget(dialog)
+    qtbot.waitUntil(lambda:not ctl.busy)
+    jobs=[]
+    monkeypatch.setattr(ctl,'run',lambda key,work,done=None,*args,**kwargs:(jobs.append((key,done)) or True))
+    dialog.observe()
+    callback=jobs[0][1]
+    dialog.stop_monitor()
+    callback(report())
+    assert not dialog.monitor_timer.isActive()
+    assert dialog.message.text()==t('Monitoring stopped. The last report is preserved.')
+    dialog.close()

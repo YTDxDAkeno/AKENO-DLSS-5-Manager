@@ -116,7 +116,7 @@ def begin(game_id, target, executable, artifacts, expected_hashes=None):
         if not p.resolve().is_relative_to(target):
             raise ValueError('Diagnostic artifacts must be inside the selected target.')
         pin = sha256_file(p)
-        if before != identity(p) or (expected_hashes and expected_hashes.get(name) != pin):
+        if before != identity(p) or (expected_hashes is not None and name in expected_hashes and expected_hashes[name] != pin):
             raise ValueError('An installed artifact differs from its transaction hash.')
         pins.append((name, pin)); metadata.append((str(p.resolve()), before))
     exe = Path(executable)
@@ -221,9 +221,6 @@ class NeuralMonitor:
             data = stream['partial'] + content
             lines = data.split(b'\n')
             stream['partial'] = lines.pop()[-8192:] if lines else b''
-            if stream['partial'] and classify(stream['partial'].decode('utf-8', errors='replace')):
-                # Complete last lines without a newline are common; re-evaluate safely on the next append.
-                lines.append(stream['partial'])
             for raw in (lines if content else []):
                 line = raw.decode('utf-8', errors='replace')[:1000]
                 self.excerpts.append({'file': name, 'line': line})
@@ -269,8 +266,10 @@ class NeuralMonitor:
         result.error_codes = sorted({code for e in self.events if e['stage'] == 'failed' for code in re.findall(r'0x[0-9a-fA-F]+', e['line'])})
         if not result.logs:
             result.detail = 'No backend log found in the bounded game/backend log locations.'
+        elif not self.events and all(item['activity'] == 'no_new_content' for item in result.logs):
+            result.detail = 'Existing backend logs have no fresh content since the observation cursor. Launch or restart the game to capture initialization.'
         elif not self.events:
-            result.detail = 'Backend logs exist, but no fresh recognized Neural Rendering events were detected after monitoring started. Launch or restart the game.'
+            result.detail = 'Fresh backend log content was read, but no recognized Neural Rendering events were found. Ordinary SR/FG events do not verify Feature 18.'
         else:
             result.detail = 'Fresh backend log evidence; module presence, initialization and Feature 18 evaluation remain separate.'
         self.bytes_read += read_bytes

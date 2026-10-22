@@ -191,7 +191,7 @@ class BenchmarkPage(QWidget):
             rows.append((f"{s['label']} #{s['id']}",
                          t("{f} FPS avg · 1% low {l} · median {m} ms · consistency {c} · {n} frames in {d} s",
                            f=f"{st['avg_fps']:.1f}", l=f"{st['low_1pct_fps']:.1f}", m=f"{st['median_frametime_ms']:.2f}",
-                           c=t(consistency_label(self.s.benchmarks.stats_of(s))), n=st["frames"], d=f"{st['duration_s']:.0f}")))
+                           c=t(consistency_label(self.s.benchmarks.stats_of(s))) if measurement.get('reliable') else t('Unconfirmed'), n=st["frames"], d=f"{st['duration_s']:.0f}")))
             rows.append((t("Recorded with"), " · ".join(x for x in (s.get("gpu"), s.get("driver") and
                                                                       f"{t('driver')} {s.get('driver')}",
                                                                       s.get("resolution"), s.get("backend_id"))
@@ -217,7 +217,7 @@ class BenchmarkPage(QWidget):
         return {"gpu": gpu.name if gpu else None, "driver": gpu.driver_version if gpu else None,
                 "resolution": self.conditions["resolution"].text().strip() or None,
                 "backend_id": active["backend_id"] if active else None,
-                "neural_config": dict(active["params"] if active else {},
+                "neural_config": dict(declared_installation_parameters=active["params"] if active else {},
                     capture_conditions={k: v.text().strip() for k, v in self.conditions.items()})}
 
     def _start(self) -> None:

@@ -113,3 +113,14 @@ def test_current_installation_and_session_are_separate_from_baseline_and_unknown
     assert [s['id'] for s in groups['current_installation']]==[10,9]
     assert [s['id'] for s in groups['current_session']]==[10]
     assert groups['baseline']==[baseline] and groups['unconfirmed']==[unknown]
+
+
+def test_legacy_metrics_are_not_represented_as_validated_gameplay_and_raw_record_is_preserved(db):
+    service=BenchmarkService(db,None)
+    session=service.record('game','old-measurement',[0.8]*75+[16]*25,{},'fixture',None)
+    raw=db.benchmarks('game')[0]['stats']['median_fps']
+    normalized=service.sessions('game')[0]
+    assert normalized['stats']['median_fps'] is None
+    assert not normalized['neural_config']['measurement']['reliable']
+    assert normalized['neural_config']['measurement']['legacy_raw_statistics']['median_fps']==raw
+    assert db.benchmarks('game')[0]['stats']['median_fps']==raw
