@@ -14,6 +14,18 @@ POLL_LIMIT = 256 * 1024
 MAX_LOGS = 24
 
 
+def log_clock_ns():
+    """Use the Windows filesystem's shared system-clock precision, without a replay tolerance."""
+    import sys
+    if sys.platform!='win32':return time.time_ns()
+    import ctypes
+    from ctypes import wintypes
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    kernel.GetSystemTimeAsFileTime.argtypes=[ctypes.POINTER(wintypes.FILETIME)]
+    stamp=wintypes.FILETIME();kernel.GetSystemTimeAsFileTime(ctypes.byref(stamp))
+    return (((stamp.dwHighDateTime<<32)|stamp.dwLowDateTime)-116444736000000000)*100
+
+
 def identity(path):
     p = Path(path)
     for parent in (p, *p.parents):
@@ -93,6 +105,7 @@ class Observation:
     executable_sha256: str
     file_identities: tuple[tuple[str, tuple], ...] = ()
     diagnostic_builds: tuple[str, ...] = ()
+    log_clock_ns: int = 0
 
 
 @dataclass
@@ -131,7 +144,7 @@ def begin(game_id, target, executable, artifacts, expected_hashes=None, diagnost
         stat = identity(p)
         cursors.append((p.relative_to(target).as_posix(), LogCursor(stat[2], _anchor(p, stat[2]), stat)))
     return Observation(game_id, str(target), str(exe.resolve()), tuple(pins), tuple(cursors),
-        time.time(), exe_hash, tuple(metadata), tuple(diagnostic_builds))
+        time.time(), exe_hash, tuple(metadata), tuple(diagnostic_builds), log_clock_ns())
 
 
 def classify(line):
@@ -202,7 +215,7 @@ class NeuralMonitor:
             stream = self.streams.get(name)
             if stream is None:
                 # Files predating observation but discovered late are historical; skip their old content.
-                offset = info[2] if path.stat().st_mtime < o.started_at else 0
+                offset = info[2] if info[3] < (o.log_clock_ns or int(o.started_at*1_000_000_000)) else 0
                 stream = {'offset': offset, 'identity': info, 'anchor': _anchor(path, offset),
                     'partial': b'', 'state': 'none', 'created': False, 'evaluated': False,
                     'stages': set(), 'baseline': offset}
