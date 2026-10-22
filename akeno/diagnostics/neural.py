@@ -92,6 +92,7 @@ class Observation:
     started_at: float
     executable_sha256: str
     file_identities: tuple[tuple[str, tuple], ...] = ()
+    diagnostic_builds: tuple[str, ...] = ()
 
 
 @dataclass
@@ -105,9 +106,10 @@ class NeuralEvidence:
     error_codes: list[str] = field(default_factory=list)
     integrity: str = 'not_checked'
     overhead: dict = field(default_factory=dict)
+    counters: dict = field(default_factory=dict)
 
 
-def begin(game_id, target, executable, artifacts, expected_hashes=None):
+def begin(game_id, target, executable, artifacts, expected_hashes=None, diagnostic_builds=()):
     target = Path(target).resolve()
     pins, metadata = [], []
     for name in artifacts:
@@ -129,7 +131,7 @@ def begin(game_id, target, executable, artifacts, expected_hashes=None):
         stat = identity(p)
         cursors.append((p.relative_to(target).as_posix(), LogCursor(stat[2], _anchor(p, stat[2]), stat)))
     return Observation(game_id, str(target), str(exe.resolve()), tuple(pins), tuple(cursors),
-        time.time(), exe_hash, tuple(metadata))
+        time.time(), exe_hash, tuple(metadata), tuple(diagnostic_builds))
 
 
 def classify(line):
@@ -175,12 +177,13 @@ class NeuralMonitor:
         self.excerpts = []
         self.bytes_read = 0
         self.stale = None
+        self.counters = {}
         for name, cursor in observation.cursors:
             self.streams[name] = {'offset': cursor.size, 'identity': cursor.file_identity,
                 'anchor': cursor.prefix_sha256, 'partial': b'', 'state': 'none', 'created': False,
                 'evaluated': False, 'stages': set(), 'baseline': cursor.size}
 
-    def poll(self, process_paths=(), attribution_allowed=True):
+    def poll(self, process_paths=(), attribution_allowed=True, process_identity=None, diagnostic_loaded=False):
         started = time.perf_counter()
         o = self.observation
         result = NeuralEvidence(state='installed' if o.artifacts else 'none', integrity='cached_start_hashes_metadata_unchanged')
@@ -224,6 +227,21 @@ class NeuralMonitor:
             for raw in (lines if content else []):
                 line = raw.decode('utf-8', errors='replace')[:1000]
                 self.excerpts.append({'file': name, 'line': line})
+                from akeno.diagnostics.counters import parse_counter, attributed
+                counter=parse_counter(line)
+                if counter:
+                    if not diagnostic_loaded or not attributed(counter,process_identity,o.diagnostic_builds):continue
+                    previous=self.counters
+                    if previous and (counter['seq']<=previous['seq'] or any(counter[k]<previous[k] for k in ('create_attempts','create_success','eval_attempts','eval_success','eval_fail'))):continue
+                    self.counters=counter
+                    stream['created']=counter['create_success']>0
+                    stream['evaluated']=counter['eval_success']>0
+                    stream['stages'].update({'creation_attempted','evaluation_attempted'})
+                    if stream['created']:stream['stages'].add('initialized')
+                    if stream['evaluated']:stream['stages'].add('running')
+                    stream['state']='failed' if counter['eval_fail'] or counter['create_fail'] else ('running' if stream['evaluated'] else 'creation_attempted')
+                    self.events.append({'file':name,'stage':'counter_summary','counter':counter,'line':line})
+                    continue
                 stage = classify(line)
                 if not stage:
                     continue
@@ -262,6 +280,7 @@ class NeuralMonitor:
             'ngx_initialized': 'ngx_initialized' in stages, 'feature_18_creation_attempted': bool(stages & {'creation_attempted','initialized'}),
             'feature_18_created': created, 'frame_evaluation_attempted': bool(stages & {'evaluation_attempted','running'}),
             'feature_evaluated': evaluated, 'evaluations_attributed_to_game': result.state == 'verified'}
+        result.counters = dict(self.counters)
         result.lines = list(self.events); result.raw_excerpts = list(self.excerpts)
         result.error_codes = sorted({code for e in self.events if e['stage'] == 'failed' for code in re.findall(r'0x[0-9a-fA-F]+', e['line'])})
         if not result.logs:

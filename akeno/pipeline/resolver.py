@@ -32,6 +32,8 @@ def resolve(facts):
                     if component.get('architectures'):need('arch:'+role,facts.architecture in component['architectures'],'Component bitness: '+role)
             if recipe.id=='native_optiscaler':need('proxy',facts.proxy is not None,'A free supported proxy with an evidenced game load path is required.')
             if recipe.id=='feeder':
+                need('feeder_api',facts.api=='d3d12','Integrated Feeder + OptiScaler contract currently requires D3D12; other transports need a reviewed recipe.')
+                need('proxy',facts.proxy is not None,'An evidenced separate OptiScaler loader is required.')
                 need('consumer',facts.components.get('selected_consumer') in ('optiscaler_nr','renodx_nr','chicken'),'Select one pinned, integrated NR consumer.')
                 if facts.native_calls is True:warnings.append('Native DLSS inputs are available; a Feeder adds transport and conflict risk.')
             if recipe.id=='legacy_bridge':

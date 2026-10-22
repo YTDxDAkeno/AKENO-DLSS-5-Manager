@@ -1,0 +1,44 @@
+name: Source-identified NR diagnostic backend
+on:
+  push:
+    branches: [codex/akeno-v1.5-universal-dlss-engine]
+    paths: ['diagnostics/**', 'tools/prepare_nr_diagnostic.py', '.github/workflows/nr-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compile:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@v4
+        with:
+          repository: Skynizz/optiscaler-dlss5
+          ref: fc702f8ca22f97b01bd6a02f3386bffb3484fc35
+          path: diagnostic-upstream
+          submodules: recursive
+      - name: Apply only the pinned NR counter source changes
+        run: python tools/prepare_nr_diagnostic.py diagnostic-upstream
+      - uses: microsoft/setup-msbuild@v2
+      - name: Compile source-identified backend (no NVIDIA runtime is run)
+        shell: pwsh
+        run: |
+          msbuild diagnostic-upstream/OptiScaler.sln /m /p:Configuration=Release /p:Platform=x64 /verbosity:minimal /fl /flp:logfile=nr-build.log
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content nr-build.log | Select-String ': error ' | Select-Object -First 12 | ForEach-Object { "::error::$($_.Line)" }
+            throw 'Diagnostic backend compilation failed; no runtime execution is claimed.'
+          }
+      - name: Preserve diagnostic source additions and build record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nr-diagnostic-source-and-build-record
+          path: |
+            diagnostics/optiscaler/*
+            tools/prepare_nr_diagnostic.py
+            diagnostic-upstream/AKENO_DIAGNOSTIC_SOURCE.json
+            nr-build.log

@@ -69,3 +69,36 @@ class ComponentStore:
             regular(p)
             return item if sha256_file(p)==item['sha256'] else None
         except (OSError,ValueError):return None
+
+    def import_diagnostic(self,path,permitted=False):
+        if permitted is not True:raise PermissionError('Explicit local diagnostic build consent is required.')
+        from akeno.paths import resource_dir
+        manifest=Path(path);regular(manifest)
+        if manifest.stat().st_size>1024*1024:raise ValueError('Diagnostic manifest is too large.')
+        data=json.loads(manifest.read_text(encoding='utf-8-sig'))
+        known=json.loads((resource_dir()/'diagnostic_backend.json').read_text())
+        if any(data.get(k)!=known[k] for k in ('schema','build','source_commit','counter_header_sha256')):raise ValueError('Unknown diagnostic source/build identity.')
+        if data.get('license')!='GPL-3.0' or not data.get('corresponding_source'):raise ValueError('Corresponding diagnostic source and GPL license metadata are required.')
+        files=data.get('binary_files',{})
+        if set(files)!={'OptiScaler.dll','nvngx.dll_dlssnr.dll'}:raise ValueError('Diagnostic package must contain only the two expected backend binaries.')
+        copied={}
+        for name,pin in files.items():
+            if not re.fullmatch('[a-fA-F0-9]{64}',pin):raise ValueError('Diagnostic binary hash required.')
+            src=manifest.parent/name;regular(src);info=pe.parse(src,with_version=False)
+            if not info.valid or not info.is_dll or info.machine!='x64' or sha256_file(src)!=pin:raise ValueError('Diagnostic binary hash/PE mismatch.')
+            dest=cache_dir()/'components'/pin/name;dest.parent.mkdir(parents=True,exist_ok=True)
+            if dest.exists() and sha256_file(dest)!=pin:raise ValueError('Changed diagnostic cache.')
+            if not dest.exists():shutil.copyfile(src,dest)
+            if sha256_file(dest)!=pin:raise ValueError('Diagnostic binary changed during import.')
+            copied[name]={'stored_path':str(dest),'sha256':pin}
+        record=dict(data,binary_files=copied,trust='local_source_build_declaration_not_a_security_review')
+        self.db.set_setting('diagnostic_optiscaler',record)
+        return record
+
+    def diagnostic(self):
+        record=self.db.get_setting('diagnostic_optiscaler')
+        if not record:return None
+        for item in record['binary_files'].values():
+            p=Path(item['stored_path']);regular(p)
+            if sha256_file(p)!=item['sha256']:raise ValueError('Changed diagnostic backend binary.')
+        return record

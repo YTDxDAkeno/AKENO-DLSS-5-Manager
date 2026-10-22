@@ -46,7 +46,10 @@ class VerificationSession:
         if selected and time.monotonic() - self.module_checked >= 15:
             self.modules = processes.module_inventory(selected.pid, birth)
             self.module_checked = time.monotonic()
-        evidence = self.monitor.poll([selected.path] if selected else [], attribution_allowed=bool(birth))
+        installed_paths = {str(Path(self.observation.target, n).resolve()) for n, _ in self.observation.artifacts}
+        diagnostic_loaded=any(str(Path(m['path']).resolve()) in installed_paths and m['name'].casefold() not in ('nvngx_dlssnr.dll','nvngx_dlss.dll') for m in self.modules['modules'])
+        evidence = self.monitor.poll([selected.path] if selected else [], attribution_allowed=bool(birth),
+            process_identity=current,diagnostic_loaded=diagnostic_loaded)
         self.polls += 1
         installed_paths = {str(Path(self.observation.target, n).resolve()) for n, _ in self.observation.artifacts}
         loaded = [m['name'] for m in self.modules['modules'] if str(Path(m['path']).resolve()) in installed_paths]

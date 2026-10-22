@@ -84,6 +84,10 @@ class AppServices:
             log.warning("Offline bundle unavailable: %s", exc)
             self.offline_bundle = OfflineBundle(Path(__file__).parent / '_absent_bundle')
             self.offline_bundle.errors.append(str(exc))
+        from akeno.pipeline.service import PipelineService
+        self.pipelines = PipelineService(self)
+        from akeno.diagnostics.selftest import NeuralSelfTest
+        self.neural_selftest = NeuralSelfTest(self)
         self.system: SystemInfo | None = None
         cached = self.db.get_setting("_last_system")
         if cached:
