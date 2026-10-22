@@ -1,3 +1,9 @@
+# Current development status — v1.5
+
+The current branch adds a shared pipeline resolver, controlled native/Feeder plans, official component swaps, isolated self-test, source counter instrumentation, crash recovery, permission-safe performance capture and local A/B reports. **Physical RTX5090/4080/game acceptance remains pending.** RenoDX NR and legacy bridge deployment, programmatic driver overrides and a redistributable diagnostic binary package remain incomplete. See [AKENO_V1_5_IMPLEMENTATION.md](AKENO_V1_5_IMPLEMENTATION.md), [AKENO_V1_5_UPSTREAM_RESEARCH.md](AKENO_V1_5_UPSTREAM_RESEARCH.md) and [AKENO_V1_5_HARDWARE_TESTS.md](AKENO_V1_5_HARDWARE_TESTS.md).
+
+The record below describes earlier versions and is retained as history.
+
 # Project status — v1.3 community runtime integration
 
 v1.3 adds a separate Community Runtime Manager, explicit local review records, four trust categories and controlled offline-only dry-run/install/rollback using existing adapters. No RHI model is pre-approved and no RTX 4080/5090 NR execution has been established here. See COMMUNITY_RUNTIME_PROGRESS.md and COMMUNITY_RUNTIME_GUIDE.md; historic signed-only limitations below remain applicable to the original official/FiveM workflows, not this separate local review path.

@@ -44,7 +44,7 @@ def env(tmp_path, db, monkeypatch):
     svc.system = system_with(rtx("NVIDIA GeForce RTX 5090", device=0x2B85, vram_gb=32))
     svc.deps.verifier = fake_verifier
     game_dir = tmp_path / "games" / "Night City"
-    make_pe(game_dir / "bin" / "x64" / "NightCity.exe", ["d3d12.dll", "kernel32.dll"], pad=50000)
+    make_pe(game_dir / "bin" / "x64" / "NightCity.exe", ["d3d12.dll", "kernel32.dll", "winmm.dll"], pad=50000)
     make_pe(game_dir / "bin" / "x64" / "nvngx_dlss.dll", [], dll=True, version=(310, 2, 1, 0))
     game = svc.library.add_manual(str(game_dir), "Night City")
     driver = tmp_path / "DriverStore" / "nv_dispi.inf_amd64_1"

@@ -59,6 +59,12 @@ class OfflineBundle:
                 self.errors.append(str(exc))
         return records
 
+    def pipeline_manifest(self):
+        if self.distribution!='private-local-use':return None
+        for item in self.entries:
+            if item.get('kind')=='pipeline_manifest':return self.path(item)
+        return None
+
     def tool(self, tool):
         for item in self.entries:
             if item.get('kind') == 'tool' and item.get('id') == tool.id and item.get('sha256') == tool.sha256:

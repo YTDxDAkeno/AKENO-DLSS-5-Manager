@@ -2,7 +2,7 @@
 
 PresentMon reads ETW events, which Windows only allows to administrators and members of the
 "Performance Log Users" group. AKENO first starts PresentMon normally; only if that is refused does it
-ask Windows for elevation (a UAC prompt the user can decline). Results are never simulated: a session
+report the permission failure. Only a separately confirmed manual capture may request elevation. Results are never simulated: a session
 exists only if PresentMon (or an imported CSV) produced frame times.
 """
 
@@ -43,6 +43,8 @@ class PresentMonRunner:
     def __init__(self, tool: Tool, downloads: DownloadManager | None):
         self.tool = tool
         self.downloads = downloads
+        self.permission_error = None
+        self._capture_lock = threading.Lock()
 
     def exe_path(self) -> Path:
         local = tools_dir() / self.tool.file_name
@@ -75,37 +77,66 @@ class PresentMonRunner:
         selection = ['--process_id', str(process_id)] if process_id else ['--process_name', process_name]
         return [*selection, "--output_file", str(csv_path), "--timed", str(duration),
                 "--delay", str(delay), "--terminate_after_timed", "--no_console_stats",
-                "--session_name", SESSION_NAME, "--stop_existing_session", "--track_frame_type"]
+                "--session_name", SESSION_NAME, "--track_frame_type", "--terminate_on_proc_exit"]
+
+    def permission_status(self):
+        from akeno.benchmark.permissions import capture_permission
+        return {'state':'denied', 'detail':self.permission_error} if self.permission_error else capture_permission()
 
     def capture(self, process_name: str, duration: int, delay: int, csv_path: Path,
-                on_status: Callable[[str], None] | None = None, token: CancelToken | None = None, process_id: int | None = None) -> Path:
-        if not is_windows():
-            raise BenchmarkError("PresentMon capture needs Windows.")
-        exe = self.ensure()
-        args = self._args(process_name, csv_path, duration, delay, process_id)
-        say = on_status or (lambda m: None)
-        say("Starting PresentMon…")
-        proc = subprocess.Popen([str(exe), *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                creationflags=0x08000000)  # CREATE_NO_WINDOW
-        t0 = time.time()
-        while proc.poll() is None:
-            if token and token.cancelled:
-                proc.terminate()
-                break
-            time.sleep(0.2)
-        out = proc.stdout.read().decode(errors="replace") if proc.stdout else ""
-        if proc.returncode not in (0, None) and not csv_path.exists() and time.time() - t0 < duration:
-            low = out.lower()
-            if "access" in low or "administrator" in low or "elevat" in low or "permission" in low or proc.returncode == 5:
-                say("PresentMon needs permission to read performance events. Waiting for your approval (UAC)…")
-                self._run_elevated(exe, args, duration + delay + 30, token)
-            else:
-                raise BenchmarkError(f"PresentMon failed (exit code {proc.returncode}): {out.strip()[:400]}")
-        if not csv_path.exists():
-            raise BenchmarkError("PresentMon did not record any frames. Is the game running and rendering?")
+                on_status=None, token=None, process_id=None, allow_elevation=False, process_guard=None) -> Path:
+        if not self._capture_lock.acquire(blocking=False):
+            raise BenchmarkError('Another PresentMon capture is already active.')
+        try:
+            return self._capture(process_name,duration,delay,csv_path,on_status,token,process_id,allow_elevation,process_guard)
+        finally:
+            self._capture_lock.release()
+
+    def _capture(self, process_name, duration, delay, csv_path, on_status, token, process_id, allow_elevation, process_guard):
+        if not is_windows():raise BenchmarkError('PresentMon capture needs Windows.')
+        if token and token.cancelled:raise BenchmarkError('Capture cancelled.')
+        permission=self.permission_status()
+        if permission['state'] in ('denied','permission_required') and not allow_elevation:
+            self.permission_error=permission['detail']
+            raise BenchmarkError('FPS capture unavailable: '+self.permission_error+' Neural log diagnostics can continue.')
+        exe=self.ensure()  # exact tool hash, also before any explicit elevated launch
+        args=self._args(process_name,csv_path,duration,delay,process_id)
+        say=on_status or (lambda message:None)
+        if allow_elevation and permission['state'] in ('denied','permission_required'):
+            say('Starting this explicitly approved elevated capture…')
+            try:self._run_elevated(exe,args,duration+delay+30,token,process_guard)
+            except BenchmarkError as exc:
+                self.permission_error=str(exc);raise
+        else:
+            import tempfile
+            say('Starting PresentMon…')
+            with tempfile.TemporaryFile() as output:
+                proc=subprocess.Popen([str(exe),*args],stdout=output,stderr=subprocess.STDOUT,creationflags=0x08000000)
+                deadline=time.monotonic()+duration+delay+30
+                try:
+                    while proc.poll() is None:
+                        if token and token.cancelled or process_guard and not process_guard():
+                            raise BenchmarkError('Capture stopped: cancelled or selected game process exited.')
+                        if time.monotonic()>deadline:raise BenchmarkError('PresentMon capture timed out.')
+                        time.sleep(0.2)
+                finally:
+                    if proc.poll() is None:
+                        proc.terminate()
+                        try:proc.wait(timeout=3)
+                        except subprocess.TimeoutExpired:proc.kill();proc.wait(timeout=3)
+                output.seek(0);out=output.read(1024*1024).decode(errors='replace')
+            if proc.returncode:
+                low=out.lower()
+                if any(word in low for word in ('access','administrator','elevat','permission')) or proc.returncode==5:
+                    self.permission_error=f'ETW permission refused (exit {proc.returncode}): '+out.strip()[:400]
+                    # No runas fallback here. The user must choose a manual elevated capture.
+                    raise BenchmarkError('FPS capture unavailable: '+self.permission_error)
+                raise BenchmarkError(f'PresentMon failed (exit {proc.returncode}): '+out.strip()[:400])
+        if token and token.cancelled:raise BenchmarkError('Capture cancelled.')
+        if not csv_path.exists():raise BenchmarkError('PresentMon did not record any frames. Is the game running and rendering?')
         return csv_path
 
-    def _run_elevated(self, exe: Path, args: list[str], timeout: int, token: CancelToken | None) -> None:
+    def _run_elevated(self, exe: Path, args: list[str], timeout: int, token: CancelToken | None, process_guard=None) -> None:
         import ctypes
         from ctypes import wintypes
 
@@ -125,28 +156,31 @@ class PresentMonRunner:
             if err == 1223:
                 raise BenchmarkError("Benchmark cancelled: administrator permission was declined.")
             raise BenchmarkError(f"Could not start PresentMon with elevation (error {err}).")
-        k32 = ctypes.windll.kernel32
+        k32 = ctypes.WinDLL('kernel32',use_last_error=True)
+        k32.WaitForSingleObject.argtypes=[wintypes.HANDLE,wintypes.DWORD]
+        k32.CloseHandle.argtypes=[wintypes.HANDLE]
+        k32.TerminateProcess.argtypes=[wintypes.HANDLE,wintypes.UINT]
         deadline = time.time() + timeout
         try:
             while time.time() < deadline:
                 if k32.WaitForSingleObject(sei.hProcess, 250) == 0:
                     return
-                if token and token.cancelled:
-                    self.stop_elevated(exe)
-                    return
+                if token and token.cancelled or process_guard and not process_guard():
+                    k32.TerminateProcess(sei.hProcess,1)
+                    k32.WaitForSingleObject(sei.hProcess,3000)
+                    raise BenchmarkError('Elevated capture stopped: cancelled or selected process exited.')
+            k32.TerminateProcess(sei.hProcess,1)
+            raise BenchmarkError('Elevated capture timed out.')
         finally:
             k32.CloseHandle(sei.hProcess)
 
-    def stop_elevated(self, exe: Path) -> None:
-        import ctypes
-        ctypes.windll.shell32.ShellExecuteW(None, "runas", str(exe),
-                                            f"--terminate_existing_session --session_name {SESSION_NAME}", None, 0)
 
 
 class BenchmarkService:
     def __init__(self, db: Database, runner: PresentMonRunner | None):
         self.db = db
         self.runner = runner
+        self._run_lock = threading.Lock()
 
     def record(self, game_id: str, label: str, frametimes: list[float], meta: dict[str, Any],
                source: str, csv_path: str | None, parsed=None) -> BenchmarkSession:
@@ -173,7 +207,7 @@ class BenchmarkService:
         return session
 
     def run(self, game_id: str, process_name: str, label: str, meta: dict[str, Any], duration: int, delay: int,
-            on_status=None, token=None, process_id=None, sensor_sampler=None, context_provider=None, swapchain=None) -> BenchmarkSession:
+            on_status=None, token=None, process_id=None, sensor_sampler=None, context_provider=None, swapchain=None, allow_elevation=False) -> BenchmarkSession:
         if self.runner is None:
             raise BenchmarkError("PresentMon is not configured.")
         safe_game = re.sub(r'[^A-Za-z0-9_-]', '_', game_id)[:80]
@@ -183,6 +217,13 @@ class BenchmarkService:
         attribution = context_provider() if context_provider else {'confirmed': False}
         attribution = dict(attribution, capture_started_at=meta['started_at'])
         kwargs = {'process_id': process_id} if process_id is not None else {}
+        if isinstance(self.runner,PresentMonRunner):
+            kwargs['allow_elevation']=bool(allow_elevation)
+            if process_id:
+                from akeno.core.processes import creation_identity
+                birth=creation_identity(process_id)
+                if not birth:raise BenchmarkError('Selected process identity could not be confirmed.')
+                kwargs['process_guard']=lambda:creation_identity(process_id)==birth
         stopped = threading.Event()
         samples = []
         def sensors():
@@ -196,9 +237,13 @@ class BenchmarkService:
         sampler = threading.Thread(target=sensors, daemon=True) if sensor_sampler else None
         if sampler:
             sampler.start()
+        if not self._run_lock.acquire(blocking=False):
+            stopped.set()
+            raise BenchmarkError('Another performance capture is already active.')
         try:
             self.runner.capture(process_name, duration, delay, out, on_status, token, **kwargs)
         finally:
+            self._run_lock.release()
             stopped.set()
             if sampler:
                 sampler.join(timeout=4)

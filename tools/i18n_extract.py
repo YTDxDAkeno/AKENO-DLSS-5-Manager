@@ -51,6 +51,12 @@ def data_strings() -> set[str]:
     out |= set(LABELS.values())
     from akeno.community.runtime import LABELS as COMMUNITY_LABELS
     out |= set(COMMUNITY_LABELS.values())
+    from akeno.pipeline.recipes import RECIPES
+    from akeno.pipeline.results import RouteState
+    out |= {r.name for r in RECIPES} | {s.value for s in RouteState}
+    out |= {"Choose pipeline", "Runtime self-test", "Official DLL management", "Visual A/B comparison",
+            "Analyze pipelines", "Preview installation", "Open game verification", "Choose NR-off screenshot", "Choose NR-on screenshot",
+            "Camera / scene", "Exact component version", "Upstream HTTPS source", "Component license"}
     out |= {"System", "Game", "Dependencies", "Installation"}
     out |= {"good", "fair", "poor", "Good", "Fair", "Poor", "low", "medium", "high", "bundled", "downloaded",
             "measured", "estimated", "hardware only"}

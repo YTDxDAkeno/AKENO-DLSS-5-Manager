@@ -115,6 +115,11 @@ def test_wait_start_evaluate_exit_and_restart_do_not_mix_sessions(installed, liv
     report=s.community.report(g.id)
     assert report['session']['state']=='backend_not_detected'
     (root/'OptiScaler.log').write_text('feature 18 created\ninline feature 18 evaluation succeeded\n')
+    # Synthetic fresh-session evidence must be unambiguously newer than the observation.
+    # Windows file timestamps and time.time() may sample different sub-millisecond ticks.
+    import os
+    fresh_time=s.community.observations[g.id].started_at+1
+    os.utime(root/'OptiScaler.log',(fresh_time,fresh_time))
     report=s.community.report(g.id)
     assert report['session']['state']=='neural_evaluation_detected'
     sid=report['session']['id']

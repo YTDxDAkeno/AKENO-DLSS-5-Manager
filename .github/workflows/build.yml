@@ -42,15 +42,17 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           AKENO_V14_SCREENSHOTS: screenshots/v14-fixtures
+          AKENO_V15_SCREENSHOTS: screenshots/v15-fixtures
       - name: Publish bounded test failure annotations
         if: failure()
         run: python tools/ci_test_annotations.py test-results.xml
       - name: Verification diagnostics UI at 150 percent (synthetic fixtures)
-        run: python -m pytest -q tests/test_v141_ui.py --junitxml=v141-ui-150pct.xml
+        run: python -m pytest -q tests/test_v141_ui.py tests/test_v15_ui.py --junitxml=v141-ui-150pct.xml
         env:
           QT_QPA_PLATFORM: offscreen
           QT_SCALE_FACTOR: '1.5'
           AKENO_V14_SCREENSHOTS: screenshots/v141-150pct
+          AKENO_V15_SCREENSHOTS: screenshots/v15-150pct
       - name: Smoke test from source (real Windows hardware/library scan, every page built)
         run: python -m akeno --smoke-test
         env:
@@ -155,6 +157,8 @@ jobs:
             v141-ui-150pct.xml
             screenshots/v141-150pct/*.png
             screenshots/v14-fixtures/*.png
+            screenshots/v15-fixtures/*.png
+            screenshots/v15-150pct/*.png
             screenshots/windows-runner/*.png
             screenshots/windows-runner-150pct/*.png
             screenshots/fivem-fixture/*.png

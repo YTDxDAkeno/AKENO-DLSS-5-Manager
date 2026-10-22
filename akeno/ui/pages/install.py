@@ -250,6 +250,10 @@ class InstallPage(QWidget):
         self._community_row_layout.addStretch(1)
         self._community_row.hide()
         lay.addWidget(self._community_row)
+        pipeline_row=QHBoxLayout()
+        pipeline_row.addWidget(button(t('Rendering pipelines'), 'layers', on_click=self._pipelines))
+        pipeline_row.addWidget(label(t('Plan a route, run a standalone test or manage official DLSS components.'), 'dim', wrap=True),1)
+        lay.addLayout(pipeline_row)
         self._narrow = None
 
         body = QGridLayout()
@@ -398,6 +402,11 @@ class InstallPage(QWidget):
             self._update_buttons()
 
     # ------------------------------------------------------------------------------------------
+    def _pipelines(self):
+        from akeno.ui.pipelines import PipelineDialog
+        PipelineDialog(self.ctl,self).exec()
+        self.refresh()
+
     def _community_manager(self):
         from akeno.ui.community_runtime import CommunityRuntimeDialog
         dialog = CommunityRuntimeDialog(self.ctl, self)

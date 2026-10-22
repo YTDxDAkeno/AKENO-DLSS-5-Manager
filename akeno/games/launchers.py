@@ -375,12 +375,34 @@ def _walk_limited(root: str, depth: int):
             dirs[:] = []
 
 
+def scan_battlenet(entries=None):
+    """Bounded uninstall-registry inventory. No recursive drive scan or product.db guesses."""
+    if entries is None:
+        if not is_windows():return []
+        import winreg
+        entries=[]
+        for hive in (winreg.HKEY_CURRENT_USER,winreg.HKEY_LOCAL_MACHINE):
+            entries.extend(_reg_subkeys(hive,r'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'))
+    games=[];seen=set()
+    for key,values in entries:
+        publisher=str(values.get('Publisher','')).casefold();name=str(values.get('DisplayName',''))
+        path=values.get('InstallLocation')
+        if 'blizzard' not in publisher or not path or not os.path.isdir(path):continue
+        if name.casefold() in ('battle.net','blizzard battle.net','battle.net setup'):continue
+        root=os.path.normcase(os.path.abspath(path))
+        if root in seen:continue
+        seen.add(root)
+        identity=hashlib.sha256(root.encode()).hexdigest()[:16]
+        games.append(RawGame(id='battlenet:'+identity,name=name or str(key),install_dir=str(path),launcher='battlenet',launcher_id=str(key)))
+    return games
+
+
 def scan_all(manual_dirs: list[str] | None = None) -> tuple[list[RawGame], list[str]]:
     """Run every scanner; returns games and per-launcher error messages."""
     out: list[RawGame] = []
     errors: list[str] = []
     for label, fn in (("Steam", scan_steam), ("Epic Games", scan_epic), ("GOG", scan_gog),
-                      ("Ubisoft Connect", scan_ubisoft), ("EA app", scan_ea), ("Xbox", scan_xbox)):
+                      ("Ubisoft Connect", scan_ubisoft), ("EA app", scan_ea), ("Xbox", scan_xbox), ("Battle.net", scan_battlenet)):
         try:
             out.extend(fn())
         except Exception as exc:  # one broken launcher must not hide the others

@@ -84,6 +84,14 @@ class AppServices:
             log.warning("Offline bundle unavailable: %s", exc)
             self.offline_bundle = OfflineBundle(Path(__file__).parent / '_absent_bundle')
             self.offline_bundle.errors.append(str(exc))
+        from akeno.pipeline.service import PipelineService
+        self.pipelines = PipelineService(self)
+        from akeno.pipeline.dlls import DllService
+        self.dlls = DllService(self)
+        from akeno.diagnostics.selftest import NeuralSelfTest
+        self.neural_selftest = NeuralSelfTest(self)
+        from akeno.quality.comparison import VisualComparisons
+        self.visual_comparisons = VisualComparisons(self)
         self.system: SystemInfo | None = None
         cached = self.db.get_setting("_last_system")
         if cached:
@@ -165,9 +173,11 @@ class AppServices:
             if adapter:
                 return self.fivem.context(adapter, staging)
         managed = self.installer.managed_files(game.id, game.target_dir) if game.target_dir else set()
+        from akeno.pipeline.proxy import observed_loader_paths
         return BackendContext(system=self.system, gpu=self.selected_gpu(), runtime_lookup=self.runtime_lookup,
                               staging_dir=staging, managed_files=managed, allow_disable=list(allow_disable or []),
-                              strict_conflicts=bool(self.settings.get("block_unknown_conflicts")))
+                              strict_conflicts=bool(self.settings.get("block_unknown_conflicts")),
+                              loaded_modules=tuple(observed_loader_paths(self,game)))
 
     def compatibility(self, game: Game, adapter: BackendAdapter | None = None) -> CompatibilityResult | None:
         adapter = adapter or self.backend_for(game)

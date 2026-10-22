@@ -28,7 +28,7 @@ def digest(value) -> str:
 
 def plan_digest(plan: InstallPlan) -> str:
     return digest({"backend": plan.backend_id, "package": asdict(plan.package) if plan.package else None,
-        "target": plan.target_dir, "kind": plan.kind, "params": plan.params, "renames": plan.rename_away,
+        "target": plan.target_dir, "kind": plan.kind, "params": plan.params, "expected_originals": plan.expected_originals, "renames": plan.rename_away,
         "ops": [(o.rel_path, str(o.source), o.expected_sha256,
                  hashlib.sha256(o.content).hexdigest() if o.content is not None else None, o.kind) for o in plan.ops]})
 
@@ -114,7 +114,9 @@ class CommunityService:
         rt = {"stored_path": candidate.path, "sha256": candidate.sha256, "version": candidate.version}
         lookup = lambda name: rt if name == runtimes.NR_RUNTIME else self.s.runtime_lookup(name)
         managed = self.s.installer.managed_files(game.id, game.target_dir)
-        ctx = BackendContext(self.s.system, gpu, lookup, staging, managed, strict_conflicts=True)
+        from akeno.pipeline.proxy import observed_loader_paths
+        ctx = BackendContext(self.s.system, gpu, lookup, staging, managed, strict_conflicts=True,
+                             loaded_modules=tuple(observed_loader_paths(self.s,game)))
         compat = self.s.compat_db.entries_for(game, backend_id)
         if any(e["status"] in (CompatStatus.BLOCKED.value, CompatStatus.INCOMPATIBLE.value) for e in compat):
             raise PermissionError(msg("The selected game/backend has a blocking compatibility record."))
@@ -233,7 +235,8 @@ class CommunityService:
         # A game's overlay may legitimately save INI settings. Hash and report the effective config,
         # but keep binary/marker pins mandatory. Deployment and restore policies are unchanged.
         binary_pins = {name: pin for name,pin in expected.items() if name.casefold() != 'optiscaler.ini'}
-        observation = neural.begin(game.id, game.target_dir, game.exe_path, list(expected), binary_pins)
+        observation = neural.begin(game.id, game.target_dir, game.exe_path, list(expected), binary_pins, diagnostic_builds=([tx['params']['_diagnostic_build']] if tx['params'].get('_diagnostic_build') else []),
+            diagnostic_modules=([tx['params']['_diagnostic_module']] if tx['params'].get('_diagnostic_module') in expected else []))
         from akeno.diagnostics.session import VerificationSession
         with self._monitor_lock:
             previous = self.sessions.get(game_id)

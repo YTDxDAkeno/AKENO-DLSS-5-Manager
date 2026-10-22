@@ -149,10 +149,12 @@ class CommunityRuntimeDialog(QDialog):
         controls.addWidget(button(t("Export support ZIP"), "file", on_click=self.export_support))
         controls.addWidget(button(t('Stop monitoring'), 'stop', on_click=lambda: self.stop_monitor()))
         controls.addWidget(self.last_checked, 1); evidence.addLayout(controls)
+        evidence.addWidget(button(t('Open desktop monitoring HUD'),on_click=self.open_hud))
         self.include_excerpts = QCheckBox(t('Include redacted recent log excerpts in support export'))
         evidence.addWidget(self.include_excerpts)
         self.performance = QCheckBox(t("Start automatic performance monitoring (local PresentMon required)"))
         experiment.addWidget(self.performance)
+        self.hud = None
         self.capture_busy = False
         self.capture_token = None
         self.finished.connect(self._closed)
@@ -161,8 +163,14 @@ class CommunityRuntimeDialog(QDialog):
         if ctl.s.offline_bundle.errors:
             self.message.setText('\n'.join(ctl.s.offline_bundle.errors))
 
+    def open_hud(self):
+        from akeno.ui.monitor_hud import MonitorHud
+        if self.hud:self.hud.close()
+        self.hud=MonitorHud(lambda:self.last_report,self);self.hud.show()
+
     def _closed(self, *_):
         self._closing = True
+        if self.hud:self.hud.close()
         self._pending_diagnostic = None
         self.stop_monitor()
 
@@ -195,6 +203,11 @@ class CommunityRuntimeDialog(QDialog):
             text = t('Automatic FPS monitoring needs a locally verified PresentMon executable.')
             if self.message.text() != text: self.message.setText(text)
             return
+        permission=runner.permission_status()
+        if permission['state'] in ('denied','permission_required','unavailable'):
+            self.performance.setChecked(False)
+            self.message.setText(t('FPS capture unavailable. Neural log diagnostics continue.')+' '+permission['detail'])
+            return
         from akeno.security.downloads import CancelToken
         self.capture_busy = True; self.capture_token = CancelToken()
         game, gpu, token = self.game, self.ctl.s.selected_gpu(), self.capture_token
@@ -213,7 +226,9 @@ class CommunityRuntimeDialog(QDialog):
             if not self._closing: self.ctl.benchmarks_changed.emit()
         def failed(error):
             self.capture_busy = False
-            if not self._closing and not token.cancelled: self.message.setText(t(str(error)))
+            if not self._closing and not token.cancelled:
+                self.performance.setChecked(False)
+                self.message.setText(t('FPS capture stopped. Enable it explicitly to retry.')+' '+t(str(error)))
         if not self.ctl.run('community_performance', work, done, failed, silent=True): self.capture_busy = False
 
     def toggle_monitor(self, enabled):
@@ -448,7 +463,7 @@ class CommunityRuntimeDialog(QDialog):
         stages = report['neural'].get('stages', {})
         status = (state, report['neural']['state'], report['neural'].get('detail'), tuple(report['neural'].get('error_codes', [])))
         view = json.dumps([session.get('process'), state, stages, report['neural'].get('lines'),
-            report['neural'].get('logs'), report.get('current_session_benchmark_ids'), report.get('benchmark_status'), self.capture_busy, self.performance.isChecked()], sort_keys=True, default=str)
+            report['neural'].get('logs'), report['neural'].get('counters'), report.get('current_session_benchmark_ids'), report.get('benchmark_status'), self.capture_busy, self.performance.isChecked()], sort_keys=True, default=str)
         # No repaint/scroll reset when only counters or polling durations change.
         if view != self._last_view:
             self._last_view = view
@@ -460,6 +475,7 @@ class CommunityRuntimeDialog(QDialog):
                 (t('Runtime loaded'), t('Yes') if stages.get('runtime_loaded') else t('Not verified')),
                 (t('NGX initialized'), t('Yes') if stages.get('ngx_initialized') else t('Not verified')),
                 (t('Feature 18 created'), t('Yes') if stages.get('feature_18_created') else t('Not verified')),
+                (t('Successful NR API evaluations'), str(report['neural'].get('counters', {}).get('eval_success', t('Not measured')))),
                 (t('Neural feature evaluation'), t('Yes') if stages.get('feature_evaluated') else t('Not verified')),
                 (t('FPS monitoring'), t('Active') if self.capture_busy else (t('Ready') if self.performance.isChecked() and not session.get('ended') else t('Off'))),
                 (t('Current benchmark'), t(report.get('benchmark_status', 'Not verified')))])
@@ -471,7 +487,9 @@ class CommunityRuntimeDialog(QDialog):
                 if not stages.get('evaluations_attributed_to_game'):
                     text += ' ' + t('No conclusive Neural Rendering evaluation evidence was captured.')
             elif state == 'stopped': text = t('Monitoring stopped. The last report is preserved.')
-            elif state == 'neural_evaluation_detected': text = t('Neural Rendering active — evaluation evidence detected')
+            elif state == 'neural_evaluation_detected':
+                count=report['neural'].get('counters',{}).get('eval_success')
+                text = t('Neural Rendering working — {count} successful API evaluations recorded',count=count) if count is not None else t('Neural Rendering active — evaluation evidence detected')
             elif state == 'neural_evaluation_failed': text = t('Neural Rendering reported a failure: {codes}', codes=', '.join(report['neural'].get('error_codes', [])) or t('View diagnostic details'))
             elif state == 'backend_not_detected': text = t('{game} was detected, but OptiScaler Neural Rendering activity was not confirmed. View diagnostic details.', game=self.game.name)
             elif state == 'neural_initialization_pending': text = t('Backend loaded. Waiting for fresh Neural Rendering initialization and evaluation evidence.')
