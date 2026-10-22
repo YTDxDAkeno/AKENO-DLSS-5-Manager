@@ -48,3 +48,22 @@ def test_portable_counter_templates_preserve_results(tmp_path):
     source.write_text('#define LOG_INFO(...) ((void)0)\n#include "'+header+'"\n#include <cassert>\nint main(){assert(AkenoNrDiagnostic::Evaluate([]{return 1;})==1);assert(AkenoNrDiagnostic::Evaluate([]{return -1;})==-1);assert(AkenoNrDiagnostic::counters.success==1);assert(AkenoNrDiagnostic::counters.failed==1);}')
     exe=tmp_path/'counter-test';subprocess.run([compiler,'-std=c++17',str(source),'-o',str(exe)],check=True,capture_output=True)
     subprocess.run([str(exe)],check=True)
+
+
+def test_other_managed_modules_cannot_authorize_diagnostic_counter(qapp,tmp_path,monkeypatch):
+    from akeno.diagnostics.session import VerificationSession
+    from akeno.core.processes import ProcessInfo
+    import time
+    exe=tmp_path/'game.exe';exe.write_bytes(b'synthetic exe')
+    for name in ('winmm.dll','dxgi.dll','nvngx_dlssnr.dll'):(tmp_path/name).write_bytes(b'synthetic '+name.encode())
+    observation=neural.begin('g',tmp_path,exe,['winmm.dll','dxgi.dll','nvngx_dlssnr.dll'],diagnostic_builds=[BUILD],diagnostic_modules=['winmm.dll'])
+    session=VerificationSession(observation,{'id':5})
+    monkeypatch.setattr('akeno.diagnostics.session.processes.creation_identity',lambda _: 'filetime:123')
+    monkeypatch.setattr('akeno.diagnostics.session.processes.module_inventory',lambda *args:{'state':'observed','modules':[{'name':'dxgi.dll','path':str(tmp_path/'dxgi.dll')}],'detail':'Synthetic other backend'})
+    log=tmp_path/'OptiScaler.log';log.write_text(line()+'\n')
+    live=[ProcessInfo(42,'game.exe',str(exe))]
+    assert session.poll(live,{'id':5}).state!='verified'
+    session.modules={'state':'observed','modules':[{'name':'winmm.dll','path':str(tmp_path/'winmm.dll')}],'detail':'Synthetic exact diagnostic consumer'}
+    session.module_checked=time.monotonic()
+    with log.open('a') as output:output.write(line(seq=2)+'\n')
+    assert session.poll(live,{'id':5}).state=='verified'
