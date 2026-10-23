@@ -1,3 +1,5 @@
+> Current v2 development status: [delivery and validation](AKENO_V2_DELIVERY.md), [component contracts](COMMUNITY_COMPONENTS.md), [FiveM installer](AKENO_V2_FIVEM.md). The older release notes below remain historical evidence.
+
 # v1.6 development status
 
 The executable is an instrumented development manager, not evidence of successful

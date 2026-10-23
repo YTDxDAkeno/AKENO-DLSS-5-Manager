@@ -1,30 +1,35 @@
 # AKENO DLSS 5 Manager
 
-**v1.6 development:** precise Feature-18 API evidence, SR/NR and secure-loader diagnostics,
-a guided local diagnostic build, monitoring before normal offline game launch, and a
-separate guarded FiveM feasibility workflow. No physical RTX/game success is claimed;
-FiveM NR installation remains blocked without a complete permitted recipe. See
-[execution](docs/AKENO_V1_6_NEURAL_EXECUTION.md), [official runtime research](docs/AKENO_V1_6_OFFICIAL_RUNTIME_RESEARCH.md),
-[FiveM feasibility](docs/AKENO_V1_6_FIVEM_FEASIBILITY.md), [local acceptance](docs/AKENO_V1_6_HARDWARE_ACCEPTANCE.md)
-and [remaining limits](docs/AKENO_V1_6_KNOWN_LIMITATIONS.md). All v1.5 features and the official-SR hotfix are retained.
+**v2.0 development:** a game-oriented community mod manager. Open **My Games**, choose a reviewed
+community version, resolve its complete permitted stack, install/configure it, launch normally,
+and switch versions or restore. OptiScaler native, Feeder and local licensed RenoDX recipes are
+integrated; FiveM Legacy has its own plugin-only workflow and client/server checks. RTX 4080
+and RTX 5090 are first-class experimental targets.
 
+See [components, version management and licensing](docs/COMMUNITY_COMPONENTS.md),
+[FiveM workflow](docs/AKENO_V2_FIVEM.md) and [delivery/validation status](docs/AKENO_V2_DELIVERY.md).
+All v1.6 data, backups, inventories, diagnostics and PresentMon remain available. A diagnostic
+source build and a 300-frame self-test are optional advanced tools.
 
-A Windows desktop launcher that makes DLSS 5 Neural Rendering community mods easier to understand,
-safer to install and simple to undo — with honest answers about what works on your GPU.
-
-> **Status:** v1.6 development — v1.4.1 fixes, official dependencies, restore chains and FiveM restrictions are retained.
-> Current implementation, test/build evidence and incomplete integrations are recorded in [the v1.6 execution notes](docs/AKENO_V1_6_NEURAL_EXECUTION.md). It has **not** yet been
-> verified on a physical NVIDIA RTX GPU; what has and has not been verified is listed in
-> [docs/STATUS.md](docs/STATUS.md). Please read it before relying on any feature.
+> Windows v2 artifacts require the updated Actions job to run. This session's publishing is
+> blocked by GitHub authentication and API network access. No physical Feature 18 success is
+> claimed on RTX 4080, RTX 5090 or FiveM. Installation and neural execution are separate results.
 
 AKENO is an independent community project. It is **not affiliated with NVIDIA**, OptiScaler,
 DLSS5-Feeder or any game publisher. DLSS 5 Neural Rendering mods drive an undocumented NVIDIA feature:
 nothing about them is officially supported.
 
-![AKENO dashboard (rendered with test-fixture data)](docs/screenshots/dashboard.png)
+![My Games in AKENO 2.0 (synthetic data)](screenshots/v2-local/v2-my-games-en-synthetic.png)
 
-*Rendered by the app itself (1920x1080 window) with synthetic test-fixture data (an RTX 5090 system) — see
-[docs/screenshots](docs/screenshots/README.md). Not a concept image.*
+*Rendered by the application with synthetic fixture data; no physical GPU execution evidence.*
+
+## What's new in 2.0
+
+Per-game version browser, actual GitHub API discovery/cache, original pinned downloads,
+complete dependency recipes, CI-built licensed components, local NR consumer library,
+real presets/custom settings, launch, previous-version restore and complete uninstall.
+The primary game page keeps the optional diagnostics in its Advanced tab.
+
 
 ## What's new in 1.1
 
@@ -50,7 +55,7 @@ nothing about them is officially supported.
 |---|---|
 | **Dashboard** | Detected GPU, game analysis, the recommended configuration, measured performance, profile comparison, safety checks and one-click actions. |
 | **Hardware Scan** | Every GPU (multi-GPU aware) via DXGI, the display-driver registry and NVML: PCI IDs, architecture, Tensor Cores, VRAM, driver version/date, D3D12 feature level, displays. Neural Rendering support report and DLSS technology matrix. Diagnostic export. |
-| **Game Library** | Games from Steam (all libraries), Epic, GOG, Ubisoft Connect, EA app and Xbox/Microsoft Store, plus manual folders. Search, sort, filter, per-game executable/API overrides, mod and anti-cheat detection. |
+| **My Games** | Games from Steam (all libraries), Epic, GOG, Ubisoft Connect, EA app and Xbox/Microsoft Store, plus manual folders. Search, sort, filter, per-game executable/API overrides, mod and anti-cheat detection. |
 | **Smart Profiles** | Performance / Balanced / Quality / Custom built only from settings the backend really has (e.g. OptiScaler `[DlssNr] WorkingScale`, `PreSr`, `CacheInterval`). Apply to an installed backend. |
 | **Benchmark** | Real frame-time capture with Intel PresentMon, CSV import, avg/1%/0.1% low, percentiles, frame-time graphs, comparisons, CSV/JSON export. |
 | **Secure Install** | Wizard with grouped checks (System, Game, Dependencies, Installation), **Resolve Dependencies** (verified NVIDIA runtime import from your own PC, reviewed package downloads), and a transactional installation with backup, validation and automatic rollback. |
@@ -94,8 +99,8 @@ AKENO starts on any Windows 10/11 x64 PC; no NVIDIA library is needed to launch 
 ## Safety model
 
 * **Only reviewed packages.** Downloads come from allow-listed GitHub hosts over HTTPS (redirects are
-  re-checked) and must match the SHA-256 pinned in `akeno/data/catalog.json`. A hash supplied by the
-  download source itself is never trusted. Archives are inspected for path traversal, absolute paths,
+  re-checked) and must match reviewed SHA-256 pins in the bundled catalogs. Remote metadata alone cannot
+  authorize installation; published digests are reviewed together with source/version/member contracts. Archives are inspected for path traversal, absolute paths,
   symlinks, reserved names, oversized members and zip bombs; only the named files are extracted and
   each is hash-checked again.
 * **No scripts.** AKENO never runs downloaded `.ps1`, `.bat` or `.py` files.
@@ -127,18 +132,18 @@ then delete that folder.
 
 ## First steps
 
-1. **Dashboard → Scan Hardware.** Check that your RTX GPU and driver are shown. *Hardware Scan* shows
-   what your GPU generation can and cannot do.
-2. **Game Library.** Pick your game. If the graphics API shows *Unknown*, select it.
-3. **Benchmark.** Start the game, then record a *Baseline* run.
-4. **Secure Install → Resolve Dependencies.** Review the list (imports from your NVIDIA driver, package
-   download with size and licence) and confirm. Anything AKENO may not obtain is explained with a link.
-5. **Secure Install → Install.** Review the summary and confirm. A verified backup is made first.
-6. Benchmark again with the installed profile. The recommendation switches from *provisional* to
-   *measured* and can tell you to use a cheaper profile — or to leave Neural Rendering off.
-7. **Restore** (Dashboard or Backups) puts the original files back at any time.
+1. Scan for games and hardware, then open **My Games** and choose the actual executable/renderer.
+2. Select a community method/version and an eligible offline or permitted FiveM session.
+3. Confirm experimental component use. AKENO finds legally held local runtimes and resolves
+   bundled dependencies and original release downloads. Import a licensed NR consumer/runtime
+   once if it cannot be supplied automatically.
+4. Click **Install DLSS 5**, review the full file list and apply the backed-up transaction.
+5. Choose a preset and **Launch Game**. Installation success does not establish Neural Rendering.
+   Optional Advanced diagnostics and PresentMon can record real execution/performance.
+6. Use **Change Version / Reinstall**, **Restore previous version** or **Remove mod completely**.
 
-Use mods only in offline / single-player games.
+Generic game mods require an eligible offline/singleplayer context. The dedicated FiveM route
+requires an actually permitted client/server configuration and never changes its protections.
 
 ## Building from source
 

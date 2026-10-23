@@ -23,14 +23,14 @@ def resolve(facts):
             profile=facts.runtime_profile
             if profile.get('schema')==3:
                 backend='renodx_nr' if recipe.id=='native_renodx' else ('dlss5_feeder' if recipe.id=='legacy_bridge' else 'optiscaler_nr')
-                need('runtime_profile',backend in profile.get('backends',[]) and facts.api in profile.get('apis',[]),'Runtime profile must cover this exact backend/API.')
+                need('runtime_profile',backend in profile.get('backends',[]) and ('d3d12' if recipe.id=='feeder' else facts.api) in profile.get('apis',[]),'Runtime profile must cover this exact backend/API.')
                 need('runtime_gpu',facts.gpu_generation not in profile.get('incompatible_generations',[]) and facts.gpu_device_id not in profile.get('incompatible_device_ids',[]) and (facts.gpu_generation not in ('RTX 20','RTX 30') or facts.gpu_generation in profile.get('validated_generations',[])),'Runtime profile must permit this GPU; lower RTX generations require applicable validated profiles.')
                 if profile.get('minimum_driver'):
                     minimum=version(profile['minimum_driver']);actual=version(facts.driver)
                     need('runtime_driver',minimum and actual and actual>=minimum,'Runtime minimum driver '+profile['minimum_driver'])
             elif profile.get('targets'):
                 backend='renodx_nr' if recipe.id=='native_renodx' else ('dlss5_feeder' if recipe.id=='legacy_bridge' else 'optiscaler_nr')
-                targets=[t for t in profile['targets'] if (t.get('generation'),t.get('driver'),t.get('backend'),t.get('api'))==(facts.gpu_generation,facts.driver,backend,facts.api)]
+                targets=[t for t in profile['targets'] if (t.get('generation'),t.get('driver'),t.get('backend'),t.get('api'))==(facts.gpu_generation,facts.driver,backend,'d3d12' if recipe.id=='feeder' else facts.api)]
                 need('runtime_profile',targets and all(t.get('status')!='incompatible' for t in targets),'Legacy runtime review must match the exact GPU generation/driver/backend/API.')
             need('runtime_compatibility',not facts.components.get('runtime_known_incompatible'),'No applicable exact runtime/GPU incompatibility is recorded.')
             consumer_backend='dlss5_feeder' if recipe.id=='legacy_bridge' else 'optiscaler_nr'
@@ -49,7 +49,7 @@ def resolve(facts):
             if recipe.id=='native_optiscaler':need('proxy',facts.proxy is not None,'A free supported proxy with an evidenced game load path is required.')
             if recipe.id=='feeder':
                 need('reshade_loader',facts.components.get('reshade_load_route') is True,'ReShade requires an evidenced dxgi.dll load route.')
-                need('feeder_api',facts.api=='d3d12','Integrated Feeder + OptiScaler contract currently requires D3D12; other transports need a reviewed recipe.')
+                need('feeder_api',facts.api in ('d3d11','d3d12'),'Pinned Feeder 1.19 supports D3D12 and the reviewed D3D11 private-D3D12 transport.')
                 need('proxy',facts.proxy is not None,'An evidenced separate OptiScaler loader is required.')
                 need('consumer',facts.components.get('selected_consumer') in ('optiscaler_nr','renodx_nr','chicken'),'Select one pinned, integrated NR consumer.')
                 if facts.native_calls is True:warnings.append('Native DLSS inputs are available; a Feeder adds transport and conflict risk.')

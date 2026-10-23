@@ -95,7 +95,7 @@ def selftest_fixture(experiment,tmp_path,monkeypatch,official_inventory=False):
         s.dlls=DllService(s,s.community.runtimes.verifier)
         imported=s.dlls.import_official(sr,True)
         assert imported['family']=='super_resolution'
-        assert s.runtime_lookup(runtimes.DLSS_RUNTIME) is None  # v1.5 stores are separate
+        assert s.runtime_lookup(runtimes.DLSS_RUNTIME)['sha256']==imported['sha256']  # v2 unifies authenticated local inventory
     else:
         runtimes.import_runtime(s.db,str(sr),s.community.runtimes.verifier)
     host=make_pe(tmp_path/'host'/'dlss5-feed-host64.exe',imports=['winmm.dll'])

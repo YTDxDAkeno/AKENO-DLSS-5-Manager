@@ -20,7 +20,7 @@ from akeno.i18n import t
 from akeno.ui import art, assets, icons, theme
 from akeno.ui.widgets import StatusPill, confirm, info, label
 
-NAV = [("dashboard", "Dashboard", "home"), ("hardware", "Hardware Scan", "chip"), ("library", "Game Library", "gamepad"),
+NAV = [("dashboard", "Dashboard", "home"), ("hardware", "Hardware Scan", "chip"), ("library", "My Games", "gamepad"),
        ("profiles", "Smart Profiles", "sliders"), ("benchmark", "Benchmark", "chart"),
        ("install", "Secure Install", "shield"), ("backups", "Backups", "database"), ("settings", "Settings", "gear")]
 
@@ -43,7 +43,7 @@ class Header(QWidget):
         self.title = label(APP_NAME, "h1")
         col.addStretch(1)
         col.addWidget(self.title)
-        self.sub = label(t("Safe analysis & recommendation tool for DLSS 5 community mods"), "dim")
+        self.sub = label(t("Community DLSS 5 mod manager · Install · Versions · Restore"), "dim")
         col.addWidget(self.sub)
         col.addStretch(1)
         lay.addLayout(col, 1)
@@ -290,7 +290,7 @@ class MainWindow(QMainWindow):
         self._header_status()
         for i, (key, _, _) in enumerate(NAV):
             QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self, activated=lambda k=key: self.go(k))
-        self.go("dashboard")
+        self.go("library")
 
     def _initial_size(self) -> None:
         """Open at a size that fits the screen's available area (taskbar and scaling respected)."""

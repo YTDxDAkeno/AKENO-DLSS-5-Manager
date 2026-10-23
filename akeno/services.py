@@ -100,6 +100,9 @@ class AppServices:
             except (TypeError, ValueError, KeyError):
                 self.system = None
 
+        from akeno.mods.service import ModManager
+        self.mods=ModManager(self)
+
     # -- hardware ------------------------------------------------------------------------------
     def scan_hardware(self) -> SystemInfo:
         self.system = self.hardware.detect()
@@ -165,7 +168,13 @@ class AppServices:
     def runtime_lookup(self, name: str) -> dict | None:
         local = runtimes.best_runtime(self.db, name, allow_unverified=not is_windows() and
                                      bool(os.environ.get("AKENO_ALLOW_UNVERIFIED_RUNTIME_FOR_TESTS")))
-        return local or self.offline_bundle.official_runtime(name)
+        if local:return local
+        rows=self.db.get_setting('official_dll_inventory',{})
+        matching=[r for r in rows.values() if r.get('name')==name and r.get('trust')=='nvidia_authenticated']
+        if matching:
+            from akeno.mods.releases import version_key
+            return dict(max(matching,key=lambda r:version_key(r.get('version'))),trust='verified')
+        return self.offline_bundle.official_runtime(name)
 
     def context(self, game: Game, staging: Path | None = None, allow_disable: list[str] | None = None) -> BackendContext:
         if game.launcher == "fivem":
@@ -209,12 +218,13 @@ class AppServices:
         return self.deps.resolve(game, adapter, progress, token)
 
     # -- packages ----------------------------------------------------------------------------
-    def package_for(self, adapter: BackendAdapter) -> Package | None:
+    def package_for(self, adapter: BackendAdapter, game: Game | None = None) -> Package | None:
         if adapter.id.startswith("fivem_legacy:"):
             return adapter.package
-        pid = self.settings.get(f"package.{adapter.id}")
+        pid=self.db.game_overrides(game.id).get('mod_package.'+adapter.id) if game else None
+        pid = pid or self.settings.get(f"package.{adapter.id}")
         p = self.catalog.package(pid) if pid else None
-        return p or self.catalog.best_package(adapter.id)
+        return p or next(iter(self.catalog.packages_for(adapter.id)),None)
 
     def package_cached(self, package: Package) -> bool:
         if not package.sha256:
@@ -313,6 +323,9 @@ class AppServices:
 
     def restore(self, tx_id: int, force: bool = False) -> TxResult:
         tx = self.db.get_transaction(tx_id)
+        if tx and tx['backend_id'].startswith('fivem_community:'):
+            from akeno.fivem.community_stack import restore
+            return restore(self,self.library.get(tx['game_id']),tx)
         if tx and tx["backend_id"].startswith("fivem_legacy:"):
             from akeno.fivem.discovery import inspect_installation
             installation = inspect_installation(Path(tx["target_dir"]).parent.parent)

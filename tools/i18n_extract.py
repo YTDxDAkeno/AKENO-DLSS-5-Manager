@@ -61,6 +61,19 @@ def data_strings() -> set[str]:
     out |= {"System", "Game", "Dependencies", "Installation"}
     out |= {"good", "fair", "poor", "Good", "Fair", "Poor", "low", "medium", "high", "bundled", "downloaded",
             "measured", "estimated", "hardware only"}
+    out |= {"Community DLSS 5", "Versions", "Advanced / Diagnostics", "Choose Preset", "Restore previous version", "Remove mod completely",
+        "Find local runtimes", "Import community runtime", "View installation logs", "Import private component manifest", "Rendering pipelines", "Community runtime diagnostics",
+        "Pure 0", "Pure 1", "Pure 2", "Performance", "Balanced", "Quality", "Ultra", "Disabled"}
+    for path in [ROOT/"akeno/mods/service.py", ROOT/"akeno/fivem/community_stack.py"]:
+        tree=ast.parse(path.read_text())
+        for call in ast.walk(tree):
+            if isinstance(call,ast.Call) and isinstance(call.func,ast.Name) and call.func.id=="need":
+                for arg in call.args[3:5]:
+                    if isinstance(arg,ast.Constant) and isinstance(arg.value,str):out.add(arg.value)
+    for role in ('reshade','motion_provider','neural_consumer'):
+        out.add('A compatible '+role+' is required.')
+    from akeno.mods.catalog import CommunityCatalog
+    out |= {r['name'] for r in CommunityCatalog.bundled().recipes.values()}
     return out
 
 

@@ -74,7 +74,7 @@ def test_language_switch_rebuilds_ui(app_window, qtbot):
     win, ctl, svc = app_window
     ctl.set_setting("language", "de")
     qtbot.waitUntil(lambda: win.sidebar.buttons["dashboard"].text().strip() == "Übersicht", timeout=3000)
-    assert "Spielebibliothek" in win.sidebar.buttons["library"].text()
+    assert "Meine Spiele" in win.sidebar.buttons["library"].text()
     ctl.set_setting("language", "en")
     qtbot.waitUntil(lambda: win.sidebar.buttons["dashboard"].text().strip() == "Dashboard", timeout=3000)
 

@@ -27,7 +27,7 @@ def validate_profile(data):
             raise ValueError('Invalid GPU architecture inventory.')
     if data.get('validated_generations') and not data.get('execution_evidence'):
         raise ValueError('Validated older-GPU profiles require independent execution evidence.')
-    if not data.get('backends') or any(x not in ('optiscaler_nr', 'dlss5_feeder') for x in data['backends']):
+    if not data.get('backends') or any(x not in ('optiscaler_nr', 'dlss5_feeder', 'renodx_nr') for x in data['backends']):
         raise ValueError('Declare applicable neural backends.')
     if not data.get('apis') or any(x not in ('d3d11', 'd3d12', 'vulkan') for x in data['apis']):
         raise ValueError('Declare applicable rendering APIs.')
@@ -45,7 +45,7 @@ def local_profile(evaluation, source, permitted):
         'local_use_permitted': permitted, 'claimed_generations': ['RTX 40'] if named else [],
         'validated_generations': [], 'incompatible_generations': [], 'tested_gpus': [],
         'execution_evidence': [], 'minimum_driver': None,
-        'backends': ['optiscaler_nr', 'dlss5_feeder'], 'apis': ['d3d11', 'd3d12', 'vulkan'],
+        'backends': ['optiscaler_nr', 'dlss5_feeder', 'renodx_nr'], 'apis': ['d3d11', 'd3d12', 'vulkan'],
         'status': 'unverified', 'limitations': ['No malware audit or successful GPU execution is claimed.',
             'Modified/invalid signatures are not NVIDIA authentication. Keep Windows protections enabled.']})
 

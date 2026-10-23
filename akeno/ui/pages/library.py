@@ -22,7 +22,7 @@ LAUNCHERS = {"battlenet": "Battle.net", "steam": "Steam", "epic": "Epic Games", 
 
 
 class GameCard(Clickable):
-    def __init__(self, game, compat, selected: bool):
+    def __init__(self, game, compat, selected: bool, mod_status=None):
         super().__init__()
         self.setFixedSize(236, 214)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
@@ -44,7 +44,10 @@ class GameCard(Clickable):
         nm.setWordWrap(True)
         lay.addWidget(nm)
         lay.addWidget(label(f"{t(LAUNCHERS.get(game.launcher, game.launcher))} · {t(game.api.label)}", "muted"))
-        if compat:
+        if mod_status:
+            txt,st=mod_status
+            lay.addWidget(StatusPill(t(txt),st))
+        elif compat:
             txt, st = COMPAT_TEXT[compat.status]
             lay.addWidget(StatusPill(t(txt), st))
         lay.addStretch(1)
@@ -60,7 +63,7 @@ class LibraryPage(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(14)
         top = QHBoxLayout()
-        top.addWidget(label(t("Game Library"), "h1"))
+        top.addWidget(label(t("My Games"), "h1"))
         top.addStretch(1)
         self.spinner = Spinner()
         top.addWidget(self.spinner)
@@ -98,9 +101,9 @@ class LibraryPage(QWidget):
         self.grid = QGridLayout(self.grid_host)
         self.grid.setSpacing(14)
         self.grid.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        body.addWidget(self.grid_host, 3)
+        body.addWidget(self.grid_host, 1)
         self.detail = Card(t("Game details"), "gamepad", theme.VIOLET)
-        self.detail.setMinimumWidth(430)
+        self.detail.setMinimumWidth(560)
         self.detail_body = QVBoxLayout()
         self.detail.body.addLayout(self.detail_body)
         body.addWidget(self.detail, 2, Qt.AlignmentFlag.AlignTop)
@@ -153,9 +156,11 @@ class LibraryPage(QWidget):
                                            t("Scan your launchers or add a game folder manually."),
                                            button(t("Scan for games"), "search", "primary",
                                                   on_click=lambda: self.ctl.scan_games())), 0, 0)
-        cols = 3
+        cols = 1
         for i, g in enumerate(games):
-            card = GameCard(g, compat.get(g.id), sel is not None and sel.id == g.id)
+            active=self.s.installer.active_install(g.id)
+            mod_status=('Mod installed','success') if active else ('Community methods','warn')
+            card = GameCard(g, compat.get(g.id), sel is not None and sel.id == g.id,mod_status)
             card.clicked.connect(lambda gid=g.id: self._open(gid))
             self.grid.addWidget(card, i // cols, i % cols)
         if self.s.library.last_errors:
@@ -169,18 +174,31 @@ class LibraryPage(QWidget):
         self.ctl.select_game(game_id)
 
     def _render_detail(self) -> None:
+        previous=getattr(self,'mod_panel',None)
+        if previous is not None:
+            previous.closed=True;previous.cancel()
         clear_layout(self.detail_body)
         g = self.s.library.get(self.detail_id) or self.s.selected_game()
         if g is None:
             self.detail_body.addWidget(label(t("Select a game to see its analysis."), "dim", wrap=True))
             return
         self.detail_id = g.id
-        if g.launcher == "fivem":
-            from akeno.ui.fivem_panel import FiveMPanel
-            self.detail_body.addWidget(FiveMPanel(self.ctl, g, compact=True))
-            self.detail_body.addWidget(button(t("Open FiveM setup"), "sliders", "primary",
-                on_click=lambda: self.ctl.navigate.emit("install")))
-            return
+        from akeno.ui.mod_manager import ModPanel
+        self.mod_panel = ModPanel(self.ctl, g, self)
+        self.detail_body.addWidget(self.mod_panel)
+        diagnostics = self.mod_panel.tabs.widget(2).layout()
+        self._render_analysis(g, diagnostics)
+
+    def _render_analysis(self, g, destination):
+        # The original executable/API overrides and detailed analysis remain available.
+        original = self.detail_body
+        self.detail_body = destination
+        try:
+            self._analysis_widgets(g)
+        finally:
+            self.detail_body = original
+
+    def _analysis_widgets(self, g):
         self.detail_body.addWidget(label(g.name, "h2"))
         grid = KeyValueGrid(130)
         exe_combo = QComboBox()

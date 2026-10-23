@@ -10,6 +10,7 @@ from akeno.pipeline.manifests import ComponentStore, safe_relative
 from akeno.pipeline.discovery import facts_for, dll_inventory
 from akeno.pipeline.resolver import resolve
 from akeno.games import pe
+from akeno.core.models import GraphicsApi
 from akeno.security.downloads import sha256_file
 
 
@@ -34,13 +35,15 @@ class PipelineService:
         selection={'components':self.components.records(),'diagnostic':self.s.db.get_setting('diagnostic_optiscaler')}
         return hashlib.sha256(json.dumps(selection,sort_keys=True).encode()).hexdigest()
 
-    def _components(self,runtime):
-        result=self.components.records().copy()
+    def _components(self,runtime,game=None):
+        result=self.components.records(game.id if game else None).copy()
         # Inventory is cheap. Full byte validation is at prepare and immediately before deploy.
         opti_adapter=self.s.registry.get('optiscaler_nr');feeder_adapter=self.s.registry.get('dlss5_feeder')
-        opti=self.s.package_for(opti_adapter) if opti_adapter else None
-        feeder=self.s.package_for(feeder_adapter) if feeder_adapter else None
-        if opti and opti.installable and opti.id=='optiscaler-dlss5-skynizz-1.3.0' and opti.version=='1.3.0':
+        opti=self.s.package_for(opti_adapter,game) if opti_adapter else None
+        feeder=self.s.package_for(feeder_adapter,game) if feeder_adapter else None
+        mod_catalog=getattr(getattr(self.s,'mods',None),'catalog',None)
+        manifest=mod_catalog.package(opti.id) if mod_catalog and opti else None
+        if opti and opti.installable and (opti.id=='optiscaler-dlss5-skynizz-1.3.0' or manifest and manifest.get('contract')=='skynizz_nr'):
             result.update(optiscaler={'version':opti.version,'package':opti.id},forwarder={'version':opti.version,'package':opti.id})
         if feeder and feeder.installable and feeder.id=='dlss5-feeder-1.19.0' and feeder.version=='1.19.0':
             result.update(feeder={'version':feeder.version,'package':feeder.id},shader={'version':feeder.version,'package':feeder.id},host64={'version':feeder.version,'package':feeder.id})
@@ -56,7 +59,7 @@ class PipelineService:
         saved=self.s.community.runtime_record(runtime_sha) if runtime_sha else None
         runtime=dict(saved or {})
         if saved:runtime.update(sha256=runtime_sha,category=saved.get('category','community_experimental'))
-        facts=facts_for(self.s,game,offline,runtime,self._components(runtime))
+        facts=facts_for(self.s,game,offline,runtime,self._components(runtime,game))
         routes=resolve(facts)
         session=self.s.community.sessions.get(game.id)
         active=self.s.installer.active_install(game.id)
@@ -70,7 +73,7 @@ class PipelineService:
         return {'game_id':game.id,'game':game.name,'facts':facts,'routes':routes,'dll_inventory':dll_inventory(game),
                 'execution':'Not tested. Installation planning does not prove Neural Rendering.'}
 
-    def prepare(self,game_id,route_id,runtime_sha,offline=False,consent=False):
+    def prepare(self,game_id,route_id,runtime_sha,offline=False,consent=False,params=None):
         if consent is not True:raise PermissionError('Explicit experimental consent is required.')
         game=self.s.library.reanalyze(game_id)
         if not game:raise ValueError('Selected game is unavailable.')
@@ -80,22 +83,22 @@ class PipelineService:
         if route_id not in ('native_optiscaler','feeder'):raise PermissionError('Use the component swap or application-settings workflow for this route. A source-verified RenoDX NR consumer is not currently shipped.')
         candidate=self.s.community._candidate(runtime_sha)
         if route_id=='native_optiscaler':
-            prepared=self.s.community.prepare(game_id,runtime_sha,'optiscaler_nr',{},offline,consent)
+            prepared=self.s.community.prepare(game_id,runtime_sha,'optiscaler_nr',params or {},offline,consent)
             plan=prepared.plan
         else:
             # Feeder's synthetic DLSS contract is the input, not a claim of native game DLSS.
-            virtual=replace(game,upscaler_inputs=['dlss'])
+            virtual=replace(game,upscaler_inputs=['dlss'],api=GraphicsApi.D3D12)
             adapter,ctx=self.s.community._check(virtual,candidate,'optiscaler_nr',offline,consent)
-            package=self.s.package_for(adapter);staging=self.s.stage(game,adapter,package)
+            package=self.s.package_for(adapter,game);staging=self.s.stage(game,adapter,package)
             ctx.staging_dir=staging
-            plan=adapter.plan(virtual,package,adapter.default_params(game),ctx)
-            feeder=self.s.registry.get('dlss5_feeder');fp=self.s.package_for(feeder)
+            plan=adapter.plan(virtual,package,params or adapter.default_params(virtual),ctx)
+            feeder=self.s.registry.get('dlss5_feeder');fp=self.s.package_for(feeder,game)
             staged=self.s.stage(game,feeder,fp)
             for rel in ('dlss5-feed.addon64','reshade-shaders/Shaders/DLSS5_Feed.fx'):
                 plan.ops.append(FileOp(rel,source=staged/rel,expected_sha256=fp.files[rel],description='Pinned Feeder 1.19.0 component'))
             imports=set(pe.parse(game.exe_path,with_version=False).imports)
             if 'dxgi.dll' not in imports:raise PermissionError('Feeder/ReShade needs an evidenced dxgi loader path; do not introduce an unproven proxy.')
-            reshade=self.components.verified('reshade');motion=self.components.verified('motion_provider')
+            reshade=self.components.verified('reshade',game.id);motion=self.components.verified('motion_provider',game.id)
             if not reshade or not motion:raise PermissionError('Reimport missing or changed ReShade/motion-provider components.')
             self._component_op(game,plan,'dxgi.dll',reshade)
             destination=safe_relative(motion.get('destination','reshade-shaders/Shaders/'+Path(motion['path']).name))
@@ -109,7 +112,10 @@ class PipelineService:
             plan.backend_id='community:optiscaler_nr'
             plan.params.update(_community_runtime=runtime_sha,_review=candidate.review,_offline_attested=True,
                                _trust_category=candidate.category.value)
-            plan.summary.append('Feeder creates synthetic inputs; configure the actual depth/motion provider in ReShade before testing. No NR execution is claimed.')
+            from akeno.mods.configuration import feeder_configuration
+            plan.ops.extend(feeder_configuration(self.s,game,motion))
+            plan.params['_transport']='d3d11_private_d3d12' if game.api.value=='d3d11' else 'native_d3d12'
+            plan.summary.append('Feeder supplies color/depth/motion inputs on its D3D12 contract. Validate the selected depth buffer during gameplay; no NR execution is claimed.')
         # Use the central loader selection even if the old adapter preferred another free filename.
         marker=next((op for op in plan.ops if op.rel_path=='akeno-install.json'),None)
         proxy=next(op for op in plan.ops if op.source and op.source.name=='OptiScaler.dll')
@@ -151,9 +157,9 @@ class PipelineService:
         decision=next(r for r in analysis['routes'] if r.route_id==prepared.route_id)
         if not decision.eligible:raise PermissionError('Rendering eligibility changed. Prepare again.')
         candidate=self.s.community._candidate(prepared.runtime_sha256)
-        virtual=replace(game,upscaler_inputs=['dlss']) if prepared.route_id=='feeder' else game
+        virtual=replace(game,upscaler_inputs=['dlss'],api=GraphicsApi.D3D12) if prepared.route_id=='feeder' else game
         adapter,_=self.s.community._check(virtual,candidate,'optiscaler_nr',True,True)
-        if self.s.package_for(adapter)!=prepared.plan.package:raise PermissionError('Selected backend package changed after preview.')
+        if self.s.package_for(adapter,game)!=prepared.plan.package:raise PermissionError('Selected backend package changed after preview.')
         if self.s.community._environment(game,prepared.plan)!=prepared.environment_pin:raise PermissionError('Game/hardware state changed after preview.')
         pin=self.component_selection_pin()
         if pin!=prepared.components_pin:raise PermissionError('Component selection changed after preview.')

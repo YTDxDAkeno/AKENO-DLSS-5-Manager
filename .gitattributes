@@ -1,3 +1,6 @@
 # Diagnostic source identity uses canonical bytes on every build host.
 diagnostics/optiscaler/AkenoNrDiagnostic.h text eol=lf
 akeno/data/diagnostic_source/AkenoNrDiagnostic.h text eol=lf
+
+# Exact upstream source bytes are SHA-256 pinned, including original whitespace.
+community/vendor/** -text -whitespace
