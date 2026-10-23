@@ -104,7 +104,7 @@ class Installer:
     def managed_files(self, game_id: str, target_dir: str) -> set[str]:
         out: set[str] = set()
         for t in self.db.transactions(game_id):
-            if t["state"] == "installed" and os.path.normcase(t["target_dir"]) == os.path.normcase(target_dir):
+            if t["state"] in ("installed","superseded") and os.path.normcase(t["target_dir"]) == os.path.normcase(target_dir):
                 out |= {f["rel_path"].lower() for f in self.db.tx_files(t["id"])}
         return out
 
@@ -134,6 +134,9 @@ class Installer:
 
         prior = self.active_install(game.id, plan.backend_id) if plan.kind in ("install","swap") else None
         managed = self.managed_files(game.id, target_dir)
+        if prior:
+            conflicts=self.check_restore(prior['id'])
+            if conflicts:return TxResult(False,None,'failed',['Managed files or backups changed; review before updating.'],conflicts)
         # Refuse to overwrite anything AKENO did not install, unless it is renamed away by approval.
         for op in plan.ops:
             dst = _safe_join(target_dir, op.rel_path)
@@ -146,6 +149,7 @@ class Installer:
                     msg("Installation blocked: {rel_path} already exists and was not installed by AKENO. AKENO never "
                         "overwrites files from other tools.", rel_path=op.rel_path)])
         for op in plan.ops:
+            if op.kind=='delete' and not op.expected_sha256:raise InstallError('Deletion requires an exact current hash.')
             if op.source is not None and op.expected_sha256:
                 actual = sha256_file(op.source)
                 if actual != op.expected_sha256.lower():
@@ -206,12 +210,15 @@ class Installer:
                 if fail_after is not None and i >= fail_after:
                     raise InstallError("Injected failure (test)")
                 dst = _safe_join(target_dir, op.rel_path)
-                expected=op.expected_sha256 or hashlib.sha256(op.content or b'').hexdigest()
+                expected='deleted' if op.kind=='delete' else op.expected_sha256 or hashlib.sha256(op.content or b'').hexdigest()
                 # Journal intended bytes BEFORE atomic replacement, closing the crash window.
                 self.db.set_tx_file_installed(tx, op.rel_path, expected)
-                _atomic_write(dst, op.source, op.content)
+                if op.kind=='delete':
+                    if not dst.is_file() or sha256_file(dst)!=op.expected_sha256:raise InstallError('Deletion source changed.')
+                    dst.unlink()
+                else:_atomic_write(dst, op.source, op.content)
                 written.append(op.rel_path)
-                sha = sha256_file(dst)
+                sha = sha256_file(dst) if dst.is_file() else 'deleted'
                 if sha!=expected:raise InstallError('Post-copy hash mismatch: '+op.rel_path)
                 self.db.append_tx_log(tx, f"Wrote {op.rel_path} ({op.description})")
                 say(f"Installed {op.rel_path}")
@@ -296,9 +303,11 @@ class Installer:
             p = _safe_join(tx["target_dir"], rel)
             last = latest[rel]
             if last["action"] in ("create", "replace") and last["installed_sha256"]:
-                if not p.exists():
+                if last['installed_sha256']=='deleted':
+                    if p.exists():out.append(RestoreConflict(rel,'recreated after managed removal'))
+                elif not p.exists():
                     out.append(RestoreConflict(rel, "deleted after installation"))
-                elif sha256_file(p) != last["installed_sha256"]:
+                elif last['installed_sha256']!='deleted' and sha256_file(p) != last["installed_sha256"]:
                     out.append(RestoreConflict(rel, "modified after installation"))
             if f["action"] == "replace":
                 if not f["backup_path"] or not Path(f["backup_path"]).is_file():
@@ -384,7 +393,7 @@ class Installer:
                 if not backup or not backup.is_file() or backup.is_symlink() or sha256_file(backup)!=original:
                     conflicts.append(RestoreConflict(rel,'Original backup missing or damaged.'));continue
                 if actual==original:continue
-                if installed and actual==installed:operations.append(('restore',path,backup))
+                if installed and (actual==installed or installed=='deleted' and actual is None):operations.append(('restore',path,backup))
                 else:conflicts.append(RestoreConflict(rel,'Current bytes have no established transaction ownership.'))
             elif record['action']=='create':
                 if not path.exists():continue

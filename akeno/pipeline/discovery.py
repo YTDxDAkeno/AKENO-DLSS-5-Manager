@@ -13,6 +13,16 @@ def native_support(game, managed=()):
         except ValueError:rel=''
         if rel=='oakgame/binaries/win64/borderlands4.exe':
             return True,'Borderlands 4 Steam1285190 exact executable profile establishes engine DLSS support, not current calls or NR execution.'
+    from akeno.paths import resource_dir
+    import json
+    profile_file=resource_dir()/'community/catalog.json'
+    if profile_file.is_file() and game.launcher=='steam' and game.exe_path:
+        for profile in json.loads(profile_file.read_text())['profiles']:
+            if profile.get('native_upscaler_contract') and str(game.launcher_id)==profile.get('steam_app_id') and game.api.value in profile['apis']:
+                try:relative=Path(game.exe_path).relative_to(game.install_dir).as_posix().casefold()
+                except ValueError:continue
+                if relative in [p.casefold() for p in profile['executables']]:
+                    return True,profile['evidence']
     if not game.exe_path:return None,'Select the actual game executable.'
     imports=set(pe.parse(game.exe_path,with_version=False).imports)
     if 'nvngx_dlss.dll' in imports and 'nvngx_dlss.dll' not in {x.casefold() for x in managed}:

@@ -171,7 +171,7 @@ class CommunityService:
     def prepare(self, game_id, sha, backend_id, params, offline_confirmed=False, consent=False, staging=None):
         game, candidate = self._game(game_id), self._candidate(sha)
         adapter, ctx = self._check(game, candidate, backend_id, offline_confirmed, consent)
-        package = self.s.package_for(adapter)
+        package = self.s.package_for(adapter,game)
         if not package or not package.installable:
             raise PermissionError(msg("A reviewed, pinned backend package is required."))
         # An optional staging argument is for existing verified staging/tests; all members are rehashed below.
@@ -215,7 +215,7 @@ class CommunityService:
         adapter, _ = self._check(game, candidate, prepared.backend_id, offline_confirmed, consent)
         if self._environment(game, prepared.plan) != prepared.environment_pin:
             raise PermissionError(msg("Game files, renderer or hardware changed; prepare a fresh plan."))
-        if self.s.package_for(adapter) != prepared.plan.package:
+        if self.s.package_for(adapter,game) != prepared.plan.package:
             raise PermissionError(msg("The selected backend package changed."))
         for op in prepared.plan.ops:
             if op.source:

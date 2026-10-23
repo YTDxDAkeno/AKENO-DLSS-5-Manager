@@ -20,3 +20,7 @@ runtimes/**/*.zip
 runtimes/**/*.exe
 dist-private/
 private-inputs/
+
+# CI-generated redistributable components: release assets, never binary Git history.
+akeno/data/community/dependencies/
+community-build/

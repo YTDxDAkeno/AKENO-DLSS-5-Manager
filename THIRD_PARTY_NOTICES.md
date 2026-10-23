@@ -11,6 +11,21 @@ This file lists every third-party component AKENO bundles, downloads or interact
 | Qt for Python (PySide6, shiboken6) and Qt 6 libraries | 6.8.1 | LGPL-3.0 (Qt and PySide6 open-source licence) | User interface. Shipped as separate, replaceable DLLs in the one-folder build, as the LGPL requires. Source: https://code.qt.io/cgit/pyside/pyside-setup.git |
 | PyInstaller bootloader | 6.11.1 | GPL-2.0 with bootloader exception | Starts the bundled application |
 
+### Versioned community dependencies (v2 Windows CI)
+
+The release job builds ReShade 6.8.0 from commit `18deaa52de0c425a78b329e9cb3c497281cd00ec`
+(BSD-3-Clause) with pinned submodule source and notices. It bundles unchanged AlucardDH
+`dh_uber_motion.fx` 0.2.0 at `0783b8fde77df48412d79070be7de4bc3743b898` (GPL-2.0), its complete
+source/license, required `ReShade.fxh` at `fd0022170615ce0d8162d219bff07232fa6dd84f` (CC0-1.0),
+and the original pinned MIT Feeder 1.19.0 archive with matching source and NIGos MIT notice.
+The upstream main MIT notice credits NIGos; the same source tree contains the full bridge notice
+under `LICENSE-NIGos-dlss5-bridge.md` (its README's old `bridge-1.0.19/LICENSE` path is absent).
+
+Generated dependency archives carry matching source archives, source/file hashes and notices.
+See [COMMUNITY_COMPONENTS.md](docs/COMMUNITY_COMPONENTS.md) and `community/vendor/pins.json`.
+No proprietary NVIDIA runtime, protected NR consumer or restricted motion package is bundled.
+Local NR consumer imports remain private and require the user's own license/permission.
+
 ### AKENO design artwork (`akeno/data/assets/`)
 
 The header, recommendation and sidebar backgrounds, the GPU illustration, the AKENO logo/wordmark SVGs

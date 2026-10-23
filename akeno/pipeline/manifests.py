@@ -10,7 +10,7 @@ from akeno.community.runtime import regular
 from akeno.games import pe
 from .dependencies import ordered_components
 
-ROLES={'reshade','motion_provider','shader','dlss_runtime','nr_runtime','api_bridge'}
+ROLES={'reshade','motion_provider','shader','dlss_runtime','nr_runtime','api_bridge','neural_consumer'}
 
 
 def safe_relative(value):
@@ -22,7 +22,7 @@ def safe_relative(value):
 class ComponentStore:
     def __init__(self,db):self.db=db
 
-    def import_manifest(self,path,permitted=False):
+    def import_manifest(self,path,permitted=False,roles=None):
         if permitted is not True:raise PermissionError('Explicit local-use permission is required.')
         manifest=Path(path);regular(manifest)
         if manifest.stat().st_size>1024*1024:raise ValueError('Component manifest is too large.')
@@ -33,6 +33,7 @@ class ComponentStore:
         validated={}
         for item in entries:
             role=item.get('role')
+            if roles is not None and role not in roles:continue
             if role not in ROLES or role in validated:raise ValueError('Unknown or duplicate component role.')
             if not all(isinstance(item.get(k),str) and item[k].strip() for k in ('version','source','license')):raise ValueError('Version, source and license metadata are required.')
             if not item['source'].startswith('https://'):raise ValueError('Declare the upstream HTTPS source identity.')
@@ -41,8 +42,16 @@ class ComponentStore:
             src=manifest.parent/safe_relative(item['path']);regular(src)
             if not src.resolve().is_relative_to(manifest.parent.resolve()) or sha256_file(src)!=item['sha256'].lower():raise ValueError('Component path/hash mismatch: '+role)
             arch=item.get('architecture');info=pe.parse(src)
-            if src.suffix.lower() in ('.dll','.addon64','.addon32'):
+            if role in ('reshade','neural_consumer','api_bridge','nr_runtime','dlss_runtime') or src.suffix.lower() in ('.dll','.addon64','.addon32'):
                 if not info.valid or not info.is_dll or info.machine!=arch:raise ValueError('Component PE architecture mismatch.')
+            if role=='neural_consumer':
+                if item.get('contract')!='renodx-dlss5-config7' or arch!='x64' or not item.get('version'):
+                    raise ValueError('An exact x64 RenoDX DLSS5 ConfigVersion 7 consumer contract is required.')
+                # These strings are a format check, not authentication or proof of NR execution.
+                blob=src.read_bytes()
+                for marker in (b'NeuralUplift',b'NRPasses',b'NREnableUpscaling'):
+                    if marker not in blob and marker.decode().encode('utf-16le') not in blob:
+                        raise ValueError('Consumer lacks the declared NR configuration contract.')
             if role=='reshade' and not {'ReShadeRegisterAddon','ReShadeUnregisterAddon'}<=set(info.exports):raise ValueError('ReShade full addon exports are required.')
             asset_records=[]
             assets=item.get('assets',[])
@@ -63,7 +72,7 @@ class ComponentStore:
                     if shader.stat().st_size>4*1024*1024:raise ValueError('Shader source is too large.')
                     for include in re.findall(r'^\s*#include\s*[<"]([^>"\r\n]+)[>"]',shader.read_text(errors='replace'),re.M):
                         target=posixpath.normpath(posixpath.join(posixpath.dirname(destination),include.replace('\\','/')))
-                        if target not in available:raise ValueError('Missing pinned shader include: '+include)
+                        if target.casefold() not in {a.casefold() for a in available}:raise ValueError('Missing pinned shader include: '+include)
             record=dict(item,assets=asset_records,sha256=item['sha256'].lower(),architectures=[arch] if arch else [],trust='local_declared_not_a_security_review')
             validated[role]=record|{'_source':str(src)}
         ordered_components(self.records()|validated)
@@ -83,13 +92,31 @@ class ComponentStore:
                 if sha256_file(asset_dest)!=asset['sha256']:raise ValueError('Changed shader asset cache.')
                 asset['stored_path']=str(asset_dest)
         existing=self.db.get_setting('pipeline_components',{})
+        library=self.db.get_setting('pipeline_component_library',{})
+        library.update({item['sha256']:item for item in existing.values()});library.update({item['sha256']:item for item in validated.values()})
+        self.db.set_setting('pipeline_component_library',library)
         existing.update(validated);self.db.set_setting('pipeline_components',existing)
         return validated
 
-    def records(self):return self.db.get_setting('pipeline_components',{})
+    def records(self,game_id=None):
+        records=self.db.get_setting('pipeline_components',{})
+        if game_id:
+            library=self.db.get_setting('pipeline_component_library',{})
+            for key,pin in self.db.game_overrides(game_id).items():
+                if not key.startswith('mod_component.'):continue
+                role=key.split('.',1)[1];item=library.get(pin)
+                if item and item.get('role')==role:records[role]=item
+                else:records.pop(role,None)  # Never silently replace a missing explicitly selected version.
+        return records
 
-    def verified(self,role):
-        item=self.records().get(role)
+    def select(self,game_id,role,pin):
+        item=self.db.get_setting('pipeline_component_library',{}).get(pin)
+        if role not in ROLES or not item or item.get('role')!=role:raise ValueError('Unknown imported component version.')
+        overrides=self.db.game_overrides(game_id);overrides['mod_component.'+role]=pin;self.db.set_game_overrides(game_id,overrides)
+        return item
+
+    def verified(self,role,game_id=None):
+        item=self.records(game_id).get(role)
         if not item:return None
         p=Path(item['stored_path'])
         try:

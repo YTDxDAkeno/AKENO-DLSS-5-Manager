@@ -5,6 +5,11 @@ on:
     branches: ["**"]
   pull_request:
   workflow_dispatch:
+    inputs:
+      draft_release:
+        description: Create a draft development prerelease after Linux and Windows pass
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -54,17 +59,19 @@ jobs:
           AKENO_V14_SCREENSHOTS: screenshots/v14-fixtures
           AKENO_V15_SCREENSHOTS: screenshots/v15-fixtures
           AKENO_V16_SCREENSHOTS: screenshots/v16-fixtures
+          AKENO_V2_SCREENSHOTS: screenshots/v2-fixtures
       - name: Publish bounded test failure annotations
         if: failure()
         run: python tools/ci_test_annotations.py test-results.xml
       - name: Verification diagnostics UI at 150 percent (synthetic fixtures)
-        run: python -m pytest -q tests/test_v141_ui.py tests/test_v15_ui.py tests/test_v16_ui.py --junitxml=v141-ui-150pct.xml
+        run: python -m pytest -q tests/test_v141_ui.py tests/test_v15_ui.py tests/test_v16_ui.py tests/test_v2_ui.py --junitxml=v141-ui-150pct.xml
         env:
           QT_QPA_PLATFORM: offscreen
           QT_SCALE_FACTOR: '1.5'
           AKENO_V14_SCREENSHOTS: screenshots/v141-150pct
           AKENO_V15_SCREENSHOTS: screenshots/v15-150pct
           AKENO_V16_SCREENSHOTS: screenshots/v16-150pct
+          AKENO_V2_SCREENSHOTS: screenshots/v2-150pct
       - name: Smoke test from source (real Windows hardware/library scan, every page built)
         run: python -m akeno --smoke-test
         env:
@@ -94,6 +101,33 @@ jobs:
           $null = [scriptblock]::Create((Get-Content tools/build-private-offline.ps1 -Raw))
       - name: Build icon
         run: python packaging\make_icon.py
+      - name: Checkout reviewed ReShade source and submodule source
+        uses: actions/checkout@v4
+        with:
+          repository: crosire/reshade
+          ref: 18deaa52de0c425a78b329e9cb3c497281cd00ec
+          path: community-build/ReShade
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+      - uses: microsoft/setup-msbuild@v2
+      - name: Build redistributable ReShade with full addon support
+        working-directory: community-build/ReShade
+        run: msbuild ReShade.sln /p:Configuration=Release /p:Platform=64-bit /m
+      - name: Assemble licensed community dependencies with corresponding source
+        run: python tools/build_community_bundle.py --reshade-source community-build/ReShade --reshade-dll community-build/ReShade/bin/x64/Release/ReShade64.dll
+      - name: Compile pinned Feeder and motion effects
+        run: python tools/check_community_shaders.py --compiler community-build/ReShade/bin/x64/Release/fxc.exe --bundle akeno/data/community/dependencies
+      - name: Package community dependency release
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force packaging/out | Out-Null
+          Compress-Archive -Path akeno/data/community/dependencies/* -DestinationPath packaging/out/AKENO-community-dependencies-2.0.0-x64.zip
+      - name: Test bundled dependency contracts
+        run: python -m pytest -q tests/test_v2_bundle.py
+        env:
+          QT_QPA_PLATFORM: offscreen
+          AKENO_TEST_REAL_BUNDLE: '1'
       - name: PyInstaller build
         run: pyinstaller --noconfirm --distpath dist --workpath build packaging\akeno.spec
       - name: Smoke test the packaged executable
@@ -173,6 +207,8 @@ jobs:
             screenshots/v14-fixtures/*.png
             screenshots/v15-fixtures/*.png
             screenshots/v15-150pct/*.png
+            screenshots/v2-fixtures/*.png
+            screenshots/v2-150pct/*.png
             screenshots/v16-fixtures/*.png
             screenshots/v16-150pct/*.png
             screenshots/windows-runner/*.png
@@ -182,3 +218,23 @@ jobs:
             ${{ runner.temp }}/akeno-gui/logs/*
             ${{ runner.temp }}/akeno-smoke/logs/*
             ${{ runner.temp }}/akeno-exe/logs/*
+
+  development-release:
+    name: Draft development release from tested Windows artifacts
+    if: github.event_name == 'workflow_dispatch' && inputs.draft_release
+    needs: [test-linux, windows]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: AKENO-DLSS5-Manager-windows-x64
+          path: release-inputs
+      - name: Create draft prerelease with exact tested artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create v2.0.0-dev --draft --prerelease --target "$GITHUB_SHA" --title "AKENO DLSS 5 Manager 2.0 development" --notes-file docs/AKENO_V2_RELEASE_NOTES.md release-inputs/*

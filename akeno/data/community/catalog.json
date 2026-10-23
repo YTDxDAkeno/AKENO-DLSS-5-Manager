@@ -1,0 +1,1132 @@
+{
+  "schema": 2,
+  "version": "2.0.0",
+  "projects": [
+    {
+      "id": "skynizz",
+      "name": "OptiScaler DLSS 5",
+      "repository": "Skynizz/optiscaler-dlss5",
+      "role": "neural_consumer"
+    },
+    {
+      "id": "dagherbou",
+      "name": "OptiScaler DLSSNR",
+      "repository": "Dagherbou/OptiScaler_DLSSNR",
+      "role": "neural_consumer"
+    },
+    {
+      "id": "feeder",
+      "name": "DLSS5-Feeder",
+      "repository": "jlrouzies-fr/DLSS5-Feeder",
+      "role": "input_provider"
+    },
+    {
+      "id": "reshade",
+      "name": "ReShade",
+      "repository": "crosire/reshade",
+      "role": "graphics_hook"
+    },
+    {
+      "id": "renodx",
+      "name": "RenoDX",
+      "repository": "clshortfuse/renodx",
+      "role": "consumer_requires_individual_license"
+    },
+    {
+      "id": "rhi",
+      "name": "RHI",
+      "repository": "RankFTW/RHI",
+      "role": "metadata_tool"
+    },
+    {
+      "id": "rhi-repo",
+      "name": "RHI game metadata",
+      "repository": "RankFTW/rhi-repo",
+      "role": "metadata"
+    },
+    {
+      "id": "fivem",
+      "name": "FiveM-DLSS5 reference",
+      "repository": "kerim0x1/FiveM-DLSS5",
+      "role": "integration_reference"
+    },
+    {
+      "id": "enabler",
+      "name": "DLSS-Enabler",
+      "repository": "artur-graniszewski/DLSS-Enabler",
+      "role": "non_nr_integration_reference"
+    },
+    {
+      "id": "optiscaler",
+      "name": "OptiScaler upstream",
+      "repository": "optiscaler/OptiScaler",
+      "role": "non_nr_reference"
+    }
+  ],
+  "packages": [
+    {
+      "id": "optiscaler-dlss5-skynizz-1.3.0",
+      "project": "skynizz",
+      "name": "OptiScaler DLSS 5",
+      "version": "1.3.0",
+      "release_tag": "v1.3.0",
+      "channel": "stable",
+      "asset_name": "OptiScaler-DLSS5-1.3.0-win-x64.zip",
+      "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.3.0/OptiScaler-DLSS5-1.3.0-win-x64.zip",
+      "sha256": "2f0ee88ac00848602c1422db19c29b3c992d3e0039675aa900a3cde9cf05dd8a",
+      "size": 6714186,
+      "license": "GPL-3.0",
+      "redistribution": "original_download_only",
+      "checksum_source": "maintainer_sha256_sidecar",
+      "reviewed_at": "2026-10-23",
+      "source_commit": "fc702f8ca22f97b01bd6a02f3386bffb3484fc35",
+      "backend": "optiscaler_nr",
+      "root": "DLSS5-Optimised",
+      "files": {
+        "OptiScaler.dll": "90b813108f8aea5a0a9335c6b0cd6a8927bdce438d512c07435f2071209045e9",
+        "OptiScaler.ini": "4bfe7a4ec6ed7ebdc024ab4be15f21a898d53a99249e8bd34ddadc8dfa9309b5",
+        "nvngx.dll_dlssnr.dll": "903d1b39889ddb4893a45825783d1b5d79387ba0645872d7dbe6938e9b37b9ec"
+      },
+      "architectures": [
+        "x64"
+      ],
+      "graphics_apis": [
+        "d3d11",
+        "d3d12",
+        "vulkan"
+      ],
+      "contract": "skynizz_nr",
+      "installable": true,
+      "dependencies": [
+        "nr_runtime"
+      ],
+      "gpu_families": [
+        "RTX 40",
+        "RTX 50"
+      ],
+      "runtime_policy": "exact_local_runtime_profile; no generation-wide execution claim",
+      "issues": [
+        "Experimental: exact GPU/runtime/driver results required."
+      ],
+      "supported_nr_keys": [
+        "ToggleKey",
+        "CompareKey",
+        "ShowStats",
+        "PreSr",
+        "PreSrReduced",
+        "Enabled",
+        "TransferStrength",
+        "ColourStrength",
+        "WhitePointScale",
+        "AutoFollowsGameExposure",
+        "MaxRatio",
+        "WorkingScale",
+        "ScalingDownscaler",
+        "DebugView",
+        "AutoCapture",
+        "Preset",
+        "Style",
+        "Passes",
+        "PassStyles",
+        "Intensity",
+        "LocalStructure",
+        "LocalTone",
+        "SkinStructure",
+        "AutoMask",
+        "CacheEnabled",
+        "CacheInterval",
+        "CacheAdaptive",
+        "CacheAdaptiveThreshold",
+        "CacheDepthTolerance",
+        "CacheColourTolerance",
+        "CacheHighDecay",
+        "CacheRefreshBlend",
+        "CacheLowGain",
+        "CacheHighGain",
+        "CacheBilateral",
+        "CacheStabilize",
+        "CacheDespeckle",
+        "CacheCrossfade",
+        "CacheSoftRefresh",
+        "CacheTemporal",
+        "CacheLowTemporal",
+        "CacheModelHistory",
+        "CacheDebugView",
+        "CacheDumpFrames",
+        "CacheFingerprint",
+        "CacheContext",
+        "CacheFingerprintTolerance",
+        "CacheSurfaceFill",
+        "CacheCrossfadeFrames",
+        "CacheGuided",
+        "CacheGuidedStrength",
+        "CacheAging",
+        "CacheAgeHalfLife",
+        "CacheAgeNeutral",
+        "CacheAdaptiveSpeed",
+        "CacheAdaptiveMin",
+        "CacheAntiPop",
+        "CacheAntiPopRate",
+        "CacheMotionPriority",
+        "CacheBudgetMs",
+        "CacheStillMax",
+        "CacheStillHold",
+        "CacheNoiseAware",
+        "CacheAsync",
+        "FGSync",
+        "PrivateCreate",
+        "RegionMask",
+        "RegionMaskDistance",
+        "RegionMaskSoftness",
+        "RegionMaskStrength",
+        "RegionMaskIgnoreFloor",
+        "RegionMaskShow",
+        "MotionFade",
+        "MotionFadeStart",
+        "MotionFadeEnd",
+        "MotionFadeSkipModel",
+        "JbuUpsample",
+        "JbuSigma"
+      ],
+      "published_at": "2026-10-19T22:30:01Z"
+    },
+    {
+      "id": "optiscaler-dlss5-skynizz-1.2.1",
+      "project": "skynizz",
+      "name": "OptiScaler DLSS 5",
+      "version": "1.2.1",
+      "release_tag": "v1.2.1",
+      "channel": "stable",
+      "asset_name": "OptiScaler-DLSS5-1.2.1-win-x64.zip",
+      "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/OptiScaler-DLSS5-1.2.1-win-x64.zip",
+      "sha256": "0d5b24887ea2c622754da68efc76ef55ae42b5d3be350a8d43cafbabb6747ec6",
+      "size": 6456692,
+      "license": "GPL-3.0",
+      "redistribution": "original_download_only",
+      "checksum_source": "maintainer_sha256_sidecar",
+      "reviewed_at": "2026-10-23",
+      "source_commit": "6bfc4389c25054ef6747df6e6b1b470e9541c4da",
+      "backend": "optiscaler_nr",
+      "root": "DLSS5-Optimised",
+      "files": {
+        "OptiScaler.dll": "ad143c5bd6e5fab4d1abd8b048c424e9ddceabf1a864e0e0695c01a0dc82b4c9",
+        "OptiScaler.ini": "080057b315c4f0df80a966cd55be6ce12c70f55d37ca9b0b217fee8d155258e2",
+        "nvngx.dll_dlssnr.dll": "87408102bc7b6a740c2f771deb131a606424df08165d4b9ab34c2742c2a42ea0"
+      },
+      "architectures": [
+        "x64"
+      ],
+      "graphics_apis": [
+        "d3d11",
+        "d3d12",
+        "vulkan"
+      ],
+      "contract": "skynizz_nr",
+      "installable": true,
+      "dependencies": [
+        "nr_runtime"
+      ],
+      "gpu_families": [
+        "RTX 40",
+        "RTX 50"
+      ],
+      "runtime_policy": "exact_local_runtime_profile; no generation-wide execution claim",
+      "issues": [
+        "Experimental: exact GPU/runtime/driver results required."
+      ],
+      "supported_nr_keys": [
+        "ToggleKey",
+        "CompareKey",
+        "ShowStats",
+        "PreSr",
+        "PreSrReduced",
+        "Enabled",
+        "TransferStrength",
+        "ColourStrength",
+        "WhitePointScale",
+        "MaxRatio",
+        "WorkingScale",
+        "ScalingDownscaler",
+        "DebugView",
+        "AutoCapture",
+        "Preset",
+        "Style",
+        "Passes",
+        "Intensity",
+        "LocalStructure",
+        "LocalTone",
+        "SkinStructure",
+        "AutoMask",
+        "CacheEnabled",
+        "CacheInterval",
+        "CacheAdaptive",
+        "CacheAdaptiveThreshold",
+        "CacheDepthTolerance",
+        "CacheColourTolerance",
+        "CacheHighDecay",
+        "CacheRefreshBlend",
+        "CacheLowGain",
+        "CacheHighGain",
+        "CacheBilateral",
+        "CacheStabilize",
+        "CacheDespeckle",
+        "CacheCrossfade",
+        "CacheSoftRefresh",
+        "CacheTemporal",
+        "CacheLowTemporal",
+        "CacheModelHistory",
+        "CacheDebugView",
+        "CacheDumpFrames",
+        "CacheFingerprint",
+        "CacheContext",
+        "CacheFingerprintTolerance",
+        "CacheSurfaceFill",
+        "CacheCrossfadeFrames",
+        "CacheGuided",
+        "CacheGuidedStrength",
+        "CacheAging",
+        "CacheAgeHalfLife",
+        "CacheAgeNeutral",
+        "CacheAdaptiveSpeed",
+        "CacheAdaptiveMin",
+        "CacheAntiPop",
+        "CacheAntiPopRate",
+        "CacheMotionPriority",
+        "CacheBudgetMs",
+        "CacheStillMax",
+        "CacheStillHold",
+        "CacheNoiseAware",
+        "CacheAsync",
+        "JbuUpsample",
+        "JbuSigma"
+      ],
+      "published_at": "2026-10-10T23:05:09Z"
+    },
+    {
+      "id": "optiscaler-dlss5-skynizz-1.2.0",
+      "project": "skynizz",
+      "name": "OptiScaler DLSS 5",
+      "version": "1.2.0",
+      "release_tag": "v1.2.0",
+      "channel": "stable",
+      "asset_name": "OptiScaler-DLSS5-1.2.0-win-x64.zip",
+      "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.0/OptiScaler-DLSS5-1.2.0-win-x64.zip",
+      "sha256": "48dd0d9f2701237b7c9b0af652631efad2d8c4e0f5886dd088d31d3a3e4de2a3",
+      "size": 6460029,
+      "license": "GPL-3.0",
+      "redistribution": "original_download_only",
+      "checksum_source": "maintainer_sha256_sidecar",
+      "reviewed_at": "2026-10-23",
+      "source_commit": "44c921059c09272593c11da40bc3d19a00e608a0",
+      "backend": "optiscaler_nr",
+      "root": "DLSS5-Optimised",
+      "files": {
+        "OptiScaler.dll": "2f86184646511a3e0e22ed93999c6acc1a5171f9fadfa70feca7004126737a7a",
+        "OptiScaler.ini": "080057b315c4f0df80a966cd55be6ce12c70f55d37ca9b0b217fee8d155258e2",
+        "nvngx.dll_dlssnr.dll": "87408102bc7b6a740c2f771deb131a606424df08165d4b9ab34c2742c2a42ea0"
+      },
+      "architectures": [
+        "x64"
+      ],
+      "graphics_apis": [
+        "d3d11",
+        "d3d12",
+        "vulkan"
+      ],
+      "contract": "skynizz_nr",
+      "installable": true,
+      "dependencies": [
+        "nr_runtime"
+      ],
+      "gpu_families": [
+        "RTX 40",
+        "RTX 50"
+      ],
+      "runtime_policy": "exact_local_runtime_profile; no generation-wide execution claim",
+      "issues": [
+        "Experimental: exact GPU/runtime/driver results required."
+      ],
+      "supported_nr_keys": [
+        "ToggleKey",
+        "CompareKey",
+        "ShowStats",
+        "PreSr",
+        "PreSrReduced",
+        "Enabled",
+        "TransferStrength",
+        "ColourStrength",
+        "WhitePointScale",
+        "MaxRatio",
+        "WorkingScale",
+        "ScalingDownscaler",
+        "DebugView",
+        "AutoCapture",
+        "Preset",
+        "Style",
+        "Passes",
+        "Intensity",
+        "LocalStructure",
+        "LocalTone",
+        "SkinStructure",
+        "AutoMask",
+        "CacheEnabled",
+        "CacheInterval",
+        "CacheAdaptive",
+        "CacheAdaptiveThreshold",
+        "CacheDepthTolerance",
+        "CacheColourTolerance",
+        "CacheHighDecay",
+        "CacheRefreshBlend",
+        "CacheLowGain",
+        "CacheHighGain",
+        "CacheBilateral",
+        "CacheStabilize",
+        "CacheDespeckle",
+        "CacheCrossfade",
+        "CacheSoftRefresh",
+        "CacheTemporal",
+        "CacheLowTemporal",
+        "CacheModelHistory",
+        "CacheDebugView",
+        "CacheDumpFrames",
+        "CacheFingerprint",
+        "CacheContext",
+        "CacheFingerprintTolerance",
+        "CacheSurfaceFill",
+        "CacheCrossfadeFrames",
+        "CacheGuided",
+        "CacheGuidedStrength",
+        "CacheAging",
+        "CacheAgeHalfLife",
+        "CacheAgeNeutral",
+        "CacheAdaptiveSpeed",
+        "CacheAdaptiveMin",
+        "CacheAntiPop",
+        "CacheAntiPopRate",
+        "CacheMotionPriority",
+        "CacheBudgetMs",
+        "CacheStillMax",
+        "CacheStillHold",
+        "CacheNoiseAware",
+        "CacheAsync",
+        "JbuUpsample",
+        "JbuSigma"
+      ],
+      "published_at": "2026-10-10T14:53:27Z"
+    },
+    {
+      "id": "optiscaler-dagherbou-0.2.0-dlssnr",
+      "project": "dagherbou",
+      "name": "OptiScaler DLSSNR",
+      "version": "0.2.0-dlssnr",
+      "release_tag": "v0.2.0-dlssnr",
+      "channel": "stable",
+      "asset_name": "OptiScaler-DLSSNR-v0.2.0.zip",
+      "url": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-dlssnr/OptiScaler-DLSSNR-v0.2.0.zip",
+      "sha256": "8eece7a4d7de6de5917f0c99ac60540b2d77022e7699bba717b0a6d9e1829bce",
+      "size": 130486024,
+      "license": "GPL-3.0",
+      "redistribution": "original_download_only",
+      "checksum_source": "published_github_asset_digest",
+      "reviewed_at": "2026-10-23",
+      "source_commit": null,
+      "backend": "optiscaler_nr",
+      "root": "",
+      "files": {
+        "OptiScaler.dll": "8f526752d82c9cba99bf747a216a8caccd59a585d9ed0e217a8d47ab3c7c4998",
+        "OptiScaler.ini": "27af5289887b90403eef25b15d8295b35c72e1a26d13e83acd0daa28129bfff6",
+        "nvngx.dll_dlssnr.dll": "17cf51d25d142d0be15fcac945cc928c37849a1cb61011cb9c742d72df86647c"
+      },
+      "architectures": [
+        "x64"
+      ],
+      "graphics_apis": [
+        "d3d11",
+        "d3d12",
+        "vulkan"
+      ],
+      "contract": "dagherbou_full_stack_review",
+      "installable": false,
+      "dependencies": [
+        "nr_runtime"
+      ],
+      "gpu_families": [
+        "RTX 40",
+        "RTX 50"
+      ],
+      "runtime_policy": "exact_local_runtime_profile; no generation-wide execution claim",
+      "issues": [
+        "Experimental: exact GPU/runtime/driver results required.",
+        "Full AMD/Intel dependency layout requires independent review; this archive is not reduced to two arbitrary DLLs."
+      ],
+      "published_at": "2026-09-03T19:49:55Z"
+    },
+    {
+      "id": "optiscaler-dagherbou-0.2.0-patch1",
+      "project": "dagherbou",
+      "name": "OptiScaler DLSSNR",
+      "version": "0.2.0-patch1",
+      "release_tag": "v0.2.0-patch1",
+      "channel": "stable",
+      "asset_name": "OptiScaler-DLSSNR-v0.2.0-onimusha-fix.zip",
+      "url": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-patch1/OptiScaler-DLSSNR-v0.2.0-onimusha-fix.zip",
+      "sha256": "5db547216fa8a7dbd8ab0a193da1e3bce0ea4bd71f91189afa4ed2ede8bb9561",
+      "size": 130480693,
+      "license": "GPL-3.0",
+      "redistribution": "original_download_only",
+      "checksum_source": "published_github_asset_digest",
+      "reviewed_at": "2026-10-23",
+      "source_commit": null,
+      "backend": "optiscaler_nr",
+      "root": "",
+      "files": {
+        "OptiScaler.dll": "114a1d18e79d90a011406b9467b4b6dc4d4948487c4b30289311def311174bce",
+        "OptiScaler.ini": "27af5289887b90403eef25b15d8295b35c72e1a26d13e83acd0daa28129bfff6",
+        "nvngx.dll_dlssnr.dll": "17cf51d25d142d0be15fcac945cc928c37849a1cb61011cb9c742d72df86647c"
+      },
+      "architectures": [
+        "x64"
+      ],
+      "graphics_apis": [
+        "d3d11",
+        "d3d12",
+        "vulkan"
+      ],
+      "contract": "dagherbou_full_stack_review",
+      "installable": false,
+      "dependencies": [
+        "nr_runtime"
+      ],
+      "gpu_families": [
+        "RTX 40",
+        "RTX 50"
+      ],
+      "runtime_policy": "exact_local_runtime_profile; no generation-wide execution claim",
+      "issues": [
+        "Experimental: exact GPU/runtime/driver results required.",
+        "Full AMD/Intel dependency layout requires independent review; this archive is not reduced to two arbitrary DLLs."
+      ],
+      "published_at": "2026-09-04T16:16:10Z"
+    },
+    {
+      "id": "optiscaler-dagherbou-0.1.2-dIssnr",
+      "project": "dagherbou",
+      "name": "OptiScaler DLSSNR",
+      "version": "0.1.2-dIssnr",
+      "release_tag": "v0.1.2-dIssnr",
+      "channel": "stable",
+      "asset_name": "OptiScaler-DLSSNR-v0.1.2.zip",
+      "url": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.1.2-dIssnr/OptiScaler-DLSSNR-v0.1.2.zip",
+      "sha256": "4ecf3c3d4a1c23637144855fc327f4b33079370219188ca0e198c7cb6ed58f36",
+      "size": 130438762,
+      "license": "GPL-3.0",
+      "redistribution": "original_download_only",
+      "checksum_source": "published_github_asset_digest",
+      "reviewed_at": "2026-10-23",
+      "source_commit": null,
+      "backend": "optiscaler_nr",
+      "root": "",
+      "files": {
+        "OptiScaler.dll": "918f019567ee9934775fc694c94ee46d7a0497e02e28de0a5cd8ed6ed9f2f662",
+        "OptiScaler.ini": "6a6e002b796a78953a61d248ec58ce68daf3fa4cf60a0ff4851674460d44b6aa",
+        "nvngx.dll_dlssnr.dll": "7ad3b06582cb388a045d3407ea27e7c172dd9b85e9b4534b9c64f44d82342e1e"
+      },
+      "architectures": [
+        "x64"
+      ],
+      "graphics_apis": [
+        "d3d11",
+        "d3d12",
+        "vulkan"
+      ],
+      "contract": "dagherbou_full_stack_review",
+      "installable": false,
+      "dependencies": [
+        "nr_runtime"
+      ],
+      "gpu_families": [
+        "RTX 40",
+        "RTX 50"
+      ],
+      "runtime_policy": "exact_local_runtime_profile; no generation-wide execution claim",
+      "issues": [
+        "Experimental: exact GPU/runtime/driver results required.",
+        "Full AMD/Intel dependency layout requires independent review; this archive is not reduced to two arbitrary DLLs."
+      ],
+      "published_at": "2026-09-02T11:12:19Z"
+    },
+    {
+      "id": "dlss5-feeder-1.19.0",
+      "project": "feeder",
+      "name": "DLSS5-Feeder",
+      "version": "1.19.0",
+      "release_tag": "v1.19.0",
+      "channel": "stable",
+      "asset_name": "DLSS5-Feeder-1.19.0.zip",
+      "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.19.0/DLSS5-Feeder-1.19.0.zip",
+      "sha256": "9cc19e28f8fb4e216ea61621fdf6443e207e338ec639979ab335503c75f48f36",
+      "size": 503554,
+      "license": "MIT",
+      "redistribution": "permitted_with_notices",
+      "checksum_source": "published_github_asset_digest",
+      "reviewed_at": "2026-10-23",
+      "source_commit": "3c09eabcd138a68d144b6cc396a23e6b493eea4d",
+      "backend": "dlss5_feeder",
+      "root": "",
+      "files": {
+        "dlss5-feed.addon64": "2b8c905012fd464ddf0554c6b178cba55030ec10eb917acdcee0e7a2376fe4dd",
+        "dlss5-feed.addon32": "34c767bd53a99f51a6cb5d87b267734e04314d16bf495a6c69ab98acd62d0874",
+        "dlss5-feed-helper.addon64": "c069aa9d8b01fcee34234bc458a798c3be6f27fc8b9f23b74b5fb1784a828886",
+        "host64/dlss5-feed-host64.exe": "79e427430c5c0102f6c7a557155b706ad51b0c40933f6e245fce922bf5b1401e",
+        "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+      },
+      "architectures": [
+        "x64",
+        "x86"
+      ],
+      "graphics_apis": [
+        "d3d11",
+        "d3d12"
+      ],
+      "contract": "feeder_1_19",
+      "installable": true,
+      "dependencies": [
+        "reshade",
+        "motion_provider",
+        "official_sr",
+        "neural_consumer",
+        "nr_runtime"
+      ],
+      "gpu_families": [
+        "RTX 40",
+        "RTX 50"
+      ],
+      "runtime_policy": "exact_local_runtime_profile; no generation-wide execution claim",
+      "issues": [
+        "Experimental: exact GPU/runtime/driver results required."
+      ],
+      "published_at": "2026-10-11T05:56:10Z",
+      "source_archive_sha256": "e1559e5291074d00cf8a42a54d2a3c647a26c73a4a46ce605469b5525444ba6b"
+    },
+    {
+      "id": "dlss5-feeder-1.18.0-beta.2",
+      "project": "feeder",
+      "name": "DLSS5-Feeder",
+      "version": "1.18.0-beta.2",
+      "release_tag": "v1.18.0-beta.2",
+      "channel": "prerelease",
+      "asset_name": "DLSS5-Feeder-1.18.0-beta.2.zip",
+      "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.18.0-beta.2/DLSS5-Feeder-1.18.0-beta.2.zip",
+      "sha256": "4d459f902d5a8faace03c6909962334e800a58b73e0aee49eb1b30a3572f43dc",
+      "size": 503310,
+      "license": "MIT",
+      "redistribution": "permitted_with_notices",
+      "checksum_source": "published_github_asset_digest",
+      "reviewed_at": "2026-10-23",
+      "source_commit": null,
+      "backend": "dlss5_feeder",
+      "root": "",
+      "files": {
+        "dlss5-feed.addon64": "12011433dbdcc4ef42666b66d1c0a813c09b92f72a0e0ede05d9953973b29c0d",
+        "dlss5-feed.addon32": "fa2f0ca58fe0522db527627b7e53a0cfad6c6bfabd87995edaae2923f957d050",
+        "dlss5-feed-helper.addon64": "460ff2d815e7a0e8051446f985a997abe34134ddd8a60f11e8b0ef6a068cabcd",
+        "host64/dlss5-feed-host64.exe": "5a8dc1813b636d97056681bbeefac47ca8c02fa09456e353d87811513c795b42",
+        "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+      },
+      "architectures": [
+        "x64",
+        "x86"
+      ],
+      "graphics_apis": [
+        "d3d11",
+        "d3d12"
+      ],
+      "contract": "feeder_1_18",
+      "installable": true,
+      "dependencies": [
+        "reshade",
+        "motion_provider",
+        "official_sr",
+        "neural_consumer",
+        "nr_runtime"
+      ],
+      "gpu_families": [
+        "RTX 40",
+        "RTX 50"
+      ],
+      "runtime_policy": "exact_local_runtime_profile; no generation-wide execution claim",
+      "issues": [
+        "Experimental: exact GPU/runtime/driver results required."
+      ],
+      "published_at": "2026-10-06T04:30:05Z"
+    },
+    {
+      "id": "dlss5-feeder-1.18.0-beta.1",
+      "project": "feeder",
+      "name": "DLSS5-Feeder",
+      "version": "1.18.0-beta.1",
+      "release_tag": "v1.18.0-beta.1",
+      "channel": "prerelease",
+      "asset_name": "DLSS5-Feeder-1.18.0-beta.1.zip",
+      "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.18.0-beta.1/DLSS5-Feeder-1.18.0-beta.1.zip",
+      "sha256": "df5e5dd5d15a88de73885ad164fe6bf9e6cafc728db1133b9be3fc8a25f5bbcb",
+      "size": 492288,
+      "license": "MIT",
+      "redistribution": "permitted_with_notices",
+      "checksum_source": "published_github_asset_digest",
+      "reviewed_at": "2026-10-23",
+      "source_commit": null,
+      "backend": "dlss5_feeder",
+      "root": "",
+      "files": {
+        "dlss5-feed.addon64": "0ba63410222478e5d17ab760763868d8d4aa25ca4c3d347b03fde145d94a756d",
+        "dlss5-feed.addon32": "7657415a95ab6f499c78dd060a0c92a177d496296f6753dca201d9b0e8155508",
+        "dlss5-feed-helper.addon64": "d61c57c7ee47246f591cb44c01c1ba2396512b7d57a0e86b9d80ad962a6ceea4",
+        "host64/dlss5-feed-host64.exe": "7482601143ecf8e9c92979bcb6ce9c2f2932116471fe317120dd122acf0656f0",
+        "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+      },
+      "architectures": [
+        "x64",
+        "x86"
+      ],
+      "graphics_apis": [
+        "d3d11",
+        "d3d12"
+      ],
+      "contract": "feeder_1_18",
+      "installable": true,
+      "dependencies": [
+        "reshade",
+        "motion_provider",
+        "official_sr",
+        "neural_consumer",
+        "nr_runtime"
+      ],
+      "gpu_families": [
+        "RTX 40",
+        "RTX 50"
+      ],
+      "runtime_policy": "exact_local_runtime_profile; no generation-wide execution claim",
+      "issues": [
+        "Experimental: exact GPU/runtime/driver results required."
+      ],
+      "published_at": "2026-09-29T04:19:46Z"
+    }
+  ],
+  "recipes": [
+    {
+      "id": "native-optiscaler-dlss5-skynizz-1.3.0",
+      "family": "native_optiscaler",
+      "name": "Native upscaler + OptiScaler DLSS 5 1.3.0",
+      "packages": [
+        "optiscaler-dlss5-skynizz-1.3.0"
+      ],
+      "consumers": [
+        "optiscaler_nr"
+      ],
+      "apis": [
+        "d3d11",
+        "d3d12",
+        "vulkan"
+      ],
+      "architectures": [
+        "x64"
+      ],
+      "experimental": true,
+      "requirements": [
+        "existing_engine_upscaler",
+        "evidenced_loader",
+        "nr_runtime"
+      ],
+      "inputs": [
+        "engine_color",
+        "engine_depth",
+        "engine_motion"
+      ],
+      "presets": [
+        "performance",
+        "balanced",
+        "quality",
+        "ultra",
+        "custom"
+      ]
+    },
+    {
+      "id": "native-optiscaler-dlss5-skynizz-1.2.1",
+      "family": "native_optiscaler",
+      "name": "Native upscaler + OptiScaler DLSS 5 1.2.1",
+      "packages": [
+        "optiscaler-dlss5-skynizz-1.2.1"
+      ],
+      "consumers": [
+        "optiscaler_nr"
+      ],
+      "apis": [
+        "d3d11",
+        "d3d12",
+        "vulkan"
+      ],
+      "architectures": [
+        "x64"
+      ],
+      "experimental": true,
+      "requirements": [
+        "existing_engine_upscaler",
+        "evidenced_loader",
+        "nr_runtime"
+      ],
+      "inputs": [
+        "engine_color",
+        "engine_depth",
+        "engine_motion"
+      ],
+      "presets": [
+        "performance",
+        "balanced",
+        "quality",
+        "ultra",
+        "custom"
+      ]
+    },
+    {
+      "id": "native-optiscaler-dlss5-skynizz-1.2.0",
+      "family": "native_optiscaler",
+      "name": "Native upscaler + OptiScaler DLSS 5 1.2.0",
+      "packages": [
+        "optiscaler-dlss5-skynizz-1.2.0"
+      ],
+      "consumers": [
+        "optiscaler_nr"
+      ],
+      "apis": [
+        "d3d11",
+        "d3d12",
+        "vulkan"
+      ],
+      "architectures": [
+        "x64"
+      ],
+      "experimental": true,
+      "requirements": [
+        "existing_engine_upscaler",
+        "evidenced_loader",
+        "nr_runtime"
+      ],
+      "inputs": [
+        "engine_color",
+        "engine_depth",
+        "engine_motion"
+      ],
+      "presets": [
+        "performance",
+        "balanced",
+        "quality",
+        "ultra",
+        "custom"
+      ]
+    },
+    {
+      "id": "feeder-opti-1.19.0-1.3.0",
+      "family": "feeder",
+      "name": "Feeder 1.19.0 + OptiScaler NR 1.3.0",
+      "packages": [
+        "dlss5-feeder-1.19.0",
+        "optiscaler-dlss5-skynizz-1.3.0"
+      ],
+      "consumers": [
+        "optiscaler_nr"
+      ],
+      "apis": [
+        "d3d11",
+        "d3d12"
+      ],
+      "architectures": [
+        "x64"
+      ],
+      "experimental": true,
+      "requirements": [
+        "reshade_full_addon",
+        "motion_provider",
+        "depth_provider",
+        "official_sr",
+        "nr_runtime",
+        "evidenced_loaders"
+      ],
+      "inputs": [
+        "reshade_color",
+        "reshade_depth",
+        "estimated_motion_vectors"
+      ],
+      "consumer_api": "d3d12",
+      "presets": [
+        "performance",
+        "balanced",
+        "quality",
+        "ultra",
+        "custom"
+      ]
+    },
+    {
+      "id": "fivem-legacy-community",
+      "family": "fivem",
+      "name": "FiveM Legacy: Feeder + one licensed neural consumer",
+      "packages": [
+        "dlss5-feeder-1.19.0"
+      ],
+      "consumers": [
+        "renodx_nr"
+      ],
+      "apis": [
+        "d3d11"
+      ],
+      "architectures": [
+        "x64"
+      ],
+      "experimental": true,
+      "requirements": [
+        "cfx_graphics_loader",
+        "client_renderer_evidence",
+        "permitted_server_policy",
+        "reshade_full_addon",
+        "motion_provider",
+        "licensed_nr_consumer",
+        "official_sr",
+        "nr_runtime"
+      ],
+      "inputs": [
+        "reshade_color",
+        "reshade_depth",
+        "estimated_motion_vectors"
+      ],
+      "consumer_api": "d3d12",
+      "presets": [
+        "performance",
+        "balanced",
+        "quality",
+        "ultra",
+        "custom"
+      ]
+    },
+    {
+      "id": "renodx_native",
+      "family": "renodx_native",
+      "name": "Native DLSS + licensed RenoDX NR",
+      "packages": [],
+      "consumers": [
+        "renodx_nr"
+      ],
+      "apis": [
+        "d3d12"
+      ],
+      "architectures": [
+        "x64"
+      ],
+      "experimental": true,
+      "requirements": [
+        "exact_config7_neural_consumer",
+        "nr_runtime",
+        "reshade_full_addon",
+        "native_engine_inputs"
+      ],
+      "consumer_api": "d3d12",
+      "presets": [
+        "performance",
+        "balanced",
+        "quality",
+        "ultra",
+        "disabled"
+      ]
+    },
+    {
+      "id": "renodx_feeder",
+      "family": "renodx_feeder",
+      "name": "Feeder 1.19.0 + licensed RenoDX NR",
+      "packages": [
+        "dlss5-feeder-1.19.0"
+      ],
+      "consumers": [
+        "renodx_nr"
+      ],
+      "apis": [
+        "d3d11",
+        "d3d12"
+      ],
+      "architectures": [
+        "x64"
+      ],
+      "experimental": true,
+      "requirements": [
+        "exact_config7_neural_consumer",
+        "nr_runtime",
+        "reshade_full_addon",
+        "motion_provider",
+        "official_sr"
+      ],
+      "consumer_api": "d3d12",
+      "presets": [
+        "performance",
+        "balanced",
+        "quality",
+        "ultra",
+        "disabled"
+      ]
+    }
+  ],
+  "profiles": [
+    {
+      "id": "borderlands4",
+      "name": "Borderlands 4",
+      "steam_app_id": "1285190",
+      "executables": [
+        "OakGame/Binaries/Win64/Borderlands4.exe"
+      ],
+      "apis": [
+        "d3d12"
+      ],
+      "native_upscaler_contract": true,
+      "evidence": "Versioned game integration profile; no local NR execution claim.",
+      "scope": "offline_only",
+      "gpu_targets": [
+        "RTX 4080",
+        "RTX 5090"
+      ]
+    },
+    {
+      "id": "cyberpunk2077",
+      "name": "Cyberpunk 2077",
+      "steam_app_id": "1091500",
+      "executables": [
+        "bin/x64/Cyberpunk2077.exe"
+      ],
+      "apis": [
+        "d3d12"
+      ],
+      "native_upscaler_contract": true,
+      "evidence": "Versioned game integration profile; no local NR execution claim.",
+      "scope": "offline_only",
+      "gpu_targets": [
+        "RTX 4080",
+        "RTX 5090"
+      ]
+    },
+    {
+      "id": "rdr2",
+      "name": "Red Dead Redemption 2",
+      "steam_app_id": "1174180",
+      "executables": [
+        "RDR2.exe"
+      ],
+      "apis": [
+        "d3d12",
+        "vulkan"
+      ],
+      "native_upscaler_contract": true,
+      "evidence": "Versioned game integration profile; no local NR execution claim.",
+      "scope": "offline_only",
+      "gpu_targets": [
+        "RTX 4080",
+        "RTX 5090"
+      ]
+    },
+    {
+      "id": "control",
+      "name": "Control",
+      "steam_app_id": "870780",
+      "executables": [
+        "Control_DX12.exe",
+        "Control_DX11.exe"
+      ],
+      "apis": [
+        "d3d12",
+        "d3d11"
+      ],
+      "native_upscaler_contract": true,
+      "evidence": "Versioned game integration profile; no local NR execution claim.",
+      "scope": "offline_only",
+      "gpu_targets": [
+        "RTX 4080",
+        "RTX 5090"
+      ]
+    },
+    {
+      "id": "witcher3",
+      "name": "The Witcher 3",
+      "steam_app_id": "292030",
+      "executables": [
+        "bin/x64_dx12/witcher3.exe"
+      ],
+      "apis": [
+        "d3d12"
+      ],
+      "native_upscaler_contract": true,
+      "evidence": "Versioned game integration profile; no local NR execution claim.",
+      "scope": "offline_only",
+      "gpu_targets": [
+        "RTX 4080",
+        "RTX 5090"
+      ]
+    },
+    {
+      "id": "gta5-legacy",
+      "name": "GTA V Legacy offline",
+      "steam_app_id": "271590",
+      "executables": [
+        "GTA5.exe"
+      ],
+      "apis": [
+        "d3d11"
+      ],
+      "native_upscaler_contract": false,
+      "evidence": "Versioned game integration profile; no local NR execution claim.",
+      "scope": "offline_only",
+      "gpu_targets": [
+        "RTX 4080",
+        "RTX 5090"
+      ]
+    },
+    {
+      "id": "fivem-legacy",
+      "name": "FiveM Legacy",
+      "launcher": "fivem",
+      "apis": [
+        "d3d11"
+      ],
+      "native_upscaler_contract": false,
+      "scope": "client_and_server_permission",
+      "gpu_targets": [
+        "RTX 4080",
+        "RTX 5090"
+      ],
+      "source_commit": "4c4fe28a2fe4359610024269b2f1bf60cc5ea982",
+      "loader": "FiveM.app/plugins/d3d11.dll",
+      "evidence": "Cfx rage-graphics-five ReShadeFixups.cpp ScanForReshades and RenderHooks.cpp; client loading policy still applies."
+    }
+  ],
+  "hardware_profiles": [
+    {
+      "id": "father-rtx4080-fivem",
+      "device_id": "0x2704",
+      "generation": "RTX 40",
+      "vram_gib": 16,
+      "game": "fivem-legacy",
+      "preferred_recipe": "fivem-legacy-community",
+      "default_preset": "performance",
+      "runtime": "explicit_eligible_community_profile",
+      "execution_evidence": [],
+      "limitations": [
+        "RTX 4080 Super issue #63 is related-hardware evidence, not proof on RTX 4080.",
+        "Signed RTX-50-only runtime builds remain incompatible when documented."
+      ]
+    },
+    {
+      "id": "rtx5090",
+      "device_id": "0x2b85",
+      "generation": "RTX 50",
+      "vram_gib": 32,
+      "preferred_recipe": "native-optiscaler-dlss5-skynizz-1.3.0",
+      "default_preset": "quality",
+      "runtime": "authenticated_or_explicit_eligible_community_profile",
+      "execution_evidence": []
+    }
+  ]
+}
