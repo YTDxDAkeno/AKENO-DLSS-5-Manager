@@ -205,3 +205,29 @@ def test_selecting_a_game_far_down_keeps_the_list_and_shows_the_page_from_the_to
     ctl.installs_changed.emit()                  # a status refresh rebuilds the model but keeps the position
     qtbot.wait(50)
     assert bar.value() == kept
+
+
+def test_32bit_game_page_offers_the_helper_route_and_its_self_test(ui, qtbot, tmp_path, monkeypatch):
+    svc, fx, ctl, win = ui
+    from akeno.stack import transports
+    monkeypatch.setattr(transports, "REGISTRY", transports._MemoryRegistry())
+    from helpers import make_pe
+    root = tmp_path / "games" / "Retro 32"
+    make_pe(root / "Retro.exe", ["d3d9.dll", "kernel32.dll"], machine="x86", pad=60000)
+    game = svc.library.add_manual(str(root), "Retro 32")
+    ctl.games_changed.emit()
+    ctl.select_game(game.id)
+    panel = win.pages["library"].panel
+    wait_state(qtbot, panel)
+    assert [m.recipe.id for m in panel.state.methods] == ["feeder_x86"]
+    assert any(i.code == "transport" for i in panel.state.recommended.issues)
+    titles = [r.title for r in panel.state.selected.roles]
+    assert "ReShade 32-bit (game)" in titles and "ReShade 64-bit (helper)" in titles
+    assert not panel.btn_test.isVisible()
+    shot(qtbot, win, "my-games-32bit-dx9")
+    panel.btn_install.click()
+    qtbot.waitUntil(lambda: (root / "host64" / "dlss5-feed-host64.exe").is_file() and not panel.busy, timeout=20000)
+    qtbot.waitUntil(lambda: panel.state.installed is not None and panel.btn_test.isVisible(), timeout=10000)
+    assert (root / "D3D9.dll").is_file() and (root / "dgVoodoo.conf").is_file()
+    panel.btn_remove.click()
+    qtbot.waitUntil(lambda: not (root / "host64").exists() and not panel.busy, timeout=15000)
