@@ -250,6 +250,9 @@ class PageHost(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        if not getattr(page, "scrolls", True):
+            # the page fills the window and scrolls its own parts (My Games: list and game page)
+            self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         wrap = QWidget()
         self.wrap_layout = QHBoxLayout(wrap)
         self.wrap_layout.setContentsMargins(20, 16, 20, 12)

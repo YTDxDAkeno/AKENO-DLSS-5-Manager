@@ -1,58 +1,164 @@
-"""My Games: the installed games on the left, the selected game's DLSS 5 page on the right."""
+"""My Games: the installed games on the left, the selected game's DLSS 5 page on the right.
+
+The list and the game page scroll independently: picking a game far down the list keeps the list where it is and
+shows the new game's page from the top. The list is a model/delegate view, so hundreds of games stay fast.
+"""
 
 from __future__ import annotations
 
 import os
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout, QWidget
+from PySide6.QtCore import QAbstractListModel, QModelIndex, QRect, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLineEdit, QListView, QScrollArea,
+                               QStackedWidget, QStyle, QStyledItemDelegate, QVBoxLayout, QWidget)
 
 from akeno.games.launchers import ManualGameError
 from akeno.i18n import t
 from akeno.ui import art, theme
 from akeno.ui.stack_panel import LAUNCHERS, GamePanel, error_text
-from akeno.ui.widgets import Clickable, ElidedLabel, EmptyState, Spinner, button, clear_layout, info, label, scaled
+from akeno.ui.widgets import EmptyState, Spinner, button, clear_layout, info, label
 
 __all__ = ["LibraryPage", "LAUNCHERS"]
 
+ROW_HEIGHT = 62
+COVER = QSize(84, 46)
 
-class GameRow(Clickable):
-    def __init__(self, game, selected: bool, status: tuple[str, str]):
+
+class GameListModel(QAbstractListModel):
+    GameIdRole = Qt.ItemDataRole.UserRole + 1
+    SubtitleRole = Qt.ItemDataRole.UserRole + 2
+    StatusRole = Qt.ItemDataRole.UserRole + 3
+    GameRole = Qt.ItemDataRole.UserRole + 4
+
+    def __init__(self):
         super().__init__()
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setAccessibleName(game.name)
-        border = theme.VIOLET if selected else theme.BORDER
-        bg = "rgba(142,66,255,0.16)" if selected else theme.CARD
-        self.setStyleSheet(f"GameRow {{ background: {bg}; border: 1px solid {border}; border-radius: 10px; }}"
-                           f"GameRow:hover {{ border-color: {theme.BORDER_HI}; }}"
-                           f"GameRow:focus {{ border-color: {theme.VIOLET}; }}")
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(8, 6, 10, 6)
-        lay.setSpacing(10)
-        img = QLabel()
-        pm = QPixmap(game.artwork_path) if game.artwork_path and os.path.isfile(game.artwork_path) else None
-        img.setPixmap(scaled(pm, 84, 46) if pm and not pm.isNull() else art.cover_fallback(game.name, 84, 46))
-        img.setFixedSize(84, 46)
-        lay.addWidget(img)
-        col = QVBoxLayout()
-        col.setSpacing(2)
-        name = ElidedLabel(game.name)
-        name.setStyleSheet("font-weight: 600;")
-        name.setToolTip(game.name)
-        col.addWidget(name)
-        col.addWidget(ElidedLabel(f"{t(LAUNCHERS.get(game.launcher, game.launcher))} · {t(game.api.label)}", "muted"))
-        color = theme.STATE_COLORS.get(status[1], theme.TEXT_DIM)
-        col.addWidget(label(f"<span style='color:{color}'>●</span> {t(status[0])}", "muted"))
-        lay.addLayout(col, 1)
+        self.rows: list[tuple] = []          # (game, (status text, state))
+
+    def set_rows(self, rows: list[tuple]) -> None:
+        self.beginResetModel()
+        self.rows = rows
+        self.endResetModel()
+
+    def rowCount(self, parent=QModelIndex()) -> int:
+        return 0 if parent.isValid() else len(self.rows)
+
+    def row_of(self, game_id: str | None) -> int:
+        return next((i for i, (g, _) in enumerate(self.rows) if g.id == game_id), -1)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if not index.isValid() or not 0 <= index.row() < len(self.rows):
+            return None
+        g, status = self.rows[index.row()]
+        if role == Qt.ItemDataRole.DisplayRole:
+            return g.name
+        if role == Qt.ItemDataRole.ToolTipRole:
+            return f"{g.name}\n{g.install_dir}"
+        if role == Qt.ItemDataRole.AccessibleTextRole:
+            return f"{g.name}, {t(status[0])}"
+        if role == self.GameIdRole:
+            return g.id
+        if role == self.GameRole:
+            return g
+        if role == self.SubtitleRole:
+            return f"{t(LAUNCHERS.get(g.launcher, g.launcher))} · {t(g.api.label)}"
+        if role == self.StatusRole:
+            return status
+        return None
+
+
+class GameDelegate(QStyledItemDelegate):
+    """One card per game: cover, name, launcher and API, install state."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._covers: dict[tuple, QPixmap] = {}
+
+    def sizeHint(self, option, index) -> QSize:
+        return QSize(option.rect.width(), ROW_HEIGHT)
+
+    def _cover(self, game, dpr: float) -> QPixmap:
+        path = game.artwork_path if game.artwork_path and os.path.isfile(game.artwork_path) else None
+        try:
+            stamp = os.path.getmtime(path) if path else 0
+        except OSError:
+            stamp = 0
+        key = (game.id, path, stamp, dpr)
+        pm = self._covers.get(key)
+        if pm is None:
+            w, h = round(COVER.width() * dpr), round(COVER.height() * dpr)
+            src = QPixmap(path) if path else QPixmap()
+            if src.isNull():
+                src = art.cover_fallback(game.name, COVER.width(), COVER.height())
+            src = src.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                             Qt.TransformationMode.SmoothTransformation)
+            pm = src.copy((src.width() - w) // 2, (src.height() - h) // 2, w, h)
+            pm.setDevicePixelRatio(dpr)
+            if len(self._covers) > 600:          # hundreds of games: keep memory bounded
+                self._covers.clear()
+            self._covers[key] = pm
+        return pm
+
+    def paint(self, painter: QPainter, option, index) -> None:
+        game = index.data(GameListModel.GameRole)
+        if game is None:
+            return
+        painter.save()
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = option.rect.adjusted(1, 2, -1, -2)
+        selected = bool(option.state & QStyle.StateFlag.State_Selected)
+        hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
+        focus = bool(option.state & QStyle.StateFlag.State_HasFocus)
+        path = QPainterPath()
+        path.addRoundedRect(r.x() + 0.5, r.y() + 0.5, r.width() - 1, r.height() - 1, 10, 10)
+        painter.fillPath(path, QColor(142, 66, 255, 41) if selected else QColor(theme.CARD))
+        border = theme.VIOLET if selected or focus else (theme.BORDER_HI if hover else theme.BORDER)
+        painter.setPen(QPen(QColor(border), 1))
+        painter.drawPath(path)
+        cover = self._cover(game, painter.device().devicePixelRatioF() if painter.device() else 1.0)
+        cr = QRect(r.x() + 8, r.y() + (r.height() - COVER.height()) // 2, COVER.width(), COVER.height())
+        clip = QPainterPath()
+        clip.addRoundedRect(cr.x(), cr.y(), cr.width(), cr.height(), 6, 6)
+        painter.setClipPath(clip)
+        painter.drawPixmap(cr, cover)
+        painter.setClipping(False)
+        x = cr.right() + 11
+        width = r.right() - 10 - x
+        font = QFont(option.font)
+        font.setWeight(QFont.Weight.DemiBold)
+        painter.setFont(font)
+        fm = painter.fontMetrics()
+        line = fm.height()
+        top = r.y() + (r.height() - 3 * line) // 2
+        painter.setPen(QColor(theme.TEXT))
+        painter.drawText(QRect(x, top, width, line), Qt.AlignmentFlag.AlignVCenter,
+                         fm.elidedText(game.name, Qt.TextElideMode.ElideRight, width))
+        painter.setFont(option.font)
+        fm = painter.fontMetrics()
+        painter.setPen(QColor(theme.TEXT_MUTED))
+        painter.drawText(QRect(x, top + line, width, line), Qt.AlignmentFlag.AlignVCenter,
+                         fm.elidedText(index.data(GameListModel.SubtitleRole), Qt.TextElideMode.ElideRight, width))
+        text, state = index.data(GameListModel.StatusRole)
+        dot = QColor(theme.STATE_COLORS.get(state, theme.TEXT_DIM))
+        cy = top + 2 * line + line // 2
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(dot)
+        painter.drawEllipse(x + 1, cy - 3, 7, 7)
+        painter.setPen(QColor(theme.TEXT_MUTED))
+        painter.drawText(QRect(x + 13, top + 2 * line, width - 13, line), Qt.AlignmentFlag.AlignVCenter,
+                         fm.elidedText(t(text), Qt.TextElideMode.ElideRight, width - 13))
+        painter.restore()
 
 
 class LibraryPage(QWidget):
+    scrolls = False                         # the list and the game page have their own scroll areas
+
     def __init__(self, ctl, window):
         super().__init__()
         self.ctl, self.s = ctl, ctl.s
         self.detail_id: str | None = None
         self.panel: GamePanel | None = None
+        self._syncing = False
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
@@ -69,6 +175,7 @@ class LibraryPage(QWidget):
         body = QHBoxLayout()
         body.setSpacing(16)
         left = QVBoxLayout()
+        left.setContentsMargins(0, 0, 0, 0)
         left.setSpacing(8)
         self.search = QLineEdit()
         self.search.setPlaceholderText(t("Search games…"))
@@ -84,20 +191,48 @@ class LibraryPage(QWidget):
             self.filter.addItem(t(v), "launcher:" + k)
         self.filter.currentIndexChanged.connect(self.refresh_list)
         left.addWidget(self.filter)
-        self.list_host = QWidget()
-        self.list = QVBoxLayout(self.list_host)
-        self.list.setContentsMargins(0, 0, 0, 0)
-        self.list.setSpacing(6)
-        self.list.setAlignment(Qt.AlignmentFlag.AlignTop)
-        left.addWidget(self.list_host, 1)
+        self.model = GameListModel()
+        self.view = QListView()
+        self.view.setObjectName("GameList")
+        self.view.setAccessibleName(t("My Games"))
+        self.view.setModel(self.model)
+        self.view.setItemDelegate(GameDelegate(self.view))
+        self.view.setUniformItemSizes(True)
+        self.view.setMouseTracking(True)
+        self.view.setFrameShape(QFrame.Shape.NoFrame)
+        self.view.setVerticalScrollMode(QListView.ScrollMode.ScrollPerPixel)
+        self.view.verticalScrollBar().setSingleStep(24)
+        self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.view.setSelectionMode(QListView.SelectionMode.SingleSelection)
+        self.view.setStyleSheet("QListView#GameList { background: transparent; outline: 0; }"
+                                "QListView#GameList::item { background: transparent; border: 0; }")
+        self.view.selectionModel().currentRowChanged.connect(self._row_changed)
+        self.empty = EmptyState("gamepad", t("No games yet"), t("Scan your launchers or add a game folder manually."),
+                                button(t("Scan for games"), "search", "primary", on_click=lambda: self.ctl.scan_games()))
+        self.no_match = label(t("No game matches the filter."), "dim", wrap=True)
+        self.no_match.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+        self.list_stack = QStackedWidget()
+        for w in (self.view, self.empty, self.no_match):
+            self.list_stack.addWidget(w)
+        left.addWidget(self.list_stack, 1)
         self.errors = label("", "muted", wrap=True)
         left.addWidget(self.errors)
         self.list_holder = QWidget()
         self.list_holder.setLayout(left)
         self.list_holder.setFixedWidth(390)
-        body.addWidget(self.list_holder, 0, Qt.AlignmentFlag.AlignTop)
-        self.detail_host = QVBoxLayout()
-        body.addLayout(self.detail_host, 1)
+        body.addWidget(self.list_holder)
+        self.detail_scroll = QScrollArea()
+        self.detail_scroll.setObjectName("GameDetail")
+        self.detail_scroll.setWidgetResizable(True)
+        self.detail_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.detail_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.detail_scroll.setStyleSheet("QScrollArea#GameDetail, QScrollArea#GameDetail > QWidget > QWidget"
+                                         " { background: transparent; }")
+        detail = QWidget()
+        self.detail_host = QVBoxLayout(detail)
+        self.detail_host.setContentsMargins(0, 0, 6, 0)
+        self.detail_scroll.setWidget(detail)
+        body.addWidget(self.detail_scroll, 1)
         lay.addLayout(body, 1)
         ctl.games_changed.connect(self.refresh_list)
         ctl.installs_changed.connect(self.refresh_list)
@@ -117,49 +252,82 @@ class LibraryPage(QWidget):
             (self.spinner.start if on else self.spinner.stop)()
             self.btn_scan.setEnabled(not on)
 
-    def _status(self, g) -> tuple[str, str]:
-        active = self.s.installer.active_install(g.id)
-        if active and active["backend_id"] == "stack":
+    # -- list -------------------------------------------------------------------------------------
+    def _installed_map(self) -> dict[str, str]:
+        """game id -> backend of its active installation (one query for the whole library)."""
+        out: dict[str, str] = {}
+        for tx in self.s.db.transactions():
+            if tx["state"] == "installed" and tx["kind"] in ("install", "swap"):
+                out.setdefault(tx["game_id"], tx["backend_id"])
+        return out
+
+    @staticmethod
+    def _status(backend: str | None) -> tuple[str, str]:
+        if backend == "stack":
             return "Mod installed", "ok"
-        if active:
+        if backend:
             return "Older AKENO install", "warn"
         return "Not installed", "pending"
 
     def refresh_list(self, *_) -> None:
-        clear_layout(self.list)
         games = self.s.library.games()
-        if not games:
-            self.list.addWidget(EmptyState("gamepad", t("No games yet"),
-                                           t("Scan your launchers or add a game folder manually."),
-                                           button(t("Scan for games"), "search", "primary",
-                                                  on_click=lambda: self.ctl.scan_games())))
+        installed = self._installed_map()
         q = self.search.text().strip().lower()
         f = self.filter.currentData() or "all"
-        sel = self.detail_id or (self.s.selected_game().id if self.s.selected_game() else None)
-        shown = 0
+        rows = []
         for g in games:
             if q and q not in g.name.lower() and q not in g.install_dir.lower():
                 continue
-            status = self._status(g)
+            status = self._status(installed.get(g.id))
             if f == "installed" and status[1] != "ok" or f == "not_installed" and status[1] == "ok":
                 continue
             if f.startswith("launcher:") and g.launcher != f.split(":", 1)[1]:
                 continue
-            row = GameRow(g, g.id == sel, status)
-            row.clicked.connect(lambda gid=g.id: self.open(gid))
-            self.list.addWidget(row)
-            shown += 1
-        if games and not shown:
-            self.list.addWidget(label(t("No game matches the filter."), "dim"))
+            rows.append((g, status))
+        bar = self.view.verticalScrollBar()
+        keep = bar.value()
+        self._syncing = True
+        try:
+            self.model.set_rows(rows)
+            self._mark_selected()
+        finally:
+            self._syncing = False
+        bar.setValue(keep)                   # a status change never moves the list
+        self.list_stack.setCurrentWidget(self.view if rows else (self.no_match if games else self.empty))
         errs = self.s.library.last_errors
         self.errors.setText(t("Some sources could not be read: ") + "; ".join(errs) if errs else "")
+        self.errors.setVisible(bool(errs))
         if self.panel is None:
             self._selection()
+
+    def _mark_selected(self) -> None:
+        """Highlight the shown game without scrolling the list."""
+        row = self.model.row_of(self.detail_id)
+        sm = self.view.selectionModel()
+        was = self._syncing
+        self._syncing = True
+        try:
+            if row < 0:
+                sm.clearSelection()
+                sm.setCurrentIndex(QModelIndex(), sm.SelectionFlag.NoUpdate)
+            else:
+                idx = self.model.index(row)
+                sm.setCurrentIndex(idx, sm.SelectionFlag.ClearAndSelect)
+        finally:
+            self._syncing = was
+
+    def _row_changed(self, current, _previous) -> None:
+        if self._syncing or not current.isValid():
+            return
+        gid = current.data(GameListModel.GameIdRole)
+        if gid and gid != self.detail_id:
+            self.open(gid)
 
     def open(self, game_id: str) -> None:
         self.detail_id = game_id
         self.ctl.select_game(game_id)
 
+    # -- game page --------------------------------------------------------------------------------
     def _selection(self, *_) -> None:
         g = self.s.selected_game() or self.s.library.get(self.detail_id)
         if g is not None and g.launcher == "fivem" and self.detail_id and self.detail_id != g.id:
@@ -170,8 +338,11 @@ class LibraryPage(QWidget):
         if self.panel is not None and self.panel.game_id == g.id:
             return
         self.detail_id = g.id
+        bar = self.view.verticalScrollBar()
+        keep = bar.value()
+        self._mark_selected()
+        bar.setValue(keep)
         self._set_panel(g.id)
-        self.refresh_list()
 
     def _set_panel(self, game_id: str | None) -> None:
         if self.panel is not None:
@@ -180,9 +351,16 @@ class LibraryPage(QWidget):
         self.panel = None
         if game_id is None:
             self.detail_host.addWidget(label(t("Select a game to see its DLSS 5 options."), "dim", wrap=True))
-            return
-        self.panel = GamePanel(self.ctl, game_id, self)
-        self.detail_host.addWidget(self.panel)
+            self.detail_host.addStretch(1)
+        else:
+            self.panel = GamePanel(self.ctl, game_id, self)
+            self.detail_host.addWidget(self.panel)
+        self._detail_to_top()
+
+    def _detail_to_top(self) -> None:
+        self.detail_scroll.verticalScrollBar().setValue(0)
+        # the panel renders asynchronously; once its content is laid out, start at its top again
+        QTimer.singleShot(0, lambda: self.detail_scroll.verticalScrollBar().setValue(0))
 
     def _refresh_panel(self, *_) -> None:
         if self.panel is not None:

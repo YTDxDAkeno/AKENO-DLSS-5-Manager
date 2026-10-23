@@ -171,3 +171,37 @@ def test_advanced_overview_agrees_with_my_games(ui, qtbot, tmp_path):
     shot(qtbot, win, "advanced-overview-fivem")
     page.a_install.click()
     assert win.current_page() == "fivem"
+
+
+def test_selecting_a_game_far_down_keeps_the_list_and_shows_the_page_from_the_top(ui, qtbot, tmp_path):
+    """Hundreds of games: the list keeps its position, the game page starts at its top, the page never jumps."""
+    svc, fx, ctl, win = ui
+    base, _ = dlss_game(svc, tmp_path)
+    data = base.to_dict()
+    for i in range(300):
+        svc.db.upsert_game(dict(data, id=f"bulk-{i:03d}", name=f"Bulk Game {i:03d}"), manual=True)
+    ctl.games_changed.emit()
+    win.go("library")
+    page = win.pages["library"]
+    qtbot.waitUntil(lambda: page.model.rowCount() >= 301, timeout=5000)
+    bar = page.view.verticalScrollBar()
+    bar.setValue(bar.maximum())
+    kept = bar.value()
+    assert kept > 0
+    row = page.model.rowCount() - 1
+    rect = page.view.visualRect(page.model.index(row))
+    assert rect.isValid() and page.view.viewport().rect().intersects(rect), "the last game is on screen"
+    from PySide6.QtCore import Qt
+    qtbot.mouseClick(page.view.viewport(), Qt.MouseButton.LeftButton, pos=rect.center())
+    wanted = page.model.index(row).data(page.model.GameIdRole)
+    qtbot.waitUntil(lambda: page.panel is not None and page.panel.game_id == wanted, timeout=5000)
+    wait_state(qtbot, page.panel)
+    qtbot.wait(100)
+    assert bar.value() == kept, "the list stays where it was"
+    assert page.detail_scroll.verticalScrollBar().value() == 0, "the new game is shown from its top"
+    assert win.hosts["library"].scroll.verticalScrollBar().value() == 0, "the page itself never scrolls away"
+    assert page.panel.mapTo(page, page.panel.rect().topLeft()).y() >= 0
+    shot(qtbot, win, "my-games-300-games")
+    ctl.installs_changed.emit()                  # a status refresh rebuilds the model but keeps the position
+    qtbot.wait(50)
+    assert bar.value() == kept

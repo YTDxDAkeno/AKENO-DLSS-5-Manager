@@ -140,8 +140,12 @@ def test_game_page_scrolls_and_header_compacts_at_150_percent(window, qtbot):
     _game_panel(win, qtbot)
     qtbot.wait(100)
     assert win.header.height() < 110, "short windows get the compact header"
-    assert win.hosts["library"].scroll.verticalScrollBar().maximum() > 0, "content scrolls when it must"
-    assert win.hosts["library"].scroll.horizontalScrollBar().maximum() == 0, "no horizontal overflow"
+    page = win.pages["library"]
+    host = win.hosts["library"].scroll
+    assert host.verticalScrollBar().maximum() == 0, "My Games itself never scrolls; its list and game page do"
+    assert page.detail_scroll.verticalScrollBar().maximum() > 0, "the game page scrolls when it must"
+    assert host.widget().minimumSizeHint().width() <= host.viewport().width(), "no horizontal overflow"
+    assert page.detail_scroll.widget().minimumSizeHint().width() <= page.detail_scroll.viewport().width()
 
 
 def test_ultrawide_content_is_capped_and_centred(window, qtbot):
