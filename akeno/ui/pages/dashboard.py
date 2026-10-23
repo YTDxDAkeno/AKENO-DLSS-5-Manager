@@ -11,13 +11,14 @@ from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu
 
 from akeno.core.models import CompatStatus, HardwareSupport, Vendor
 from akeno.hardware.gpu_db import nr_hardware_support
-from akeno.i18n import t
+from akeno.i18n import msg, t
 from akeno.recommend.engine import Recommendation
 from akeno.stack import configs
 from akeno.benchmark.stats import consistency_label
 from akeno.ui import art, icons, theme
 from akeno.ui.widgets import (ActionTile, ArtPanel, Card, CheckRow, ElidedLabel, GradientText, KeyValueGrid, Meter,
-                              ProfileRow, Spinner, StatusPill, SubCard, button, clear_layout, info, label, scaled)
+                              ProfileRow, ResponsiveRow, Spinner, StatusPill, SubCard, button, clear_layout, info, label,
+                              scaled)
 
 SUPPORT_TEXT = {HardwareSupport.OFFICIAL: ("Officially supported", "ok"),
                 HardwareSupport.COMMUNITY: ("Community-supported", "ok"),
@@ -74,10 +75,13 @@ class DashboardPage(QWidget):
         self.win = window
         self.s = ctl.s
         self.density = 0
-        grid = QGridLayout(self)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(14)
-        grid.setVerticalSpacing(14)
+        page = QVBoxLayout(self)
+        page.setContentsMargins(0, 0, 0, 0)
+        page.setSpacing(14)
+        # card pairs side by side when they fit, stacked at 150 % scaling or with long translations
+        top_row, mid_row = ResponsiveRow(14), ResponsiveRow(14)
+        page.addWidget(top_row)
+        page.addWidget(mid_row, 1)
 
         # --- Detected hardware ---------------------------------------------------------------
         self.hw_spinner = Spinner()
@@ -110,7 +114,7 @@ class DashboardPage(QWidget):
         col.addWidget(self.hw_grid)
         hw_body.addLayout(col, 1)
         self.hw_card.body.addLayout(hw_body)
-        grid.addWidget(self.hw_card, 0, 0, 1, 10)
+        top_row.add(self.hw_card, 10)
 
         # --- Game analysis --------------------------------------------------------------------
         self.btn_change = button(t("Change Game"), tip=t("Pick another installed game"))
@@ -143,7 +147,7 @@ class DashboardPage(QWidget):
         gcol.addWidget(self.game_grid)
         gb.addLayout(gcol, 1)
         self.game_card.body.addLayout(gb)
-        grid.addWidget(self.game_card, 0, 10, 1, 10)
+        top_row.add(self.game_card, 10)
 
         # --- Smart recommendation ---------------------------------------------------------------
         self.rec_badge = StatusPill("", "pending")
@@ -186,7 +190,7 @@ class DashboardPage(QWidget):
         for sc in (self.perf_sub, self.cons_sub, self.vram_sub):
             subs.addWidget(sc, 1)
         self.rec_card.body.addLayout(subs)
-        grid.addWidget(self.rec_card, 1, 0, 1, 13)
+        mid_row.add(self.rec_card, 13)
 
         # --- Profile comparison ---------------------------------------------------------------
         self.cmp_card = Card(t("Profile Comparison"), "chart", theme.BLUE, fill=True)
@@ -196,14 +200,13 @@ class DashboardPage(QWidget):
         self.cmp_note = label(t("Values appear only after you measure them with a benchmark; estimates are labelled."),
                               "muted", wrap=True)
         self.cmp_card.body.addWidget(self.cmp_note)
-        grid.addWidget(self.cmp_card, 1, 13, 1, 7)
+        mid_row.add(self.cmp_card, 7)
 
         # --- Safety / verification --------------------------------------------------------------
         self.safe_card = Card()
         self.safe_card.setAccessibleName(t("Safety / Verification"))
         self.safe_card.outer.setContentsMargins(18, 12, 18, 12)
-        srow = QHBoxLayout()
-        srow.setSpacing(24)
+        srow = ResponsiveRow(24)          # the checks move below the title when the window is narrow
         shead = QHBoxLayout()
         shead.setSpacing(12)
         self.safe_icon = QLabel()
@@ -221,13 +224,15 @@ class DashboardPage(QWidget):
         swrap = QWidget()
         swrap.setFixedWidth(260)
         swrap.setLayout(shead)
-        srow.addWidget(swrap)
-        self.safe_grid = QGridLayout()
+        srow.add(swrap, 0)
+        checks = QWidget()
+        self.safe_grid = QGridLayout(checks)
+        self.safe_grid.setContentsMargins(0, 0, 0, 0)
         self.safe_grid.setHorizontalSpacing(26)
         self.safe_grid.setVerticalSpacing(6)
-        srow.addLayout(self.safe_grid, 1)
-        self.safe_card.body.addLayout(srow)
-        grid.addWidget(self.safe_card, 2, 0, 1, 20)
+        srow.add(checks, 1)
+        self.safe_card.body.addWidget(srow)
+        page.addWidget(self.safe_card)
 
         # --- Actions (pinned footer, always reachable) -------------------------------------------
         self.footer = QWidget()
@@ -251,11 +256,6 @@ class DashboardPage(QWidget):
         self.a_install.clicked.connect(self._install)
         self.a_restore.clicked.connect(self._restore)
         fl.addLayout(actions)
-        for c in range(20):
-            grid.setColumnStretch(c, 1)
-        grid.setRowStretch(0, 0)
-        grid.setRowStretch(1, 1)
-        grid.setRowStretch(2, 0)
 
         ctl.hardware_changed.connect(self.refresh)
         ctl.games_changed.connect(self.refresh)
@@ -584,14 +584,15 @@ class DashboardPage(QWidget):
     def _refresh_safety(self, game) -> None:
         clear_layout(self.safe_grid)
         r = self.s.readiness(game)
+        items = self._stack_checks(r.items)
         rows = 2
-        for i, it in enumerate(r.items):
+        for i, it in enumerate(items):
             self.safe_grid.addWidget(CheckRow(it.state, t(it.title), t(it.detail), compact=True), i % rows, i // rows)
-        cols = max(1, (len(r.items) + rows - 1) // rows)
+        cols = max(1, (len(items) + rows - 1) // rows)
         for c in range(cols):
             self.safe_grid.setColumnStretch(c, 1)
-        done = sum(1 for it in r.items if it.state == "ok")
-        self.safe_sub.setText(t("{n} of {m} checks passed", n=done, m=len(r.items)) if r.items else "")
+        done = sum(1 for it in items if it.state == "ok")
+        self.safe_sub.setText(t("{n} of {m} checks passed", n=done, m=len(items)) if items else "")
         active = self.s.installer.active_install(game.id) if game else None
         self.a_install.setEnabled(r.can_install or r.can_resolve)
         if r.can_resolve:
@@ -622,6 +623,29 @@ class DashboardPage(QWidget):
             notes.append(t("Restore unavailable: nothing installed by AKENO for this game."))
         self.action_note.set_text("   ·   ".join(notes))
         self.action_note.setVisible(bool(notes))
+
+    def _stack_checks(self, legacy: list) -> list:
+        """With a My Games method available, the checks describe that method (its pinned downloads, its model
+        build), not the old per-backend installer's runtime import or server-permission state."""
+        st = getattr(self, "stack_state", None)
+        if st is None:
+            return legacy
+        from akeno.services import CheckItem
+        m = next((x for x in st.methods if st.installed and x.recipe.id == st.installed["params"].get("recipe")),
+                 None) or st.recommended
+        nr = next((rc for rc in m.roles if rc.role == "nr_runtime"), None)
+        items = [CheckItem("source", "ok", "Source verified",
+                           msg("{method}: every file is pinned to the SHA-256 of its original release.",
+                               method=m.recipe.name))]
+        if nr and nr.version:
+            items.append(CheckItem("runtime", "ok" if nr.state == "ready" else "pending",
+                                   "DLSS 5 model ready" if nr.state == "ready" else "DLSS 5 model is downloaded on install",
+                                   nr.version.display))
+        items += [it for it in legacy if it.key in ("backup", "community")]
+        items.append(CheckItem("compat", "ok" if m.available else "fail",
+                               "Installed" if st.installed else ("Method available" if m.available else "Blocked"),
+                               msg(m.blockers[0].message) if m.blockers else msg(m.recipe.name)))
+        return items
 
     # -- actions -------------------------------------------------------------------------------
     def _change_game_menu(self) -> None:

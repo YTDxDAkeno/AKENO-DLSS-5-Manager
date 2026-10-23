@@ -211,3 +211,21 @@ def test_high_dpi_screenshot_render_from_source(tmp_path, akeno_home):
     from PySide6.QtGui import QImage
     img = QImage(str(out / "dashboard.png"))
     assert img.width() == 1920 and img.height() == 1080, "1280x720 logical at 150 % = 1920x1080 physical"
+
+
+def test_no_page_scrolls_sideways_at_150_percent_in_german(window, qtbot):
+    """1280x680 logical pixels is a 1080p screen at 150 %; German has the longest labels."""
+    win = window
+    win.ctl.set_setting("language", "de")
+    qtbot.waitUntil(lambda: win.sidebar.buttons["advanced"].text().strip() == "Erweitert", timeout=5000)
+    _settle(qtbot, win, 1280, 680)
+    too_wide = []
+    for key in list(win.pages):
+        win.go(key)
+        qtbot.wait(150)
+        host = win.hosts.get(key) or win.hosts["advanced"]
+        need, have = host.scroll.widget().minimumSizeHint().width(), host.scroll.viewport().width()
+        if need > have:
+            too_wide.append(f"{key}: {need} > {have}")
+    win.ctl.set_setting("language", "en")
+    assert not too_wide, too_wide

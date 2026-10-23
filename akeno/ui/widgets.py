@@ -113,8 +113,11 @@ class StatusPill(QLabel):
     def set(self, text: str, state: str) -> None:
         color = theme.STATE_COLORS.get(state, theme.TEXT_DIM)
         self.setText(f"<span style='color:{color}'>●</span>&nbsp;{text}")
-        # a sentence-long pill wraps instead of forcing the page wider than the window
-        self.setWordWrap(len(text) > 48)
+        # a sentence-long pill wraps instead of forcing the page wider than the window, and then grows in height
+        wrap = len(text) > 48
+        self.setWordWrap(wrap)
+        self.setSizePolicy(QSizePolicy.Policy.Maximum,
+                           QSizePolicy.Policy.Minimum if wrap else QSizePolicy.Policy.Fixed)
         self.setStyleSheet(f"QLabel {{ background: rgba(255,255,255,0.04); border: 1px solid {theme.BORDER_HI};"
                            f" border-radius: 11px; padding: 3px 10px; }}")
         self.setAccessibleName(text)
