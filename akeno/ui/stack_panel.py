@@ -312,9 +312,11 @@ class GamePanel(QWidget):
         self.header_lay.addWidget(img)
         col = QVBoxLayout()
         col.addWidget(label(g.name, "h1", shrink=True))
-        api = GraphicsApi(st.api).label if st.api in {a.value for a in GraphicsApi} else st.api
-        col.addWidget(label(" · ".join([t(LAUNCHERS.get(g.launcher, g.launcher)), t(api), g.architecture or ""]).strip(" ·"),
-                            "dim"))
+        api = t(GraphicsApi(st.api).label) if st.api in {a.value for a in GraphicsApi} else st.api
+        if self.s.db.game_overrides(g.id).get("api"):
+            api += " (" + t("your choice") + ")"          # a manual renderer stays visible as such
+        col.addWidget(label(" · ".join([t(LAUNCHERS.get(g.launcher, g.launcher)), api, g.architecture or ""]).strip(" ·"),
+                            "dim", shrink=True))
         gpu = st.gpu
         col.addWidget(label((gpu.name + (f" · {gpu.generation}" if gpu.generation else "") +
                              (f" · {t('driver')} {gpu.driver_version}" if gpu.driver_version else ""))
@@ -467,12 +469,21 @@ class GamePanel(QWidget):
             row = QHBoxLayout()
             api = QComboBox()
             api.setAccessibleName(t("Graphics API"))
-            api.addItem(t("Automatic"), "")
+            ov = self.s.db.game_overrides(g.id).get("api")
+            if ov:                             # what Automatic would pick without the user's choice
+                auto = st.profile.api if st.profile and st.profile.api else (
+                    g.api_candidates[0] if len(g.api_candidates) == 1 else None)
+            else:
+                auto = self.stack.game_api(g, st.profile)
+            auto_label = t(GraphicsApi(auto).label) if auto in {a.value for a in GraphicsApi} else t("Unknown")
+            api.addItem(t("Automatic ({api})", api=auto_label), "")
             for a in (GraphicsApi.D3D12, GraphicsApi.D3D11, GraphicsApi.VULKAN):
                 api.addItem(t(a.label), a.value)
-            ov = self.s.db.game_overrides(g.id).get("api")
             if ov:
                 api.setCurrentIndex(max(0, api.findData(ov)))
+                api.setToolTip(t("You chose this renderer. Pick Automatic to use the detected one again."))
+            else:
+                api.setToolTip(t("Detected from: {source}", source=t(g.api_source or "") or t("Unknown")))
             api.activated.connect(lambda _=0, c=api: self._override("api", c.currentData()))
             row.addWidget(label(t("Renderer"), "key"))
             row.addWidget(api, 1)

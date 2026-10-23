@@ -151,6 +151,7 @@ class Game:
     anti_cheat_details: list[str] = field(default_factory=list)
     is_running: bool | None = None
     analyzed_at: str | None = None
+    analysis_version: int = 0          # analyzer.ANALYSIS_VERSION that produced this record
     artwork_path: str | None = None
     notes: list[str] = field(default_factory=list)
 

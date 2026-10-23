@@ -6,8 +6,10 @@ with the candidates listed, ``NONE_FOUND`` anti-cheat instead of "no anti-cheat"
 
 from __future__ import annotations
 
+import logging
 import os
 import re
+from functools import lru_cache
 from pathlib import Path
 
 from akeno.core.db import now_iso
@@ -15,6 +17,8 @@ from akeno.core.models import AntiCheatRisk, DetectedFile, Game, GraphicsApi
 from akeno.games import pe
 from akeno.games.launchers import RawGame
 from akeno.i18n import msg
+
+log = logging.getLogger(__name__)
 
 # Files that are never the game's main executable.
 NON_GAME_EXE = re.compile(
@@ -252,6 +256,24 @@ def detect_anti_cheat(install_dir: str, exe_dir: str | None) -> tuple[AntiCheatR
     return AntiCheatRisk.NONE_FOUND, []
 
 
+# Bump when the analysis changes in a way stored records must pick up (they are re-analysed on start).
+ANALYSIS_VERSION = 2
+
+
+@lru_cache(maxsize=1)
+def _profiles():
+    from akeno.stack.catalog import StackCatalog
+    return StackCatalog.load()
+
+
+def _profile(game: Game):
+    try:
+        return _profiles().profile_for(game)
+    except (OSError, ValueError) as exc:          # a damaged catalog must not stop the library scan
+        log.warning("game profiles unavailable: %s", exc)
+        return None
+
+
 def analyze(raw: RawGame, exe_override: str | None = None, api_override: str | None = None,
             running: list | None = None) -> Game:
     from akeno.core import processes
@@ -266,7 +288,8 @@ def analyze(raw: RawGame, exe_override: str | None = None, api_override: str | N
         else:
             notes.append("The executable you selected earlier no longer exists; AKENO picked one again.")
     game = Game(id=raw.id, name=raw.name, install_dir=raw.install_dir, launcher=raw.launcher,
-                launcher_id=raw.launcher_id, exe_path=exe, exe_candidates=candidates, notes=notes)
+                launcher_id=raw.launcher_id, exe_path=exe, exe_candidates=candidates, notes=notes,
+                analysis_version=ANALYSIS_VERSION)
     if not os.path.isdir(raw.install_dir):
         game.notes.append("The installation folder no longer exists.")
         game.analyzed_at = now_iso()
@@ -280,16 +303,13 @@ def analyze(raw: RawGame, exe_override: str | None = None, api_override: str | N
     info = pe.parse(exe, with_version=False)
     game.architecture = info.machine if info.valid else None
     api, apis, source = detect_api(exe)
-    # Only this exact game identity and executable layout carry the DX12 profile.
-    try:
-        rel_exe = Path(exe).relative_to(Path(raw.install_dir)).as_posix().lower()
-    except ValueError:
-        rel_exe = ''
-    if (raw.launcher == 'steam' and str(raw.launcher_id) == '1285190'
-            and rel_exe == 'oakgame/binaries/win64/borderlands4.exe' and info.valid):
-        api, source = GraphicsApi.D3D12, 'Borderlands 4 Steam 1285190 DX12 game profile; not NR execution evidence'
-        apis = sorted(set(apis + ['d3d12']))
-        game.notes.append('Borderlands 4 supports native DLSS. Test offline single-player only; co-op/protected sessions are separate.')
+    # Import tables mislead for many engines: Unreal Engine 5 links d3d11.dll and loads d3d12.dll at run time,
+    # so Borderlands 4 used to show up as DirectX 11. A game profile names the renderer of this exact executable
+    # layout, whatever the store (Steam, Epic, manual copy).
+    profile = _profile(game) if info.valid else None
+    if profile and profile.api:
+        api, source = GraphicsApi(profile.api), msg("AKENO game profile: {name}", name=profile.name)
+        apis = sorted(set(apis) | {profile.api})
     game.api, game.api_candidates, game.api_source = api, apis, source
     if api_override:
         game.api, game.api_source = GraphicsApi(api_override), msg("selected by you")

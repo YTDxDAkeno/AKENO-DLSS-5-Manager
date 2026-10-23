@@ -316,3 +316,26 @@ def test_catalog_pin_url_must_be_the_release_asset_itself():
         for v in c.versions:
             if v.source == "download":
                 assert v.url.endswith(f"/releases/download/{v.tag}/{v.asset}")
+
+
+def test_borderlands4_is_directx12_whatever_the_store_and_old_records_are_refreshed(tmp_path, db, monkeypatch):
+    """UE5 links d3d11.dll and loads d3d12.dll at run time; the import table alone said DirectX 11."""
+    from akeno.core.models import GraphicsApi
+    from akeno.games import analyzer
+    from akeno.games.launchers import RawGame
+    root = tmp_path / "Borderlands 4"
+    make_pe(root / "OakGame/Binaries/Win64/Borderlands4.exe", ["d3d11.dll", "dxgi.dll", "kernel32.dll"], pad=60000)
+    raw = RawGame(id="epic:catnip", name="Borderlands 4", install_dir=str(root), launcher="epic", launcher_id="catnip")
+    game = analyzer.analyze(raw, running=[])
+    assert game.api == GraphicsApi.D3D12 and "game profile" in game.api_source
+    assert game.analysis_version == analyzer.ANALYSIS_VERSION
+    svc, fx = services(tmp_path, db, monkeypatch)
+    stale = dict(game.to_dict(), api="d3d11", api_source="executable imports", analysis_version=0)
+    db.upsert_game(stale, manual=False)
+    assert [g.id for g in svc.library.stale_games()] == [game.id]
+    monkeypatch.setattr(svc.library, "_raw_from_game", lambda g: raw)
+    svc.library.reanalyze(game.id)
+    assert svc.library.get(game.id).api == GraphicsApi.D3D12 and not svc.library.stale_games()
+    svc.library.set_override(game.id, "api", "d3d11")       # the user's explicit choice still wins
+    assert svc.library.get(game.id).api == GraphicsApi.D3D11
+    assert svc.stack.game_api(svc.library.get(game.id), svc.stack.catalog.profile_for(svc.library.get(game.id))) == "d3d11"

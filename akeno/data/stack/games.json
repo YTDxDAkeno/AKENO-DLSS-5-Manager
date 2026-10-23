@@ -5,12 +5,14 @@
    "id": "borderlands4",
    "name": "Borderlands 4",
    "steam_app_ids": ["1285190"],
-   "executables": ["OakGame/Binaries/Win64/Borderlands4.exe"],
+   "executables": ["OakGame/Binaries/Win64/Borderlands4.exe", "OakGame/Binaries/Win64/Borderlands4-Win64-Shipping.exe",
+                   "OakGame/Binaries/WinGDK/Borderlands4.exe"],
    "api": "d3d12",
    "upscalers": ["dlss"],
    "recipes": ["optiscaler", "renodx"],
    "renodx": {"EnableHooks": "1"},
-   "notes": ["Unreal Engine 5 with DLSS through NVIDIA Streamline; RenoDX DLSS 5 needs EnableHooks=1 there (AKENO sets it).",
+   "notes": ["DirectX 12 only (Unreal Engine 5). Its .exe also links d3d11.dll, which is why an import scan alone reads DirectX 11.",
+             "Unreal Engine 5 with DLSS through NVIDIA Streamline; RenoDX DLSS 5 needs EnableHooks=1 there (AKENO sets it).",
              "Use single-player/offline sessions for testing."]
   },
   {

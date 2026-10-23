@@ -152,8 +152,12 @@ def test_borderlands_exact_dx12_profile_and_plugin_inventory(tmp_path):
     assert game.api == GraphicsApi.D3D12 and 'game profile' in game.api_source
     assert any(m.kind == 'streamline' for m in game.existing_mods)
     assert analyze(raw, api_override='d3d11', running=[]).api == GraphicsApi.D3D11
-    raw.launcher_id = '999'
-    assert analyze(raw, running=[]).api == GraphicsApi.UNKNOWN
+    raw.launcher, raw.launcher_id = 'epic', 'b4d00dad'      # same layout from another store: same renderer
+    assert analyze(raw, running=[]).api == GraphicsApi.D3D12
+    other = tmp_path / 'Other'
+    make_pe(other/'Binaries/Win64/Other.exe', ['d3d12.dll', 'd3d11.dll'])
+    raw2 = RawGame(id='manual:other', name='Other', install_dir=str(other), launcher='manual')
+    assert analyze(raw2, running=[]).api == GraphicsApi.UNKNOWN, "no profile: ambiguous imports stay a question"
 
 
 def test_private_bundle_assembler_uses_actual_fixture_bytes_only(db, nr, tmp_path, monkeypatch):

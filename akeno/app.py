@@ -109,6 +109,10 @@ def main(argv: list[str] | None = None) -> int:
         if not services.library.games() or services.settings.get("rescan_on_start"):
             # the runtime search also looks in library games, so it runs after the library scan
             ctl.scan_games(on_done=lambda games: ctl.discover_dependencies())
+        elif stale := services.library.stale_games():
+            # records from an older AKENO (e.g. a renderer read from the import table) are refreshed once
+            ctl.run("games", lambda: [services.library.reanalyze(g.id) for g in stale],
+                    lambda _: (ctl.games_changed.emit(), ctl.discover_dependencies()), silent=True)
         else:
             ctl.discover_dependencies()
         if services.settings.get("auto_update_compat_db"):
