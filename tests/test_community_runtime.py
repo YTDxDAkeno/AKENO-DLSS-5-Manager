@@ -294,9 +294,11 @@ def test_scaled_install_actions_and_community_entry_fit_window(qtbot,experiment,
         QApplication.instance().setStyleSheet(theme.stylesheet())
         w=MainWindow(Controller(s));qtbot.addWidget(w);w.resize(1280,720);w.show()
         # Show the page without starting a real runtime-search worker.
-        w.stack.setCurrentIndex(list(w.pages).index('install'))
+        from akeno.ui.main_window import NAV
+        adv=w.pages['advanced'];adv.tabs.blockSignals(True);adv.tabs.setCurrentIndex(adv.keys.index('install'));adv.tabs.blockSignals(False);adv._place('install')
+        w.stack.setCurrentIndex([k for k,_,_ in NAV].index('advanced'))
         qtbot.wait(100)
-        page=w.pages['install'];host=w.hosts['install'];page.set_density(2);qtbot.wait(100)
+        page=w.pages['install'];host=w.hosts['advanced'];page.set_density(2);qtbot.wait(100)
         assert host.scroll.horizontalScrollBar().maximum()==0
         assert page._community_button.isVisible()
         assert page.act_card.width() <= host.width()

@@ -550,7 +550,8 @@
      "channel": "stable",
      "published": "2026-10-11",
      "recommended": true,
-     "source_commit": "3c09eabcd138a68d144b6cc396a23e6b493eea4d"
+     "source_commit": "3c09eabcd138a68d144b6cc396a23e6b493eea4d",
+     "source_archive_sha256": "e1559e5291074d00cf8a42a54d2a3c647a26c73a4a46ce605469b5525444ba6b"
     },
     {
      "tag": "v1.18.0-beta.2",

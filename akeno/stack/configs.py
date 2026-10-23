@@ -251,24 +251,25 @@ def feeder_cfg(overrides: dict | None = None) -> str:
 
 def describe_preset(family: str, preset: str, features: frozenset[str] = frozenset(), api: str = "d3d12",
                     feeder: bool = False) -> str:
-    """One line telling the user what a preset really changes."""
+    """One line telling the user what a preset really changes (a translatable template)."""
+    from akeno.i18n import msg
     if family == "renodx":
         if preset == "custom":
-            return "Your own model resolution, passes and style."
+            return msg("Your own model resolution, passes and style.")
         scale, passes = _RENODX_TABLE[preset]
-        return f"Model at {round(scale * 100)}% resolution, {passes} pass{'es' if passes > 1 else ''}."
+        return msg("Model at {pct}% resolution, {n} pass(es).", pct=round(scale * 100), n=passes)
     if preset == "custom":
-        return "Your own OptiScaler DLSS 5 settings."
+        return msg("Your own OptiScaler DLSS 5 settings.")
     v = optiscaler_preset(preset, features, api, feeder)["DlssNr"]
     parts = []
     if "PreSr" in v:
-        parts.append("before the upscaler" if v["PreSr"] else "after the upscaler")
-    parts.append(f"model at {round(v['WorkingScale'] * 100)}%")
-    if v.get("CacheEnabled"):
-        n = v.get("CacheInterval", 1)
-        parts.append("every frame" if n == 1 else f"every {n} frames")
+        parts.append(msg("Before the upscaler") if v["PreSr"] else msg("After the upscaler"))
+    parts.append(msg("model at {pct}%", pct=round(v["WorkingScale"] * 100)))
+    if v.get("CacheEnabled") and v.get("CacheInterval", 1) > 1:
+        parts.append(msg("model every {n} frames", n=v["CacheInterval"]))
     elif "CacheEnabled" in v:
-        parts.append("every frame")
+        parts.append(msg("model every frame"))
     if v.get("Passes", 1) > 1:
-        parts.append(f"{v['Passes']} passes")
-    return ", ".join(parts).capitalize() + "."
+        parts.append(msg("{n} passes", n=v["Passes"]))
+    template = ", ".join("{p%d}" % i for i in range(len(parts))) + "."
+    return msg(template, **{f"p{i}": part for i, part in enumerate(parts)})

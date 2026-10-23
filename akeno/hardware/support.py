@@ -203,7 +203,7 @@ def gpu_support(gpu: GpuInfo | None, runtime_version: str | None, runtime_presen
         rep.community = msg("Community-verified with NVIDIA's signed runtime (RTX 5090 reports, drivers 616.64 and 617.14).")
         rep.community_state = "ok"
     elif gen in ("RTX 20", "RTX 30", "RTX 40"):
-        rep.community = msg("Experimental on {g}: older-runtime failures and other-game successes are reported. New signed builds require their own evidence.", g=gen)
+        rep.community = msg("Experimental on {g}: NVIDIA's own model build refuses these cards, so AKENO recommends the community 310.8.2 (SF-v2) build listed for RTX 20 to 50. Results depend on game, driver and build.", g=gen)
         rep.community_state = "warn"
         rep.limitations.append(msg("Results depend on the exact signed runtime hash, driver and backend; verify neural creation and evaluation locally."))
     else:

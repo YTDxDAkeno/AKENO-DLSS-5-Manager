@@ -12,7 +12,7 @@ from akeno.games.launchers import ManualGameError
 from akeno.i18n import t
 from akeno.ui import art, theme
 from akeno.ui.stack_panel import LAUNCHERS, GamePanel, error_text
-from akeno.ui.widgets import Clickable, EmptyState, Spinner, StatusPill, button, clear_layout, info, label, scaled
+from akeno.ui.widgets import Clickable, ElidedLabel, EmptyState, Spinner, button, clear_layout, info, label, scaled
 
 __all__ = ["LibraryPage", "LAUNCHERS"]
 
@@ -37,12 +37,14 @@ class GameRow(Clickable):
         lay.addWidget(img)
         col = QVBoxLayout()
         col.setSpacing(2)
-        name = label(game.name)
+        name = ElidedLabel(game.name)
         name.setStyleSheet("font-weight: 600;")
+        name.setToolTip(game.name)
         col.addWidget(name)
-        col.addWidget(label(f"{t(LAUNCHERS.get(game.launcher, game.launcher))} · {t(game.api.label)}", "muted"))
+        col.addWidget(ElidedLabel(f"{t(LAUNCHERS.get(game.launcher, game.launcher))} · {t(game.api.label)}", "muted"))
+        color = theme.STATE_COLORS.get(status[1], theme.TEXT_DIM)
+        col.addWidget(label(f"<span style='color:{color}'>●</span> {t(status[0])}", "muted"))
         lay.addLayout(col, 1)
-        lay.addWidget(StatusPill(t(status[0]), status[1]))
 
 
 class LibraryPage(QWidget):

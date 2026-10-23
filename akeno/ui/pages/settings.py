@@ -10,7 +10,7 @@ import urllib.request
 
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QSpinBox, QVBoxLayout, QWidget, QGridLayout
+from PySide6.QtWidgets import QCheckBox, QComboBox, QGridLayout, QHBoxLayout, QLineEdit, QSpinBox, QVBoxLayout, QWidget
 
 from akeno import __version__
 from akeno.compat.engine import CompatDatabase, CompatDbError
@@ -96,6 +96,15 @@ class SettingsPage(QWidget):
         upd = Card(t("Updates"), "refresh", theme.CYAN)
         upd.body.addWidget(self._check("check_app_updates", t("Check for AKENO updates on start")))
         upd.body.addWidget(self._check("auto_update_compat_db", t("Update the compatibility database automatically")))
+        upd.body.addWidget(self._check("check_mod_updates", t("Check GitHub for newer mod versions once a day "
+                                                             "(never installs anything by itself)")))
+        self.token = QLineEdit()
+        self.token.setEchoMode(QLineEdit.EchoMode.Password)
+        self.token.setPlaceholderText(t("Optional: GitHub token for more update checks per hour"))
+        self.token.setAccessibleName(t("GitHub token"))
+        self.token.setText(st.get("github_token") or "")
+        self.token.editingFinished.connect(lambda: ctl.set_setting("github_token", self.token.text().strip()))
+        upd.body.addLayout(self._row(t("GitHub token"), self.token))
         self.upd_info = label(t("Compatibility database {v} ({o}); package catalog {c}.", v=self.s.compat_db.version,
                                 o=t(self.s.compat_db.origin), c=self.s.catalog.version), "dim", wrap=True)
         upd.body.addWidget(self.upd_info)

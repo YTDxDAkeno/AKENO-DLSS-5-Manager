@@ -150,7 +150,8 @@ def inspect_installation(path: str | Path) -> FiveMInstallation | None:
     # GTA Online anti-cheat in the separate GTA directory is not a FiveM attestation.
     # Any actual detection in FiveM remains a hard block; none_found is not permission.
     identity = hashlib.sha256(str(root).casefold().encode()).hexdigest()[:20]
-    game = Game(id=f"fivem:{identity}", name=f"FiveM ({edition.value})", install_dir=str(root),
+    title = {Edition.LEGACY: "FiveM Legacy", Edition.ENHANCED: "FiveM (GTA V Enhanced)"}.get(edition, "FiveM")
+    game = Game(id=f"fivem:{identity}", name=title, install_dir=str(root),
                 launcher="fivem", exe_path=str(launcher), api=api, api_candidates=candidates,
                 api_source=source, architecture=info.machine if info and info.valid else None,
                 anti_cheat=ac, anti_cheat_details=details,

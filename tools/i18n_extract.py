@@ -61,20 +61,56 @@ def data_strings() -> set[str]:
     out |= {"System", "Game", "Dependencies", "Installation"}
     out |= {"good", "fair", "poor", "Good", "Fair", "Poor", "low", "medium", "high", "bundled", "downloaded",
             "measured", "estimated", "hardware only"}
-    out |= {"Community DLSS 5", "Versions", "Advanced / Diagnostics", "Choose Preset", "Restore previous version", "Remove mod completely",
-        "Find local runtimes", "Import community runtime", "View installation logs", "Import private component manifest", "Rendering pipelines", "Community runtime diagnostics",
-        "Pure 0", "Pure 1", "Pure 2", "Performance", "Balanced", "Quality", "Ultra", "Disabled"}
-    for path in [ROOT/"akeno/mods/service.py", ROOT/"akeno/fivem/community_stack.py"]:
-        tree=ast.parse(path.read_text())
-        for call in ast.walk(tree):
-            if isinstance(call,ast.Call) and isinstance(call.func,ast.Name) and call.func.id=="need":
-                for arg in call.args[3:5]:
-                    if isinstance(arg,ast.Constant) and isinstance(arg.value,str):out.add(arg.value)
-    for role in ('reshade','motion_provider','neural_consumer'):
-        out.add('A compatible '+role+' is required.')
-    from akeno.mods.catalog import CommunityCatalog
-    out |= {r['name'] for r in CommunityCatalog.bundled().recipes.values()}
+    out |= {"Performance", "Balanced", "Quality", "Ultra", "Disabled"}
+    out |= stack_strings()
     return out
+
+
+STACK_CALLS = {"Issue": (2, 3), "StackError": (0, 1), "MissingDependency": (0, 1), "PreviewRow": (2,),
+               "GameRunning": (0,)}
+
+
+def stack_strings() -> set[str]:
+    """Strings of the stack engine and its pages that reach t() through data or exception objects."""
+    out: set[str] = set()
+    for path in (ROOT / "akeno" / "stack").glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in STACK_CALLS:
+                for i in STACK_CALLS[node.func.id]:
+                    if i < len(node.args) and isinstance(node.args[i], ast.Constant) and isinstance(node.args[i].value, str):
+                        out.add(node.args[i].value)
+                for kw in node.keywords:
+                    if kw.arg in ("message", "remedy", "detail") and isinstance(kw.value, ast.Constant):
+                        out.add(kw.value.value)
+            # constant reasons handed to disable_file(path, "...") in the planner
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "disable_file":
+                for a in node.args[1:]:
+                    if isinstance(a, ast.Constant) and isinstance(a.value, str):
+                        out.add(a.value)
+                    elif isinstance(a, ast.IfExp):
+                        out |= {x.value for x in (a.body, a.orelse) if isinstance(x, ast.Constant)}
+    from akeno.stack import configs
+    from akeno.stack.catalog import ROLES, StackCatalog
+    from akeno.ui import stack_panel
+    from akeno.ui.pages import advanced, fivem
+    out |= set(ROLES.values()) | set(configs.PRESET_LABELS.values())
+    out |= set(stack_panel.CHANNEL.values()) | set(stack_panel.ACTION_TEXT.values()) | set(stack_panel.LAUNCHERS.values())
+    out |= set(fivem.KIND_TEXT.values()) | {title for _, title in advanced.TABS}
+    for spec in configs.RENODX_SETTINGS + configs.optiscaler_settings(frozenset({"presr", "cache", "passes"}),
+                                                                       "d3d12", (), False):
+        out |= {spec.label, spec.help} | {c[1] for c in spec.choices}
+    out.discard("")
+    cat = StackCatalog.load()
+    for r in cat.recipes.values():
+        out |= {r.name, r.summary, *r.details}
+    for g in cat.games:
+        out |= {g.name, *g.notes}
+    for c in cat.components.values():
+        out.add(c.description)
+        for v in c.versions:
+            out |= set(v.notes)
+    return {x for x in out if x}
 
 
 def needed() -> set[str]:

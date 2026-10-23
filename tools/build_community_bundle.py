@@ -14,7 +14,6 @@ import zipfile
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 from akeno.games import pe
-from akeno.mods.catalog import CommunityCatalog
 from akeno.security.downloads import DownloadManager,sha256_file
 from akeno.security.archive import extract
 from akeno.pipeline.manifests import ComponentStore
@@ -55,9 +54,11 @@ def build(reshade_source,reshade_dll,out):
     motion=dict(base,role='motion_provider',version='0.2.0',path='dh-motion/dh_uber_motion.fx',sha256=sha256_file(out/'dh-motion/dh_uber_motion.fx'),
         source='https://github.com/AlucardDH/dh-reshade-shaders/tree/'+pins['motion']['commit'],license='GPL-2.0',source_commit=pins['motion']['commit'],framework_license='CC0-1.0',
         destination='reshade-shaders/Shaders/dh_uber_motion.fx',provider_id=0,technique='DH_UBER_MOTION_020',assets=assets,requires={'reshade':'6.8.0'})
-    catalog=CommunityCatalog.bundled();package=catalog.packages['dlss5-feeder-1.19.0']
-    downloader=DownloadManager(['github.com','release-assets.githubusercontent.com'],cache=out/'packages')
-    fetched=downloader.fetch(package['url'],package['sha256'],package['asset_name'],package['size'])
+    stack=json.loads((ROOT/'akeno/data/stack/components.json').read_text())
+    feeder=next(c for c in stack['components'] if c['id']=='dlss5-feeder')
+    package=dict(next(v for v in feeder['versions'] if v['version']=='1.19.0'),id='dlss5-feeder-1.19.0')
+    downloader=DownloadManager(['github.com','objects.githubusercontent.com','release-assets.githubusercontent.com'],cache=out/'packages')
+    fetched=downloader.fetch(package['url'],package['sha256'],package['asset'],package['size'])
     source='https://codeload.github.com/jlrouzies-fr/DLSS5-Feeder/zip/'+package['source_commit']
     # Source download is original, immutable by commit identity, and never executed.
     import urllib.request
