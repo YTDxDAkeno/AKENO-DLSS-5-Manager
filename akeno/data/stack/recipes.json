@@ -5,12 +5,23 @@
    "id": "optiscaler",
    "name": "OptiScaler DLSS 5",
    "target": "game",
-   "apis": ["d3d12", "d3d11", "vulkan"],
-   "architectures": ["x64"],
+   "apis": [
+    "d3d12",
+    "d3d11",
+    "vulkan"
+   ],
+   "architectures": [
+    "x64"
+   ],
    "needs_upscaler": "any",
    "roles": {
-    "consumer_optiscaler": ["optiscaler-dlss5", "optiscaler-dlssnr"],
-    "nr_runtime": ["nvngx-dlssnr"]
+    "consumer_optiscaler": [
+     "optiscaler-dlss5",
+     "optiscaler-dlssnr"
+    ],
+    "nr_runtime": [
+     "nvngx-dlssnr"
+    ]
    },
    "presets": "optiscaler",
    "summary": "Hooks the upscaler the game already has (DLSS, FSR 2+ or XeSS) and runs the DLSS 5 model on its output.",
@@ -23,13 +34,24 @@
    "id": "renodx",
    "name": "RenoDX DLSS 5 (ReShade add-on)",
    "target": "game",
-   "apis": ["d3d12", "d3d11"],
-   "architectures": ["x64"],
+   "apis": [
+    "d3d12",
+    "d3d11"
+   ],
+   "architectures": [
+    "x64"
+   ],
    "needs_upscaler": "dlss",
    "roles": {
-    "reshade": ["reshade"],
-    "consumer_renodx": ["renodx-dlss5"],
-    "nr_runtime": ["nvngx-dlssnr"]
+    "reshade": [
+     "reshade"
+    ],
+    "consumer_renodx": [
+     "renodx-dlss5"
+    ],
+    "nr_runtime": [
+     "nvngx-dlssnr"
+    ]
    },
    "presets": "renodx",
    "summary": "ReShade add-on that runs DLSS 5 on the game's own DLSS calls.",
@@ -42,38 +64,83 @@
    "id": "feeder",
    "name": "DLSS5-Feeder + RenoDX DLSS 5",
    "target": "game",
-   "apis": ["d3d11", "d3d12"],
-   "architectures": ["x64"],
+   "apis": [
+    "d3d11",
+    "d3d12",
+    "d3d9",
+    "opengl",
+    "vulkan"
+   ],
+   "architectures": [
+    "x64"
+   ],
    "needs_upscaler": null,
    "roles": {
-    "reshade": ["reshade"],
-    "feeder": ["dlss5-feeder"],
-    "motion": ["dh-uber-motion"],
-    "consumer_renodx": ["renodx-dlss5"],
-    "sr_runtime": ["nvngx-dlss"],
-    "nr_runtime": ["nvngx-dlssnr"]
+    "reshade": [
+     "reshade"
+    ],
+    "translator": [
+     "dgvoodoo2"
+    ],
+    "feeder": [
+     "dlss5-feeder"
+    ],
+    "motion": [
+     "dh-uber-motion"
+    ],
+    "consumer_renodx": [
+     "renodx-dlss5"
+    ],
+    "sr_runtime": [
+     "nvngx-dlss"
+    ],
+    "nr_runtime": [
+     "nvngx-dlssnr"
+    ]
    },
    "presets": "renodx",
    "summary": "For games without DLSS: the Feeder builds the DLSS request from ReShade depth and estimated motion vectors.",
    "details": [
     "Motion vectors are estimated by a ReShade shader, so fast motion can ghost a little.",
     "Turn MSAA/SSAA off in the game. The ReShade overlay opens with the Home key."
-   ]
+   ],
+   "api_roles": {
+    "translator": [
+     "d3d9"
+    ]
+   }
   },
   {
    "id": "feeder_optiscaler",
    "name": "DLSS5-Feeder + OptiScaler DLSS 5",
    "target": "game",
-   "apis": ["d3d11", "d3d12"],
-   "architectures": ["x64"],
+   "apis": [
+    "d3d11",
+    "d3d12"
+   ],
+   "architectures": [
+    "x64"
+   ],
    "needs_upscaler": null,
    "roles": {
-    "reshade": ["reshade"],
-    "feeder": ["dlss5-feeder"],
-    "motion": ["dh-uber-motion"],
-    "consumer_optiscaler": ["optiscaler-dlss5"],
-    "sr_runtime": ["nvngx-dlss"],
-    "nr_runtime": ["nvngx-dlssnr"]
+    "reshade": [
+     "reshade"
+    ],
+    "feeder": [
+     "dlss5-feeder"
+    ],
+    "motion": [
+     "dh-uber-motion"
+    ],
+    "consumer_optiscaler": [
+     "optiscaler-dlss5"
+    ],
+    "sr_runtime": [
+     "nvngx-dlss"
+    ],
+    "nr_runtime": [
+     "nvngx-dlssnr"
+    ]
    },
    "presets": "optiscaler_feeder",
    "summary": "Alternative for games without DLSS: OptiScaler DLSS 5 is the neural consumer of the Feeder's DLSS request.",
@@ -82,19 +149,95 @@
    ]
   },
   {
+   "id": "feeder_x86",
+   "name": "DLSS5-Feeder 32-bit helper + RenoDX DLSS 5",
+   "target": "game",
+   "apis": [
+    "d3d11",
+    "d3d10",
+    "d3d9",
+    "d3d8",
+    "opengl",
+    "vulkan"
+   ],
+   "architectures": [
+    "x86"
+   ],
+   "needs_upscaler": null,
+   "helper": true,
+   "roles": {
+    "reshade32": [
+     "reshade-x86"
+    ],
+    "translator": [
+     "dgvoodoo2"
+    ],
+    "feeder32": [
+     "dlss5-feeder-x86"
+    ],
+    "motion": [
+     "dh-uber-motion"
+    ],
+    "reshade": [
+     "reshade"
+    ],
+    "consumer_renodx": [
+     "renodx-dlss5"
+    ],
+    "sr_runtime": [
+     "nvngx-dlss"
+    ],
+    "nr_runtime": [
+     "nvngx-dlssnr"
+    ]
+   },
+   "api_roles": {
+    "translator": [
+     "d3d9",
+     "d3d8"
+    ]
+   },
+   "role_titles": {
+    "reshade": "ReShade 64-bit (helper)"
+   },
+   "presets": "renodx",
+   "summary": "For 32-bit games: the 32-bit Feeder hands every frame to a 64-bit helper (host64) that runs DLSS 5, because NVIDIA ships NGX only as 64-bit code.",
+   "details": [
+    "The first frame starts host64\\dlss5-feed-host64.exe by itself; it closes with the game.",
+    "The neural consumer's panel lives in the helper: ReShade overlay (Home) > Add-ons > DLSS 5 Feed > Show the DLSS 5 panel in-game.",
+    "Only DLAA is possible on this route; expect a lower frame rate than a 64-bit game."
+   ]
+  },
+  {
    "id": "fivem",
    "name": "FiveM Legacy: DLSS5-Feeder + RenoDX DLSS 5",
    "target": "fivem",
-   "apis": ["d3d11"],
-   "architectures": ["x64"],
+   "apis": [
+    "d3d11"
+   ],
+   "architectures": [
+    "x64"
+   ],
    "needs_upscaler": null,
    "roles": {
-    "reshade": ["reshade"],
-    "feeder": ["dlss5-feeder"],
-    "motion": ["dh-uber-motion"],
-    "consumer_renodx": ["renodx-dlss5"],
-    "sr_runtime": ["nvngx-dlss"],
-    "nr_runtime": ["nvngx-dlssnr"]
+    "reshade": [
+     "reshade"
+    ],
+    "feeder": [
+     "dlss5-feeder"
+    ],
+    "motion": [
+     "dh-uber-motion"
+    ],
+    "consumer_renodx": [
+     "renodx-dlss5"
+    ],
+    "sr_runtime": [
+     "nvngx-dlss"
+    ],
+    "nr_runtime": [
+     "nvngx-dlssnr"
+    ]
    },
    "presets": "renodx",
    "summary": "Installs into FiveM.app\\plugins: ReShade as d3d11.dll (the only name FiveM loads), the in-process Feeder and RenoDX DLSS 5.",

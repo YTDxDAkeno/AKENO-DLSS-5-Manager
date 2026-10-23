@@ -585,6 +585,72 @@
    ]
   },
   {
+   "id": "dlss5-feeder-x86",
+   "role": "feeder32",
+   "name": "DLSS5-Feeder (32-bit)",
+   "repository": "jlrouzies-fr/DLSS5-Feeder",
+   "license": "MIT",
+   "homepage": "https://github.com/jlrouzies-fr/DLSS5-Feeder",
+   "features": [],
+   "description": "For 32-bit games: dlss5-feed.addon32 runs in the game's 32-bit ReShade and hands every frame over shared GPU textures to host64\\dlss5-feed-host64.exe, which runs NGX and the neural consumer.",
+   "versions": [
+    {
+     "version": "1.19.0",
+     "tag": "v1.19.0",
+     "asset": "dlss5-feeder-1.19.0.zip",
+     "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.19.0/dlss5-feeder-1.19.0.zip",
+     "sha256": "9cc19e28f8fb4e216ea61621fdf6443e207e338ec639979ab335503c75f48f36",
+     "size": 503554,
+     "channel": "stable",
+     "published": "2026-10-11",
+     "recommended": true,
+     "files": {
+      "dlss5-feed.addon32": "34c767bd53a99f51a6cb5d87b267734e04314d16bf495a6c69ab98acd62d0874",
+      "host64/dlss5-feed-host64.exe": "79e427430c5c0102f6c7a557155b706ad51b0c40933f6e245fce922bf5b1401e",
+      "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+     },
+     "notes": [
+      "Same release archive as the 64-bit Feeder: dlss5-feed.addon32 beside the game, host64\\dlss5-feed-host64.exe runs NGX."
+     ]
+    },
+    {
+     "version": "1.18.0-beta.2",
+     "tag": "v1.18.0-beta.2",
+     "asset": "dlss5-feeder-1.18.0-beta.2.zip",
+     "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.18.0-beta.2/dlss5-feeder-1.18.0-beta.2.zip",
+     "sha256": "4d459f902d5a8faace03c6909962334e800a58b73e0aee49eb1b30a3572f43dc",
+     "size": 503310,
+     "channel": "prerelease",
+     "published": "2026-10-06",
+     "files": {
+      "dlss5-feed.addon32": "fa2f0ca58fe0522db527627b7e53a0cfad6c6bfabd87995edaae2923f957d050",
+      "host64/dlss5-feed-host64.exe": "5a8dc1813b636d97056681bbeefac47ca8c02fa09456e353d87811513c795b42",
+      "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+     },
+     "notes": [
+      "Same release archive as the 64-bit Feeder: dlss5-feed.addon32 beside the game, host64\\dlss5-feed-host64.exe runs NGX."
+     ]
+    },
+    {
+     "version": "1.17.0",
+     "tag": "v1.17.0",
+     "asset": "dlss5-feeder-1.17.0.zip",
+     "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.17.0/dlss5-feeder-1.17.0.zip",
+     "sha256": "11a96b36ae89ef75b3cff0e03849db35591143fe4df171986502905809469e12",
+     "size": 390753,
+     "channel": "stable",
+     "files": {
+      "dlss5-feed.addon32": "bfe24218be719cf5b91d829283953432907922333280931b755d83ac793fd8b2",
+      "host64/dlss5-feed-host64.exe": "c835754277a0590780d846443f314a83a30e2d2815ee0b2f7c18f1a24f252936",
+      "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+     },
+     "notes": [
+      "Same release archive as the 64-bit Feeder: dlss5-feed.addon32 beside the game, host64\\dlss5-feed-host64.exe runs NGX."
+     ]
+    }
+   ]
+  },
+  {
    "id": "reshade",
    "role": "reshade",
    "name": "ReShade (full add-on support)",
@@ -613,6 +679,39 @@
      "channel": "stable",
      "notes": [
       "ReShade64.dll is taken from the official setup and checked for ReShade 6.8.0 identity and add-on exports."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "reshade-x86",
+   "role": "reshade32",
+   "name": "ReShade 32-bit (full add-on support)",
+   "repository": "crosire/reshade",
+   "license": "BSD-3-Clause",
+   "homepage": "https://reshade.me",
+   "features": [],
+   "description": "32-bit ReShade with add-on support, loaded by the 32-bit game; it loads dlss5-feed.addon32.",
+   "versions": [
+    {
+     "version": "6.8.0",
+     "label": "6.8.0 (AKENO build from source)",
+     "source": "bundled",
+     "bundle_role": "reshade32",
+     "channel": "stable",
+     "recommended": true,
+     "notes": [
+      "Built from crosire/reshade v6.8.0 (18deaa5) for 32-bit with full add-on support by AKENO CI."
+     ]
+    },
+    {
+     "version": "6.8.0",
+     "label": "6.8.0 (official reshade.me add-on setup)",
+     "source": "reshade_setup",
+     "url": "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe",
+     "channel": "stable",
+     "notes": [
+      "ReShade32.dll is taken from the official setup and checked for ReShade 6.8.0 identity, 32-bit and add-on exports."
      ]
     }
    ]
@@ -804,6 +903,49 @@
      "notes": [
       "The build the DLSS5-Feeder installer downloads. RTX 50 only, like NVIDIA's."
      ]
+    }
+   ]
+  },
+  {
+   "id": "dgvoodoo2",
+   "role": "translator",
+   "name": "dgVoodoo2",
+   "repository": "dege-diosg/dgVoodoo2",
+   "license": "Freeware (dgVoodoo2 by Dege, downloaded from its official GitHub release)",
+   "homepage": "http://dege.freeweb.hu/dgVoodoo2/",
+   "features": [],
+   "description": "Translates Direct3D 8/9 to Direct3D 11 so ReShade and the Feeder can work with the game.",
+   "versions": [
+    {
+     "version": "2.87.5",
+     "tag": "v2.87.5",
+     "asset": "dgVoodoo2_87_5.zip",
+     "url": "https://github.com/dege-diosg/dgVoodoo2/releases/download/v2.87.5/dgVoodoo2_87_5.zip",
+     "sha256": "5ffde6927f7355ca3fdd5d785b581256a8e6539fa13e395a891ade6ba1040850",
+     "size": 9268078,
+     "channel": "stable",
+     "files": {
+      "MS/x86/D3D9.dll": "6a0ca214784be04b7c8b547105aa9d79acf4dc26c0b6f8702b437ddca54058b2",
+      "MS/x86/D3D8.dll": "d03e2562178db1fcf3493fc0a0b23a465e35c55d73adb3ec095be866cd662704",
+      "MS/x64/D3D9.dll": "0b3485614a56fff27cf66c1cee670979defe4103342884203e9726f455a5b091",
+      "dgVoodoo.conf": "45cc0eb8e6ed4f067aca1b2e4ac1268dfbd164bbbd06d264c53e8a60642c4dbf"
+     },
+     "recommended": true
+    },
+    {
+     "version": "2.87.4",
+     "tag": "v2.87.4",
+     "asset": "dgVoodoo2_87_4.zip",
+     "url": "https://github.com/dege-diosg/dgVoodoo2/releases/download/v2.87.4/dgVoodoo2_87_4.zip",
+     "sha256": "74aeb464d829db80e3f4aa8fae235e6e3b38fc01188776c5c2376bb0dea0956e",
+     "size": 9235426,
+     "channel": "stable",
+     "files": {
+      "MS/x86/D3D9.dll": "db1c445f7bcf699df1e175e974c779bdc7e19a468680a44884b1ab7078888d04",
+      "MS/x86/D3D8.dll": "d6e8931e785e267f926c049d4d1257b00771e2de8c57c8f39e434ddf6185df06",
+      "MS/x64/D3D9.dll": "ca777d0e1be467091d851d5dd41293f90c254beb35247e365fccc053abfc5678",
+      "dgVoodoo.conf": "3c7da2fac3eaad369df468e80c9ba9c4db632c419799b32bbc31279d10985801"
+     }
     }
    ]
   }

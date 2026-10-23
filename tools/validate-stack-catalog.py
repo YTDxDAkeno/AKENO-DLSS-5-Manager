@@ -32,6 +32,7 @@ from akeno.security.archive import extract  # noqa: E402
 from akeno.security.downloads import sha256_file  # noqa: E402
 from akeno.stack import configs  # noqa: E402
 from akeno.stack.catalog import StackCatalog  # noqa: E402
+from akeno.stack.sources import BINARY_SUFFIXES, expected_machine  # noqa: E402
 
 
 def downloadable(cat: StackCatalog):
@@ -78,10 +79,18 @@ def download(cat: StackCatalog, folder: Path) -> tuple[list[str], list[str]]:
 
 def check_member(c, v, rel: str, path: Path, problems: list[str]) -> None:
     low = rel.lower()
-    if low.endswith((".dll", ".addon64", ".exe", ".asi")):
+    if low.endswith(BINARY_SUFFIXES):
         info = pe.parse(str(path))
-        if not info.valid or info.machine != "x64":
-            problems.append(f"{c.id} {v.version}: {rel} is not an x64 PE file")
+        want = expected_machine(rel)
+        if not info.valid or info.machine != want:
+            problems.append(f"{c.id} {v.version}: {rel} is not an {want} PE file")
+        if c.role == "translator" and "dgvoodoo" not in " ".join(info.strings.values()).lower():
+            problems.append(f"{c.id} {v.version}: {rel} does not identify itself as dgVoodoo")
+    if low == "dgvoodoo.conf":
+        sections = ini.get_values(path.read_text(encoding="utf-8-sig", errors="replace"))
+        for section, key, _ in configs.DGVOODOO_SETTINGS:
+            if key not in sections.get(section, {}):
+                problems.append(f"{c.id} {v.version}: dgVoodoo.conf has no [{section}] {key}")
     if low == "optiscaler.ini":
         sections = ini.get_values(path.read_text(encoding="utf-8-sig", errors="replace"))
         if "DlssNr" not in sections:

@@ -144,11 +144,13 @@ jobs:
           submodules: recursive
           persist-credentials: false
       - uses: microsoft/setup-msbuild@v2
-      - name: Build redistributable ReShade with full addon support
+      - name: Build redistributable ReShade with full addon support (64-bit and 32-bit)
         working-directory: community-build/ReShade
-        run: msbuild ReShade.sln /p:Configuration=Release /p:Platform=64-bit /m
+        run: |
+          msbuild ReShade.sln /p:Configuration=Release /p:Platform=64-bit /m
+          msbuild ReShade.sln /p:Configuration=Release /p:Platform=32-bit /m
       - name: Assemble licensed community dependencies with corresponding source
-        run: python tools/build_community_bundle.py --reshade-source community-build/ReShade --reshade-dll community-build/ReShade/bin/x64/Release/ReShade64.dll
+        run: python tools/build_community_bundle.py --reshade-source community-build/ReShade --reshade-dll community-build/ReShade/bin/x64/Release/ReShade64.dll --reshade32-dll community-build/ReShade/bin/Win32/Release/ReShade32.dll
       - name: Compile pinned Feeder and motion effects
         run: python tools/check_community_shaders.py --compiler community-build/ReShade/bin/x64/Release/fxc.exe --bundle akeno/data/community/dependencies
       - name: Package community dependency release

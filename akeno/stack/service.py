@@ -11,21 +11,27 @@ from __future__ import annotations
 from akeno.i18n import msg
 
 import logging
+import os
+import re
+import signal
+import subprocess
 import threading
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
-from akeno.core.models import AntiCheatRisk, Game, GpuInfo, Vendor
+from akeno.core import processes
+from akeno.core.models import AntiCheatRisk, Game, GpuInfo, GraphicsApi, Vendor
 from akeno.install.transaction import TxResult
+from akeno.paths import is_windows
 from akeno.security.downloads import CancelToken, Cancelled, sha256_file
 
-from . import configs
+from . import configs, transports
 from .catalog import ROLES, ComponentVersion, GameProfile, Recipe, StackCatalog
 from .errors import GameRunning, StackError, explain
 from .planner import BACKEND_ID, LOG_ARTIFACTS, Planner, Prepared, PreviewRow
 from .releases import GitHubReleases
-from .sources import ComponentStore, Staged
+from .sources import ComponentStore, Staged, reshade_identity
 from .targets import FiveMTarget, target_for
 
 log = logging.getLogger(__name__)
@@ -191,7 +197,7 @@ class StackManager:
         chosen = next((v for v in options if v.key == chosen_key), None)
         if chosen is None or chosen.component not in recipe.roles[role]:
             chosen = self._default_version(options, role, gpu)
-        title = ROLES[role]
+        title = recipe.title(role)
         if chosen is None:
             issues.append(Issue("block", "no_version:" + role, msg("No usable {title} for this GPU.", title=msg(title)),
                                 "Import a compatible file from this PC.", "import:" + role))
@@ -250,9 +256,6 @@ class StackManager:
             if not game.exe_path:
                 issues.append(Issue("block", "no_exe", "The game executable is unknown.",
                                     "Select the game's .exe.", "select_exe"))
-            elif game.architecture and game.architecture != "x64":
-                issues.append(Issue("block", "x86", "This is a 32-bit game.",
-                                    "32-bit games need the Feeder helper mode, which AKENO does not automate yet."))
             if game.anti_cheat == AntiCheatRisk.DETECTED and not sel.get("anti_cheat_ack"):
                 issues.append(Issue("block", "anti_cheat",
                                     msg("This game ships anti-cheat: {names}.",
@@ -275,20 +278,26 @@ class StackManager:
     def evaluate(self, game: Game, recipe: Recipe, sel: dict, gpu: GpuInfo | None, profile: GameProfile | None,
                  api: str, upscalers: set[str]) -> Method:
         issues: list[Issue] = []
+        labels = {a.value: a.label for a in GraphicsApi}
         if api not in recipe.apis:
-            label = {"d3d11": "DirectX 11", "d3d12": "DirectX 12", "vulkan": "Vulkan", "opengl": "OpenGL",
-                     "d3d9": "DirectX 9"}.get(api, "?")
-            need = " / ".join({"d3d11": "DirectX 11", "d3d12": "DirectX 12", "vulkan": "Vulkan"}[a] for a in recipe.apis)
+            need = " / ".join(labels.get(a, a) for a in recipe.apis)
             if api == "unknown":
                 issues.append(Issue("block", "api_unknown", "AKENO could not tell which graphics API the game uses.",
-                                    "Choose it in the game's settings panel (DirectX 11, DirectX 12 or Vulkan).",
-                                    "choose_api"))
+                                    "Choose it in the game's settings panel.", "choose_api"))
             else:
                 issues.append(Issue("block", "api", msg("This method needs {need}; the game uses {api}.", need=need,
-                                                        api=label),
+                                                        api=labels.get(api, "?")),
                                     "Choose another method, or switch the game's renderer and select its executable."))
-        if game.architecture and game.architecture not in recipe.architectures:
-            issues.append(Issue("block", "arch", "This method needs a 64-bit game executable."))
+        arch = game.architecture
+        if recipe.target == "game" and arch and arch not in recipe.architectures:
+            issues.append(Issue("block", "arch", "This method is for 32-bit games." if recipe.helper else
+                                "This method needs a 64-bit game executable.",
+                                "" if recipe.helper else "32-bit games use the DLSS5-Feeder 32-bit helper method."))
+        elif recipe.target == "game" and recipe.helper and not arch:
+            issues.append(Issue("block", "arch_unknown", "AKENO could not read whether the game is 32-bit.",
+                                "Select the game's .exe.", "select_exe"))
+        if recipe.target == "game" and recipe.uses_reshade and api in recipe.apis and (arch or "x64") in recipe.architectures:
+            issues.extend(self._transport_issues(game, api, arch or "x64"))
         if recipe.needs_upscaler == "any" and not upscalers:
             issues.append(Issue("block", "no_upscaler", "No DLSS, FSR 2+ or XeSS was found in this game.",
                                 "Use the DLSS5-Feeder method for games without an upscaler."))
@@ -298,15 +307,33 @@ class StackManager:
         if recipe.uses_feeder and "dlss" in upscalers and recipe.target == "game":
             issues.append(Issue("info", "native_better", "This game has its own DLSS: the native methods use the "
                                 "game's real motion vectors instead of estimated ones."))
-        roles = [self._role_choice(recipe, role, sel, gpu, issues) for role in recipe.roles]
+        roles = [self._role_choice(recipe, role, sel, gpu, issues) for role in recipe.roles_for(api)]
         if recipe.target == "fivem":
             issues.extend(self.fivem_issues(game, sel))
         return Method(recipe, self._rank(game, profile, recipe, upscalers), issues, roles)
 
+    def _transport_issues(self, game: Game, api: str, arch: str) -> list[Issue]:
+        """How ReShade gets into this game, and whether an existing machine-wide Vulkan layer can be used."""
+        try:
+            tr = transports.choose(api, arch, game.target_dir)
+        except ValueError as exc:
+            return [Issue("block", "transport", str(exc), "Choose another renderer for this game.", "choose_api")]
+        out = [] if tr.id == "dxgi" else [Issue("info", "transport", tr.describe())]
+        if tr.layer and tr.machine_layer:
+            dll = transports.machine_layer_dll(tr.machine_layer)
+            ok, version, why = reshade_identity(dll, arch) if dll else (False, None, "its DLL is missing")
+            if not ok or tuple(int(x) for x in str(version or "0").split(".")[:2] if x.isdigit()) < (6, 8):
+                out.append(Issue("block", "vk_layer",
+                                 msg("A machine-wide ReShade Vulkan layer is installed but cannot load add-ons "
+                                     "({reason}).", reason=why if not ok else "version " + str(version)),
+                                 "Run ReShade's official setup with add-on support once, or uninstall that "
+                                 "machine-wide ReShade; AKENO then uses its own per-user layer."))
+        return out
+
     def fivem_issues(self, game: Game, sel: dict) -> list[Issue]:
         out = []
         try:
-            target = target_for(game)
+            target = self._target(game)
         except StackError as exc:
             return [Issue("block", exc.code, exc.message, exc.remedy, "rescan")]
         inst = target.installation
@@ -338,18 +365,33 @@ class StackManager:
         for recipe in self.catalog.recipes.values():
             if (recipe.target == "fivem") != (game.launcher == "fivem"):
                 continue
+            if recipe.target == "game" and game.architecture and game.architecture not in recipe.architectures:
+                continue                  # a 32-bit game only sees the 32-bit route, a 64-bit game never sees it
             methods.append(self.evaluate(game, recipe, sel, gpu, profile, api, upscalers))
         methods.sort(key=lambda m: (not m.available, m.rank))
         recommended = next((m for m in methods if m.available), methods[0] if methods else None)
         active = self.active(game_id)
+        if active and self.catalog.recipes.get(active["params"].get("recipe")) and \
+                self.catalog.recipe(active["params"]["recipe"]).helper and self.helper_orphaned(game):
+            issues.append(Issue("warn", "helper_running", "The 64-bit DLSS 5 helper is still running although the "
+                                "game is closed.", "Stop it before you change or remove the mod.", "stop_helper"))
         chosen_id = sel.get("recipe") or (active or {}).get("params", {}).get("recipe")
         selected = next((m for m in methods if m.recipe.id == chosen_id), None) or recommended
         preset = sel.get("preset") or (active or {}).get("params", {}).get("preset") or self.default_preset(gpu, game)
         return GameState(game, profile, gpu, api, methods, selected, recommended, preset, dict(sel.get("custom") or {}),
                          active, self.legacy_install(game), issues)
 
+    def _target(self, game: Game):
+        """The install target with the renderer My Games uses (profile or the user's choice) and its transport."""
+        if game.launcher == "fivem":
+            return target_for(game)
+        return target_for(game, api=self.game_api(game, self.catalog.profile_for(game)))
+
     def default_preset(self, gpu: GpuInfo | None, game: Game) -> str:
         gen = _gen(gpu)
+        if game.architecture == "x86":
+            # the 32-bit route runs DLAA at native size plus the 32-to-64-bit hop (the Feeder: about half the fps)
+            return "balanced" if gen == "RTX 50" else "performance"
         if gen == "RTX 50":
             return "quality"
         if game.launcher == "fivem" and gen in ("RTX 40", "RTX 30", "RTX 20"):
@@ -415,7 +457,7 @@ class StackManager:
                 raise StackError("An installation made by an older AKENO version is active in this game.",
                                  "Remove it first (Installed Mods → Remove); AKENO restores the original files.",
                                  "legacy_install")
-            target = target_for(game)
+            target = self._target(game)
             staged: dict[str, Staged] = {}
             total = sum(r.download_bytes for r in method.roles)
             done_bytes = 0
@@ -450,7 +492,7 @@ class StackManager:
             game = self.s.library.get(prepared.game_id)
             if game is None:
                 raise StackError("This game is no longer in the library.", code="no_game")
-            target = target_for(game)
+            target = self._target(game)
             target.ensure_stopped()
             if prepared.approvals and not approve:
                 raise StackError("Files of other tools need your approval before they are replaced or disabled.",
@@ -463,9 +505,17 @@ class StackManager:
                                      "installation again.", "changed_after_preview")
             plan = prepared.plan
             plan.force = force
+            before = (self.active(game.id) or {}).get("params", {}).get("vk_layer")
             res: TxResult = self.s.installer.apply(game, plan, log_cb)
             messages = list(res.messages)
             if res.ok:
+                layer = plan.params.get("vk_layer")
+                if before and before != layer:
+                    transports.unregister_user_layer(before)
+                if layer:
+                    transports.register_user_layer(layer)
+                    messages.append("ReShade's Vulkan layer is registered for your Windows user; it only "
+                                    "activates in this game.")
                 if prepared.fivem_ack:
                     messages.append(self._add_fivem_ack(target, res.tx_id))
                 self.s.installer.prune(game.id, int(self.s.settings.get("backup_keep_per_game") or 5))
@@ -497,7 +547,7 @@ class StackManager:
 
     def _remove_fivem_ack(self, game: Game) -> str | None:
         try:
-            target = target_for(game)
+            target = self._target(game)
         except StackError:
             return None
         if not isinstance(target, FiveMTarget) or target.reshade_ack() != "present":
@@ -519,7 +569,7 @@ class StackManager:
             if not active:
                 return Result(True, ["Preset saved. It is applied when you install."])
             game = self.s.library.get(game_id)
-            target = target_for(game)
+            target = self._target(game)
             target.ensure_stopped()
             recipe = self.catalog.recipe(active["params"]["recipe"])
             versions = active["params"].get("versions", {})
@@ -567,7 +617,7 @@ class StackManager:
             if not game or not active:
                 return Result(False, ["Nothing is installed in this game."])
             try:
-                target = target_for(game)
+                target = self._target(game)
                 target.ensure_stopped()
             except GameRunning:
                 raise
@@ -583,6 +633,9 @@ class StackManager:
             res = self.s.restore(active["id"], force=True)
             messages = list(res.messages)
             if res.ok:
+                for layer in {t.get("params", {}).get("vk_layer") for t in [active, *self.s.installer._chain(active)]}:
+                    if layer:
+                        transports.unregister_user_layer(layer)
                 if active.get("params", {}).get("fivem_ack_added") or any(
                         t.get("params", {}).get("fivem_ack_added") for t in self.s.installer._chain(active)):
                     note = self._remove_fivem_ack(game)
@@ -608,12 +661,86 @@ class StackManager:
         res = self.s.restore(legacy["id"], force=True)
         return Result(res.ok, list(res.messages), legacy["id"], res.conflicts)
 
+    # -- the 32-bit route's 64-bit helper -----------------------------------------------------------------------
+    HELPER_EXE = "dlss5-feed-host64.exe"
+    HELPER_TEST = re.compile(r"--test finished: (\d+)/(\d+) evaluates succeeded")
+
+    def helper_processes(self, game: Game) -> list:
+        if not game.target_dir:
+            return []
+        try:
+            return [p for p in processes.processes_in_dir(os.path.join(game.target_dir, "host64"))
+                    if p.name.lower() == self.HELPER_EXE]
+        except Exception:                     # process listing is best effort
+            return []
+
+    def helper_orphaned(self, game: Game) -> bool:
+        """The helper outlived its game (a crash): it keeps host64 files open and has nothing to serve."""
+        helpers = self.helper_processes(game)
+        if not helpers:
+            return False
+        try:
+            others = [p for p in processes.processes_in_dir(game.install_dir) if p.pid not in {h.pid for h in helpers}]
+        except Exception:
+            return False
+        return not others
+
+    def stop_helper(self, game_id: str) -> Result:
+        game = self.s.library.get(game_id)
+        if game is None:
+            raise StackError("This game is no longer in the library.", code="no_game")
+        helpers = self.helper_processes(game)
+        if not helpers:
+            return Result(True, ["The helper is not running."])
+        if not self.helper_orphaned(game):
+            return Result(False, ["Close the game first; the helper closes with it."])
+        for p in helpers:
+            try:
+                os.kill(p.pid, signal.SIGTERM)    # TerminateProcess on Windows
+            except OSError as exc:
+                return Result(False, [msg("Could not stop the helper: {error}", error=str(exc))])
+        return Result(True, ["The 64-bit helper was stopped."])
+
+    def test_helper(self, game_id: str, timeout: int = 240) -> Result:
+        """Run the helper's own self-test (``dlss5-feed-host64.exe --test``: 300 NGX evaluations without the game)
+        and report its result line from host64\\dlss5-feed-host.log."""
+        game = self.s.library.get(game_id)
+        active = self.active(game_id) if game else None
+        recipe = self.catalog.recipes.get((active or {}).get("params", {}).get("recipe")) if active else None
+        if not game or not recipe or not recipe.helper:
+            raise StackError("The 32-bit route is not installed in this game.", code="no_helper")
+        folder = Path(game.target_dir) / "host64"
+        exe = folder / self.HELPER_EXE
+        if not exe.is_file():
+            raise StackError("host64\\dlss5-feed-host64.exe is missing.", "Install the mod again.", "no_helper")
+        if not is_windows():
+            raise StackError("The helper test runs on Windows.", code="not_windows")
+        self._target(game).ensure_stopped()
+        log_file = folder / "dlss5-feed-host.log"
+        try:
+            subprocess.run([str(exe), "--test"], cwd=str(folder), timeout=timeout, capture_output=True,
+                           creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        except subprocess.TimeoutExpired:
+            return Result(False, ["The helper test did not finish in time."])
+        except OSError as exc:
+            return Result(False, [msg("The helper could not start: {error}", error=str(exc))])
+        text = log_file.read_text(encoding="utf-8", errors="replace") if log_file.is_file() else ""
+        hits = self.HELPER_TEST.findall(text)
+        if not hits:
+            return Result(False, ["The helper test wrote no result. See host64\\dlss5-feed-host.log."])
+        good, total = (int(x) for x in hits[-1])
+        if good == total:
+            return Result(True, [msg("Helper test passed: {good}/{total} DLSS evaluations succeeded.",
+                                     good=good, total=total)])
+        return Result(False, [msg("Helper test: only {good}/{total} DLSS evaluations succeeded. Check the driver and "
+                                  "the DLSS 5 model build for this GPU.", good=good, total=total)])
+
     # -- launch ---------------------------------------------------------------------------------------------------
     def launch(self, game_id: str, connect: str | None = None) -> str:
         game = self.s.library.get(game_id)
         if game is None:
             raise StackError("This game is no longer in the library.", code="no_game")
-        target = target_for(game)
+        target = self._target(game)
         if connect is not None:
             self.save_selection(game_id, server=connect or None)
         target.launch(connect or None)

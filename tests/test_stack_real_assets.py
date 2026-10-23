@@ -94,3 +94,29 @@ def test_real_fivem_stack(real, tmp_path, monkeypatch):
     assert svc.stack.uninstall(game.id).ok
     assert not any(plugins.iterdir()) if plugins.exists() else True
     shutil.rmtree(tmp_path / "real-components", ignore_errors=True)
+
+
+def test_real_32bit_directx9_game_through_dgvoodoo2_and_the_helper(real, tmp_path, monkeypatch):
+    """Original Feeder 1.19.0 (addon32 + host64 helper), dgVoodoo2 2.87.5, RenoDX DLSS 5 and both runtimes."""
+    from akeno.games import pe
+    from akeno.backends import ini
+    from helpers import make_pe
+    from stack_fixtures import snapshot
+    svc = real
+    root = tmp_path / "games" / "Fable Like"
+    make_pe(root / "Fable.exe", ["d3d9.dll", "kernel32.dll"], machine="x86", pad=60000)
+    game = svc.library.add_manual(str(root), "Fable Like")
+    before = snapshot(root)
+    res = svc.stack.install(svc.stack.prepare(game.id, "feeder_x86", preset="performance"))
+    assert res.ok, res.messages
+    assert (root / "dlss5-feed.addon32").stat().st_size == 195584 and pe.parse(str(root / "dlss5-feed.addon32")).machine == "x86"
+    assert (root / "D3D9.dll").stat().st_size == 482304 and pe.parse(str(root / "D3D9.dll")).machine == "x86"
+    conf = ini.get_values((root / "dgVoodoo.conf").read_bytes().decode())
+    assert conf["General"]["OutputAPI"] == "d3d11_fl11_0" and conf["DirectX"]["dgVoodooWatermark"] == "false"
+    host = root / "host64"
+    assert (host / "dlss5-feed-host64.exe").stat().st_size == 177664 and pe.parse(str(host / "dlss5-feed-host64.exe")).machine == "x64"
+    assert (host / "renodx-dlss5.addon64").stat().st_size == 1921024
+    assert (host / "nvngx_dlssnr.dll").stat().st_size == 165830144
+    assert "NRResolutionScale=0.5" in (host / "ReShade.ini").read_text()
+    assert svc.stack.uninstall(game.id).ok
+    assert snapshot(root) == before

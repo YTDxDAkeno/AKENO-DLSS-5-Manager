@@ -33,10 +33,27 @@ NON_GAME_EXE = re.compile(
 GRAPHICS_IMPORTS = {
     "d3d12.dll": GraphicsApi.D3D12,
     "d3d11.dll": GraphicsApi.D3D11,
+    "d3d10.dll": GraphicsApi.D3D10,
+    "d3d10_1.dll": GraphicsApi.D3D10,
     "vulkan-1.dll": GraphicsApi.VULKAN,
     "d3d9.dll": GraphicsApi.D3D9,
+    "d3d8.dll": GraphicsApi.D3D8,
     "opengl32.dll": GraphicsApi.OPENGL,
 }
+# DXVK replaces these with Vulkan implementations; a game shipping them renders through Vulkan.
+DXVK_NAMES = ("d3d9.dll", "d3d8.dll", "d3d10core.dll", "d3d11.dll", "dxgi.dll")
+
+
+def dxvk_in(folder: str) -> str | None:
+    """Name of a DXVK DLL beside the executable (DXVK identifies itself in its version resource)."""
+    for name in DXVK_NAMES:
+        path = os.path.join(folder, name)
+        if not os.path.isfile(path):
+            continue
+        info = pe.parse(path)
+        if info.valid and "dxvk" in " ".join(info.strings.values()).lower():   # the Feeder installer's own test
+            return name
+    return None
 
 # DLL names the Windows loader resolves from the game folder first, so mods drop proxies under them.
 PROXY_NAMES = {"dxgi.dll", "d3d11.dll", "d3d12.dll", "d3d9.dll", "winmm.dll", "version.dll", "dinput8.dll",
@@ -230,6 +247,11 @@ def detect_api(exe: str) -> tuple[GraphicsApi, list[str], str]:
     for h in hints:
         if h not in apis:
             apis.append(h)
+    dxvk = dxvk_in(d)
+    if dxvk:
+        # the game's own Direct3D calls end up in Vulkan; ReShade has to hook Vulkan there
+        return GraphicsApi.VULKAN, sorted(set(apis) | {"vulkan"}), msg("DXVK ({name}) translates the game to Vulkan",
+                                                                        name=dxvk)
     if len(apis) == 1:
         return GraphicsApi(apis[0]), apis, msg("executable imports")
     if not apis:

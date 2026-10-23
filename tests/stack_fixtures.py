@@ -57,6 +57,17 @@ Intensity=auto
 """
 
 
+# dgVoodoo2's shipped dgVoodoo.conf: CRLF, column-aligned values, the same key in several sections.
+DGV_CONF = "\r\n".join([
+    ";==========================================================================",
+    "Version                              = 0x287", "", "[General]", "",
+    "OutputAPI                            = bestavailable", "Adapters                             = all", "",
+    "[Glide]", "", "VideoCard                           = voodoo_2", "",
+    "[DirectX]", "", "DisableAndPassThru                  = false", "",
+    "VideoCard                           = internal3D", "VRAM                                = 256",
+    "dgVoodooWatermark                   = true", ""])
+
+
 def _sha(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
@@ -209,15 +220,36 @@ def build(tmp: Path) -> dict:
                     "dlss5-feed.addon32": make_pe(tmp / "pe" / "f32", [], machine="x86", dll=True).read_bytes(),
                     "dlss5-feed.addon64": _pe_bytes(tmp, "feed.addon64"), "READ-ME-FIRST.txt": b"read",
                     "Verify-DLSS5Feeder.ps1": b"Write-Host"}
-    feed = release("jlrouzies-fr/DLSS5-Feeder", "v1.19.0", "DLSS5-Feeder-1.19.0.zip", feed_members)
-    feed = pick(feed, ["dlss5-feed.addon64", "reshade-shaders/Shaders/DLSS5_Feed.fx"])
+    feed_all = release("jlrouzies-fr/DLSS5-Feeder", "v1.19.0", "DLSS5-Feeder-1.19.0.zip", feed_members)
+    feed = pick(feed_all, ["dlss5-feed.addon64", "reshade-shaders/Shaders/DLSS5_Feed.fx"])
     comps.append({"id": "dlss5-feeder", "role": "feeder", "name": "DLSS5-Feeder", "repository": "jlrouzies-fr/DLSS5-Feeder",
                   "license": "MIT", "homepage": "", "features": [],
                   "versions": [dict(feed, version="1.19.0", channel="stable", recommended=True)]})
+    # the same release archive serves the 32-bit route: addon32 beside the game, the 64-bit helper in host64
+    feed32 = pick(feed_all, ["dlss5-feed.addon32", "host64/dlss5-feed-host64.exe", "reshade-shaders/Shaders/DLSS5_Feed.fx"])
+    comps.append({"id": "dlss5-feeder-x86", "role": "feeder32", "name": "DLSS5-Feeder (32-bit)",
+                  "repository": "jlrouzies-fr/DLSS5-Feeder", "license": "MIT", "homepage": "", "features": [],
+                  "versions": [dict(feed32, version="1.19.0", channel="stable", recommended=True)]})
     comps.append({"id": "reshade", "role": "reshade", "name": "ReShade", "repository": "crosire/reshade",
                   "license": "BSD-3-Clause", "homepage": "", "features": [],
                   "versions": [{"version": "6.8.0", "label": "6.8.0 (AKENO build)", "source": "bundled",
                                 "bundle_role": "reshade", "channel": "stable", "recommended": True}]})
+    comps.append({"id": "reshade-x86", "role": "reshade32", "name": "ReShade 32-bit", "repository": "crosire/reshade",
+                  "license": "BSD-3-Clause", "homepage": "", "features": [],
+                  "versions": [{"version": "6.8.0", "label": "6.8.0 (AKENO build)", "source": "bundled",
+                                "bundle_role": "reshade32", "channel": "stable", "recommended": True}]})
+    dgv_strings = {"ProductName": "dgVoodoo", "FileDescription": "dgVoodoo DirectX Wrapper"}
+    dgv_members = {"MS/x86/D3D9.dll": make_pe(tmp / "pe" / "dgv9", [], machine="x86", dll=True,
+                                              strings=dgv_strings).read_bytes(),
+                   "MS/x86/D3D8.dll": make_pe(tmp / "pe" / "dgv8", [], machine="x86", dll=True,
+                                              strings=dgv_strings, pad=8).read_bytes(),
+                   "MS/x64/D3D9.dll": _pe_bytes(tmp, "dgv64.dll", strings=dgv_strings),
+                   "dgVoodoo.conf": DGV_CONF.encode(), "dgVoodooCpl.exe": _pe_bytes(tmp, "cpl.exe")}
+    dgv = release("dege-diosg/dgVoodoo2", "v2.87.5", "dgVoodoo2_87_5.zip", dgv_members)
+    dgv = pick(dgv, ["MS/x86/D3D9.dll", "MS/x86/D3D8.dll", "MS/x64/D3D9.dll", "dgVoodoo.conf"])
+    comps.append({"id": "dgvoodoo2", "role": "translator", "name": "dgVoodoo2", "repository": "dege-diosg/dgVoodoo2",
+                  "license": "Freeware", "homepage": "", "features": [],
+                  "versions": [dict(dgv, version="2.87.5", channel="stable", recommended=True)]})
     comps.append({"id": "dh-uber-motion", "role": "motion", "name": "dh_uber_motion", "repository": None,
                   "license": "GPL-2.0", "homepage": "", "features": [],
                   "versions": [{"version": "0.2.0", "source": "bundled", "bundle_role": "motion_provider",
@@ -253,12 +285,15 @@ def build(tmp: Path) -> dict:
     bundle = tmp / "bundle"
     reshade = make_pe(bundle / "ReShade64.dll", ["kernel32.dll"], dll=True, version=(6, 8, 0, 0),
                       strings={"ProductName": "ReShade"}, exports=["ReShadeRegisterAddon", "ReShadeUnregisterAddon"])
+    reshade32 = make_pe(bundle / "ReShade32.dll", ["kernel32.dll"], machine="x86", dll=True, version=(6, 8, 0, 0),
+                        strings={"ProductName": "ReShade"}, exports=["ReShadeRegisterAddon", "ReShadeUnregisterAddon"])
     (bundle / "dh-motion").mkdir(parents=True)
     (bundle / "dh-motion" / "dh_uber_motion.fx").write_text("technique DH_UBER_MOTION_020 {}")
     (bundle / "reshade-framework").mkdir()
     (bundle / "reshade-framework" / "ReShade.fxh").write_text("// framework")
     manifest = {"schema": 1, "components": [
         {"role": "reshade", "version": "6.8.0", "path": "ReShade64.dll", "sha256": _sha(reshade.read_bytes())},
+        {"role": "reshade32", "version": "6.8.0", "path": "ReShade32.dll", "sha256": _sha(reshade32.read_bytes())},
         {"role": "motion_provider", "version": "0.2.0", "path": "dh-motion/dh_uber_motion.fx",
          "destination": "reshade-shaders/Shaders/dh_uber_motion.fx",
          "sha256": _sha((bundle / "dh-motion" / "dh_uber_motion.fx").read_bytes()),

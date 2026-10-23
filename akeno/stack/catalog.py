@@ -19,7 +19,10 @@ from akeno.paths import resource_dir
 
 ROLES = {
     "reshade": "ReShade",
+    "reshade32": "ReShade 32-bit (game)",
     "feeder": "DLSS5-Feeder",
+    "feeder32": "DLSS5-Feeder 32-bit add-on and 64-bit helper",
+    "translator": "Direct3D 8/9 translation (dgVoodoo2)",
     "motion": "Motion vectors",
     "consumer_optiscaler": "Neural Rendering consumer",
     "consumer_renodx": "Neural Rendering consumer",
@@ -111,6 +114,9 @@ class Recipe:
     presets: str
     summary: str
     details: tuple[str, ...] = ()
+    helper: bool = False                 # NGX and the consumer run in the 64-bit host64\ helper (32-bit games)
+    api_roles: dict[str, tuple[str, ...]] = field(default_factory=dict)   # role -> the APIs it is needed for
+    role_titles: dict[str, str] = field(default_factory=dict)
 
     @property
     def consumer_role(self) -> str:
@@ -118,11 +124,18 @@ class Recipe:
 
     @property
     def uses_reshade(self) -> bool:
-        return "reshade" in self.roles
+        return "reshade" in self.roles or "reshade32" in self.roles
 
     @property
     def uses_feeder(self) -> bool:
-        return "feeder" in self.roles
+        return "feeder" in self.roles or "feeder32" in self.roles
+
+    def roles_for(self, api: str) -> dict[str, tuple[str, ...]]:
+        """The roles an installation for this graphics API needs (dgVoodoo2 only for Direct3D 8/9)."""
+        return {r: ids for r, ids in self.roles.items() if r not in self.api_roles or api in self.api_roles[r]}
+
+    def title(self, role: str) -> str:
+        return self.role_titles.get(role) or ROLES[role]
 
 
 @dataclass(frozen=True)
@@ -219,7 +232,9 @@ class StackCatalog:
                                         frozenset(c.get("features", [])), versions, dict(c.get("release") or {})))
         recipes = [Recipe(r["id"], r["name"], r["target"], tuple(r["apis"]), tuple(r["architectures"]),
                           r.get("needs_upscaler"), {k: tuple(v) for k, v in r["roles"].items()}, r["presets"],
-                          r.get("summary", ""), tuple(r.get("details", []))) for r in rec["recipes"]]
+                          r.get("summary", ""), tuple(r.get("details", [])), bool(r.get("helper")),
+                          {k: tuple(v) for k, v in (r.get("api_roles") or {}).items()},
+                          dict(r.get("role_titles") or {})) for r in rec["recipes"]]
         games = []
         known = set(GameProfile.__dataclass_fields__)
         for g in gam["games"]:
@@ -274,6 +289,15 @@ class StackCatalog:
                         raise ValueError(f"{r.id}: {cid} cannot fill {role}.")
             if r.uses_feeder and not {"reshade", "motion", "sr_runtime"} <= set(r.roles):
                 raise ValueError(f"{r.id}: the Feeder needs ReShade, a motion provider and the SR runtime.")
+            if r.helper and not ({"reshade32", "feeder32"} <= set(r.roles) and r.consumer_role == "consumer_renodx"
+                                 and r.architectures == ("x86",)):
+                raise ValueError(f"{r.id}: the 32-bit helper route needs 32-bit ReShade, the 32-bit Feeder and the "
+                                 "RenoDX consumer, for 32-bit games only.")
+            if ("feeder32" in r.roles or "reshade32" in r.roles) and not r.helper:
+                raise ValueError(f"{r.id}: 32-bit components belong to the helper route.")
+            for role, apis in r.api_roles.items():
+                if role not in r.roles or not set(apis) <= set(r.apis):
+                    raise ValueError(f"{r.id}: api_roles names an unknown role or API.")
         for g in self.games:
             for rid in g.recipes:
                 if rid not in self.recipes:

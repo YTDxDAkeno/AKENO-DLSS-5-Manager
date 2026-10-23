@@ -37,8 +37,19 @@ NR_DLL = "nvngx_dlssnr.dll"
 SR_DLL = "nvngx_dlss.dll"
 RENODX_DLL = "renodx-dlss5.addon64"
 
+BINARY_SUFFIXES = (".dll", ".addon64", ".addon32", ".exe", ".asi")
+
+
+def expected_machine(rel: str) -> str:
+    """The bitness a release member must have: the Feeder's ``.addon32`` and dgVoodoo2's ``MS/x86`` files are
+    32-bit, everything else (including the 64-bit helper host64\\dlss5-feed-host64.exe) is 64-bit."""
+    low = rel.replace("\\", "/").lower()
+    return "x86" if low.endswith(".addon32") or "/x86/" in "/" + low else "x64"
+
+
 # File name a role's single file is staged under.
-ROLE_FILE = {"nr_runtime": NR_DLL, "sr_runtime": SR_DLL, "consumer_renodx": RENODX_DLL, "reshade": "ReShade64.dll"}
+ROLE_FILE = {"nr_runtime": NR_DLL, "sr_runtime": SR_DLL, "consumer_renodx": RENODX_DLL, "reshade": "ReShade64.dll",
+             "reshade32": "ReShade32.dll"}
 
 
 @dataclass
@@ -70,13 +81,13 @@ def _vendor_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "community" / "vendor"
 
 
-def reshade_identity(path: str | Path) -> tuple[bool, str | None, str]:
-    """(is full add-on ReShade, version, reason)."""
+def reshade_identity(path: str | Path, machine: str = "x64") -> tuple[bool, str | None, str]:
+    """(is full add-on ReShade of this bitness, version, reason)."""
     info = pe.parse(str(path))
     if not info.valid:
         return False, None, "not a valid Windows DLL"
-    if info.machine != "x64":
-        return False, info.file_version, "not a 64-bit ReShade"
+    if info.machine != machine:
+        return False, info.file_version, "not a 32-bit ReShade" if machine == "x86" else "not a 64-bit ReShade"
     if (info.strings.get("ProductName") or "").strip() != "ReShade":
         return False, info.file_version, "the file does not identify itself as ReShade"
     if not {"ReShadeRegisterAddon", "ReShadeUnregisterAddon"} <= set(info.exports):
@@ -134,18 +145,19 @@ class ComponentStore:
 
     def _stage_bundled(self, v: ComponentVersion) -> Staged:
         entries = self.bundle()
-        if v.bundle_role == "reshade":
-            if "reshade" not in entries:
+        if v.bundle_role in ("reshade", "reshade32"):
+            dll, machine = ("ReShade32.dll", "x86") if v.bundle_role == "reshade32" else ("ReShade64.dll", "x64")
+            if v.bundle_role not in entries:
                 raise MissingDependency("ReShade (AKENO build)",
-                                        "This copy of AKENO was built without the ReShade bundle. Choose "
-                                        "'official reshade.me add-on setup' or import ReShade64.dll.")
-            folder, entry = entries["reshade"]
+                                        msg("This copy of AKENO was built without the ReShade bundle. Choose "
+                                            "'official reshade.me add-on setup' or import {dll}.", dll=dll))
+            folder, entry = entries[v.bundle_role]
             src = folder / entry["path"]
             self._check_hash(src, entry["sha256"])
-            ok, version, why = reshade_identity(src)
+            ok, version, why = reshade_identity(src, machine)
             if not ok:
                 raise StackError(msg("The bundled ReShade is not usable: {reason}", reason=why), code="reshade_identity")
-            return Staged(v, folder, {"ReShade64.dll": src}, {"ReShade64.dll": entry["sha256"]})
+            return Staged(v, folder, {dll: src}, {dll: entry["sha256"]})
         if v.bundle_role == "motion_provider":
             if "motion_provider" in entries:
                 folder, entry = entries["motion_provider"]
@@ -286,14 +298,15 @@ class ComponentStore:
         component = self.catalog.components.get(v.component)
         role = component.role if component else None
         for rel, path in files.items():
-            if rel.lower().endswith((".dll", ".addon64", ".exe")):
+            if rel.lower().endswith(BINARY_SUFFIXES):
                 version, strings, machine = dll_version(path)
                 if machine is None:
                     raise StackError(msg("{file} in {version} is not a valid Windows binary.", file=rel,
                                          version=v.display), code="bad_binary")
-                if machine != "x64":
-                    raise StackError(msg("Selected release does not contain the expected x64 DLL ({file} is {arch}).",
-                                         file=rel, arch=machine), code="wrong_architecture")
+                want = expected_machine(rel)
+                if machine != want:
+                    raise StackError(msg("Selected release does not contain the expected {want} file ({file} is {arch}).",
+                                         want=want, file=rel, arch=machine), code="wrong_architecture")
         if role == "nr_runtime" and NR_DLL in files:
             desc = " ".join(dll_version(files[NR_DLL])[1].values()).lower()
             if desc and "dlss" not in desc:
@@ -301,32 +314,34 @@ class ComponentStore:
 
     def _stage_reshade_setup(self, v, progress, token) -> Staged:
         res = self.downloads.fetch_unpinned(v.url, os.path.basename(v.url), RESHADE_SETUP_MAX, progress, token)
+        x86 = self.catalog.component(v.component).role == "reshade32"
+        name, machine = ("ReShade32.dll", "x86") if x86 else ("ReShade64.dll", "x64")
         folder = self.root / "reshade" / f"setup-{res.sha256[:16]}"
-        dll = folder / "ReShade64.dll"
+        dll = folder / name
         if not dll.is_file():
             folder.mkdir(parents=True, exist_ok=True)
             try:
                 with zipfile.ZipFile(res.path) as z:      # the setup carries a ZIP appended to the executable
-                    if "ReShade64.dll" not in z.namelist():
-                        raise StackError("The ReShade setup does not contain ReShade64.dll.", code="reshade_setup")
-                    info = z.getinfo("ReShade64.dll")
+                    if name not in z.namelist():
+                        raise StackError(msg("The ReShade setup does not contain {name}.", name=name), code="reshade_setup")
+                    info = z.getinfo(name)
                     if info.file_size > 64 * 1024 * 1024:
-                        raise StackError("ReShade64.dll in the setup is unexpectedly large.", code="reshade_setup")
+                        raise StackError(msg("{name} in the setup is unexpectedly large.", name=name), code="reshade_setup")
                     with z.open(info) as src, open(dll.with_suffix(".tmp"), "wb") as out:
                         shutil.copyfileobj(src, out)
                     os.replace(dll.with_suffix(".tmp"), dll)
             except zipfile.BadZipFile as exc:
                 shutil.rmtree(folder, ignore_errors=True)
                 raise StackError("The official ReShade setup format changed; AKENO cannot read it.",
-                                 "Install ReShade with its own setup once and import ReShade64.dll.",
+                                 msg("Install ReShade with its own setup once and import {name}.", name=name),
                                  "reshade_setup") from exc
-        ok, version, why = reshade_identity(dll)
+        ok, version, why = reshade_identity(dll, machine)
         if not ok or not str(version or "").startswith(v.version):
-            shutil.rmtree(folder, ignore_errors=True)
+            dll.unlink(missing_ok=True)
             raise StackError(msg("The downloaded ReShade is not usable: {reason}",
                                  reason=why if not ok else "version " + str(version)), code="reshade_identity")
         sha = sha256_file(dll)
-        return Staged(v, folder, {"ReShade64.dll": dll}, {"ReShade64.dll": sha})
+        return Staged(v, folder, {name: dll}, {name: sha})
 
     # -- local copies -------------------------------------------------------------------------------
     def local_versions(self) -> list[ComponentVersion]:
@@ -359,17 +374,20 @@ class ComponentStore:
         if component is None or role not in ROLE_FILE:
             raise StackError("This component cannot be imported from a file.", code="no_import")
         name = ROLE_FILE[role]
+        want = "x86" if role == "reshade32" else "x64"
         version, strings, machine = dll_version(src)
         if machine is None:
             raise StackError("The selected file is not a Windows DLL.", code="bad_binary")
-        if machine != "x64":
-            raise StackError(msg("The selected file is a {arch} DLL; AKENO needs the 64-bit version.", arch=machine),
+        if machine != want:
+            raise StackError(msg("The selected file is a {arch} DLL; AKENO needs the 64-bit version.", arch=machine)
+                             if want == "x64" else
+                             msg("The selected file is a {arch} DLL; AKENO needs the 32-bit version.", arch=machine),
                              code="wrong_architecture")
         sha = sha256_file(src)
         known = self.catalog.version_by_hash(component.id, name, sha)
         text = " ".join(strings.values()).lower()
-        if role == "reshade":
-            ok, version, why = reshade_identity(src)
+        if role in ("reshade", "reshade32"):
+            ok, version, why = reshade_identity(src, want)
             if not ok:
                 raise StackError(msg("This is not usable ReShade: {reason}.", reason=why),
                                  "Use the 'with full add-on support' ReShade build.", "reshade_identity")

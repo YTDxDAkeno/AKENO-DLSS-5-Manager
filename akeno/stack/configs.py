@@ -214,9 +214,14 @@ PRESET_FILE = "AKENO-DLSS5.ini"
 
 
 def reshade_ini(current: str, *, effects: bool, definitions: dict[str, str] | None = None,
-                consumer: dict[str, dict[str, Any]] | None = None) -> str:
-    """Merge what the stack needs into ReShade.ini, keeping every unrelated setting the user has."""
+                consumer: dict[str, dict[str, Any]] | None = None, depth_before_clears: bool = False) -> str:
+    """Merge what the stack needs into ReShade.ini, keeping every unrelated setting the user has.
+
+    ``depth_before_clears``: the Direct3D 9 games dgVoodoo2 serves clear depth mid-frame (the Feeder installer
+    sets ``[DEPTH] DepthCopyBeforeClears=1`` for them)."""
     values: dict[str, dict[str, Any]] = {"ADDON": {"AddonPath": ".\\"}}
+    if depth_before_clears:
+        values["DEPTH"] = {"DepthCopyBeforeClears": "1"}
     existing = ini.get_values(current)
     general = existing.get("GENERAL", {})
     if effects:
@@ -234,6 +239,54 @@ def reshade_ini(current: str, *, effects: bool, definitions: dict[str, str] | No
     for sec, keys in (consumer or {}).items():
         values.setdefault(sec, {}).update(keys)
     return ini.set_values(current, values)
+
+
+def host_reshade_ini(current: str, consumer: dict[str, dict[str, Any]] | None) -> str:
+    """``host64\\ReShade.ini`` of the 32-bit route: minimal and without AddonPath (the helper's ReShade loads the
+    add-ons of its own folder), plus the neural consumer's preset. The helper itself adds its window size and
+    unbinds the consumer's hotkeys there."""
+    values: dict[str, dict[str, Any]] = {}
+    general = ini.get_values(current).get("GENERAL", {})
+    if "EffectSearchPaths" not in general:
+        values["GENERAL"] = {"EffectSearchPaths": ".\\", "TextureSearchPaths": ".\\"}
+    for sec, keys in (consumer or {}).items():
+        values.setdefault(sec, {}).update(keys)
+    return ini.set_values(current, values)
+
+
+DGVOODOO_SETTINGS = (("General", "OutputAPI", "d3d11_fl11_0"),
+                     ("DirectX", "DisableAndPassThru", "false"),
+                     ("DirectX", "VideoCard", "internal3D"),
+                     ("DirectX", "VRAM", "1GB"),
+                     ("DirectX", "dgVoodooWatermark", "false"))
+
+
+def dgvoodoo_conf(template: str, current: str | None = None) -> str:
+    """dgVoodoo2's config with the values the Feeder needs (its README table). A config the user already has is
+    kept and only these keys are changed; values stay column-aligned like dgVoodoo writes them."""
+    text = current if current and "[DirectX]" in current else template
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(newline)
+    for section, key, value in DGVOODOO_SETTINGS:
+        cur, done = "", False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                cur = stripped[1:-1]
+                continue
+            if not done and cur.casefold() == section.casefold() and not stripped.startswith(";"):
+                name, sep, _ = line.partition("=")
+                if sep and name.strip().casefold() == key.casefold():
+                    lines[i] = name + "= " + value
+                    done = True
+        if not done:
+            at = next((i + 1 for i, line in enumerate(lines) if line.strip().casefold() == f"[{section}]".casefold()),
+                      None)
+            if at is None:
+                lines += ["", f"[{section}]"]
+                at = len(lines)
+            lines.insert(at, f"{key:<36}= {value}")
+    return newline.join(lines)
 
 
 def reshade_preset(technique: str, shader: str, provider_id: int) -> str:

@@ -247,7 +247,11 @@ class GamePanel(QWidget):
         self.btn_launch = button(t("Launch game"), "play", on_click=self.launch)
         self.btn_previous = button(t("Previous version"), "restore", on_click=self.previous)
         self.btn_remove = button(t("Remove mod"), "trash", "danger", on_click=self.remove)
-        for b in (self.btn_install, self.btn_launch, self.btn_previous, self.btn_remove):
+        self.btn_test = button(t("Test the 64-bit helper"), "check",
+                               tip=t("Runs the helper's own DLSS self-test (300 evaluations, about a minute) "
+                                     "without starting the game."), on_click=self.test_helper)
+        self.btn_test.hide()
+        for b in (self.btn_install, self.btn_launch, self.btn_previous, self.btn_remove, self.btn_test):
             actions.addWidget(b)
         self.main.body.addLayout(actions)
         prog = QHBoxLayout()
@@ -371,7 +375,7 @@ class GamePanel(QWidget):
                 if rc.note:
                     pill.setToolTip(t(rc.note))
                 self.versions.addWidget(pill, i, 2)
-                if rc.role in ("nr_runtime", "sr_runtime", "consumer_renodx", "reshade"):
+                if rc.role in ("nr_runtime", "sr_runtime", "consumer_renodx", "reshade", "reshade32"):
                     imp = button("", "folder", tip=t("Use a file from this PC"),
                                  on_click=lambda _=False, role=rc.role: self._import(role))
                     self.versions.addWidget(imp, i, 3)
@@ -399,6 +403,9 @@ class GamePanel(QWidget):
         self.btn_remove.setEnabled(bool(st.installed or st.legacy) and not self.busy)
         self.btn_previous.setEnabled(bool(st.installed) and bool(self.stack.previous_versions(g.id)) and not self.busy)
         self.btn_launch.setEnabled(not self.busy and (g.launcher == "fivem" or bool(g.exe_path)))
+        installed_recipe = self.stack.catalog.recipes.get((st.installed or {}).get("params", {}).get("recipe"))
+        self.btn_test.setVisible(bool(installed_recipe and installed_recipe.helper))
+        self.btn_test.setEnabled(not self.busy)
         self._render_details(st)
 
     def _preset_description(self, st, family) -> str:
@@ -426,10 +433,13 @@ class GamePanel(QWidget):
             return button(t("Import file"), "folder", on_click=lambda: self._import(a.split(":", 1)[1]))
         if a in ("refresh", "rescan"):
             return button(t("Check again"), "refresh", on_click=self._reanalyze)
+        if a == "stop_helper":
+            return button(t("Stop the helper"), "stop", on_click=self._stop_helper)
         if a == "choose_api":
             combo = QComboBox()
             combo.addItem(t("Choose the renderer…"), "")
-            for api in (GraphicsApi.D3D12, GraphicsApi.D3D11, GraphicsApi.VULKAN):
+            for api in (GraphicsApi.D3D12, GraphicsApi.D3D11, GraphicsApi.D3D10, GraphicsApi.D3D9, GraphicsApi.D3D8,
+                        GraphicsApi.VULKAN, GraphicsApi.OPENGL):
                 combo.addItem(t(api.label), api.value)
             combo.activated.connect(lambda _=0, c=combo: c.currentData() and self._override("api", c.currentData()))
             return combo
@@ -477,7 +487,8 @@ class GamePanel(QWidget):
                 auto = self.stack.game_api(g, st.profile)
             auto_label = t(GraphicsApi(auto).label) if auto in {a.value for a in GraphicsApi} else t("Unknown")
             api.addItem(t("Automatic ({api})", api=auto_label), "")
-            for a in (GraphicsApi.D3D12, GraphicsApi.D3D11, GraphicsApi.VULKAN):
+            for a in (GraphicsApi.D3D12, GraphicsApi.D3D11, GraphicsApi.D3D10, GraphicsApi.D3D9, GraphicsApi.D3D8,
+                      GraphicsApi.VULKAN, GraphicsApi.OPENGL):
                 api.addItem(t(a.label), a.value)
             if ov:
                 api.setCurrentIndex(max(0, api.findData(ov)))
@@ -567,7 +578,8 @@ class GamePanel(QWidget):
 
     def _import(self, role: str) -> None:
         filters = {"nr_runtime": "nvngx_dlssnr.dll (*.dll)", "sr_runtime": "nvngx_dlss.dll (*.dll)",
-                   "consumer_renodx": "RenoDX DLSS 5 (*.addon64)", "reshade": "ReShade64.dll (*.dll)"}
+                   "consumer_renodx": "RenoDX DLSS 5 (*.addon64)", "reshade": "ReShade64.dll (*.dll)",
+                   "reshade32": "ReShade32.dll (*.dll)"}
         path, _ = QFileDialog.getOpenFileName(self, t("Use a file from this PC"), "", filters.get(role, "*"))
         if not path:
             return
@@ -589,7 +601,7 @@ class GamePanel(QWidget):
         self.progress.setRange(0, 0)
         self.progress.show()
         self.btn_cancel.show()
-        for b in (self.btn_install, self.btn_launch, self.btn_previous, self.btn_remove):
+        for b in (self.btn_install, self.btn_launch, self.btn_previous, self.btn_remove, self.btn_test):
             b.setEnabled(False)
 
         def finish(value):
@@ -686,6 +698,17 @@ class GamePanel(QWidget):
             self._run("remove", lambda token: self.stack.remove_legacy(gid), done)
         else:
             self._run("remove", lambda token: self.stack.uninstall(gid), done)
+
+    def test_helper(self) -> None:
+        gid = self.game_id
+        self.status.setText(t("Testing the 64-bit helper (about a minute)…"))
+        self._run("test_helper", lambda token: self.stack.test_helper(gid),
+                  lambda res: (self.status.setText("\n".join(t(m) for m in res.messages)), self.refresh()))
+
+    def _stop_helper(self) -> None:
+        gid = self.game_id
+        self._run("stop_helper", lambda token: self.stack.stop_helper(gid),
+                  lambda res: (self.status.setText("\n".join(t(m) for m in res.messages)), self.refresh()))
 
     def launch(self, connect: str | None = None) -> None:
         gid = self.game_id

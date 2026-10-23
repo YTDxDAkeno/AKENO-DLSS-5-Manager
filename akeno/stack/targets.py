@@ -19,6 +19,7 @@ from akeno.core.models import Game, GraphicsApi
 from akeno.paths import is_windows
 
 from .errors import GameRunning, StackError
+from .transports import Transport, choose
 
 # Cfx ReShadeFixups.cpp (commit 4c4fe28): ReShade >= 5 loads only with this machine-bound acknowledgement.
 RESHADE5_TEXT = "ID:{:08x} acknowledged that ReShade 5.x has a bug that will lead to game crashes"
@@ -29,8 +30,16 @@ FIVEM_PROCESS = re.compile(r"^FiveM(?:_b\d+)?(?:_GTAProcess|_ChromeBrowser|_Stea
 class GameTarget:
     game: Game
     kind: str = "game"
-    reshade_name: str = "dxgi.dll"
     prefix: str = ""
+    api_value: str | None = None          # the renderer My Games uses (profile or the user's choice)
+    transport: Transport | None = None    # how ReShade gets in for that renderer and bitness
+
+    def __post_init__(self):
+        if self.transport is None:
+            try:
+                self.transport = choose(self.api, self.game.architecture or "x64", self.root)
+            except ValueError:
+                self.transport = None
 
     @property
     def root(self) -> Path:
@@ -38,7 +47,16 @@ class GameTarget:
 
     @property
     def api(self) -> str:
-        return self.game.api.value
+        return self.api_value or self.game.api.value
+
+    @property
+    def arch(self) -> str:
+        return "x86" if self.game.architecture == "x86" else "x64"
+
+    @property
+    def reshade_name(self) -> str | None:
+        """The local DLL name ReShade loads under; None when it is a Vulkan layer."""
+        return self.transport.reshade_name if self.transport else "dxgi.dll"
 
     def rel(self, name: str) -> str:
         return self.prefix + name
@@ -173,7 +191,7 @@ class FiveMTarget:
         subprocess.Popen(args, cwd=str(self.installation.root))
 
 
-def target_for(game: Game, installation=None):
+def target_for(game: Game, installation=None, api: str | None = None):
     if game.launcher == "fivem":
         if installation is None:
             from akeno.fivem.discovery import inspect_installation
@@ -183,4 +201,4 @@ def target_for(game: Game, installation=None):
         return FiveMTarget(game, installation)
     if not game.exe_path or not game.target_dir:
         raise StackError("The game executable is unknown.", "Select the game's .exe in My Games.", "no_exe")
-    return GameTarget(game)
+    return GameTarget(game, api_value=api)
