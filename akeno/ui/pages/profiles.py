@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QComboBox, QDoubleSpinBo
 
 from akeno.i18n import t
 from akeno.ui import theme
-from akeno.ui.widgets import Card, StatusPill, button, clear_layout, info, label
+from akeno.ui.widgets import Card, FlowLayout, ResponsiveRow, StatusPill, button, clear_layout, info, label
 
 
 class ProfilesPage(QWidget):
@@ -38,26 +38,24 @@ class ProfilesPage(QWidget):
         self.rec_text = label("", wrap=True)
         self.rec_card.body.addWidget(self.rec_text)
         lay.addWidget(self.rec_card)
-        self.chip_row = QHBoxLayout()
+        self.chip_row = FlowLayout()
         self.chip_group = QButtonGroup(self)
         lay.addLayout(self.chip_row)
-        body = QHBoxLayout()
-        body.setSpacing(16)
+        body = ResponsiveRow(16)          # side by side when they fit, stacked at 150 % / long translations
         self.edit_card = Card(t("Settings"), "sliders", theme.BLUE)
         self.edit_box = QVBoxLayout()
         self.edit_box.setSpacing(12)
         self.edit_card.body.addLayout(self.edit_box)
-        acts = QHBoxLayout()
+        acts = FlowLayout()
         self.btn_reset = button(t("Restore recommended values"), "restore", on_click=self._reset)
         self.btn_save = button(t("Save as custom profile"), "file", on_click=self._save)
         self.btn_apply = button(t("Apply to installed backend"), "check", "primary", on_click=self._apply)
         for b in (self.btn_reset, self.btn_save, self.btn_apply):
             acts.addWidget(b)
-        acts.addStretch(1)
         self.edit_card.body.addLayout(acts)
         self.apply_note = label("", "muted", wrap=True)
         self.edit_card.body.addWidget(self.apply_note)
-        body.addWidget(self.edit_card, 3)
+        body.add(self.edit_card, 3)
         self.cmp_card = Card(t("Recorded benchmark results"), "chart", theme.CYAN)
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels([t("Profile"), t("Avg FPS"), t("1% low"), t("Frame time"), t("Date")])
@@ -68,8 +66,8 @@ class ProfilesPage(QWidget):
         self.cmp_card.body.addWidget(self.table)
         self.cmp_card.body.addWidget(button(t("Benchmark this profile"), "play",
                                             on_click=lambda: self._benchmark()))
-        body.addWidget(self.cmp_card, 2, Qt.AlignmentFlag.AlignTop)
-        lay.addLayout(body)
+        body.add(self.cmp_card, 2)
+        lay.addWidget(body)
         lay.addStretch(1)
         for sig in (ctl.selection_changed, ctl.games_changed, ctl.installs_changed, ctl.benchmarks_changed,
                     ctl.hardware_changed):
@@ -136,7 +134,6 @@ class ProfilesPage(QWidget):
             b.clicked.connect(lambda checked=False, x=pid: self.select_profile(x))
             self.chip_group.addButton(b)
             self.chip_row.addWidget(b)
-        self.chip_row.addStretch(1)
         base = a.default_params(g)
         prof = next((x for x in profiles if x.id == self.current), None)
         if prof:

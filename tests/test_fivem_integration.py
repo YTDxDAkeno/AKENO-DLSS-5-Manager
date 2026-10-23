@@ -80,7 +80,8 @@ def test_all_eight_pages_and_embedded_fivem_wizard(workflow, qtbot, language):
     win.resize(1920, 1009)
     win.show()
     try:
-        assert len(win.pages) == 8
+        from akeno.ui.main_window import ADVANCED, NAV
+        assert len(win.pages) == len(NAV) + len(ADVANCED)
         for key in win.pages:
             win.go(key)
             QApplication.processEvents()

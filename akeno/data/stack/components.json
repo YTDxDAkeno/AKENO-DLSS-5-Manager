@@ -1,0 +1,953 @@
+{
+ "schema": 3,
+ "version": "3.0.0",
+ "reviewed_at": "2026-10-23",
+ "note": "Every downloadable version below was downloaded from its original GitHub release asset and its archive and member SHA-256 were computed from those exact bytes.",
+ "components": [
+  {
+   "id": "optiscaler-dlss5",
+   "role": "consumer_optiscaler",
+   "name": "OptiScaler DLSS 5 (Skynizz)",
+   "repository": "Skynizz/optiscaler-dlss5",
+   "license": "GPL-3.0",
+   "homepage": "https://github.com/Skynizz/optiscaler-dlss5",
+   "features": [
+    "presr",
+    "cache",
+    "passes"
+   ],
+   "description": "OptiScaler with DLSS 5 Neural Rendering, pre-SR placement and a temporal edit cache. Hooks the upscaler the game already uses (DLSS, FSR 2+ or XeSS).",
+   "release": {
+    "tag": "^v(\\d+\\.\\d+\\.\\d+)$",
+    "asset": "^OptiScaler-DLSS5-(?P<v>[\\d.]+)-win-x64\\.zip$",
+    "root": "DLSS5-Optimised",
+    "files": [
+     "OptiScaler.dll",
+     "OptiScaler.ini",
+     "nvngx.dll_dlssnr.dll"
+    ]
+   },
+   "versions": [
+    {
+     "tag": "v1.3.0",
+     "asset": "OptiScaler-DLSS5-1.3.0-win-x64.zip",
+     "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.3.0/OptiScaler-DLSS5-1.3.0-win-x64.zip",
+     "sha256": "2f0ee88ac00848602c1422db19c29b3c992d3e0039675aa900a3cde9cf05dd8a",
+     "size": 6714186,
+     "root": "DLSS5-Optimised",
+     "files": {
+      "OptiScaler.dll": "90b813108f8aea5a0a9335c6b0cd6a8927bdce438d512c07435f2071209045e9",
+      "OptiScaler.ini": "4bfe7a4ec6ed7ebdc024ab4be15f21a898d53a99249e8bd34ddadc8dfa9309b5",
+      "nvngx.dll_dlssnr.dll": "903d1b39889ddb4893a45825783d1b5d79387ba0645872d7dbe6938e9b37b9ec"
+     },
+     "version": "1.3.0",
+     "channel": "stable",
+     "published": "2026-10-19",
+     "source_commit": "fc702f8ca22f97b01bd6a02f3386bffb3484fc35",
+     "settings": [
+      "ToggleKey",
+      "CompareKey",
+      "ShowStats",
+      "PreSr",
+      "PreSrReduced",
+      "Enabled",
+      "TransferStrength",
+      "ColourStrength",
+      "WhitePointScale",
+      "AutoFollowsGameExposure",
+      "MaxRatio",
+      "WorkingScale",
+      "ScalingDownscaler",
+      "DebugView",
+      "AutoCapture",
+      "Preset",
+      "Style",
+      "Passes",
+      "PassStyles",
+      "Intensity",
+      "LocalStructure",
+      "LocalTone",
+      "SkinStructure",
+      "AutoMask",
+      "CacheEnabled",
+      "CacheInterval",
+      "CacheAdaptive",
+      "CacheAdaptiveThreshold",
+      "CacheDepthTolerance",
+      "CacheColourTolerance",
+      "CacheHighDecay",
+      "CacheRefreshBlend",
+      "CacheLowGain",
+      "CacheHighGain",
+      "CacheBilateral",
+      "CacheStabilize",
+      "CacheDespeckle",
+      "CacheCrossfade",
+      "CacheSoftRefresh",
+      "CacheTemporal",
+      "CacheLowTemporal",
+      "CacheModelHistory",
+      "CacheDebugView",
+      "CacheDumpFrames",
+      "CacheFingerprint",
+      "CacheContext",
+      "CacheFingerprintTolerance",
+      "CacheSurfaceFill",
+      "CacheCrossfadeFrames",
+      "CacheGuided",
+      "CacheGuidedStrength",
+      "CacheAging",
+      "CacheAgeHalfLife",
+      "CacheAgeNeutral",
+      "CacheAdaptiveSpeed",
+      "CacheAdaptiveMin",
+      "CacheAntiPop",
+      "CacheAntiPopRate",
+      "CacheMotionPriority",
+      "CacheBudgetMs",
+      "CacheStillMax",
+      "CacheStillHold",
+      "CacheNoiseAware",
+      "CacheAsync",
+      "FGSync",
+      "PrivateCreate",
+      "RegionMask",
+      "RegionMaskDistance",
+      "RegionMaskSoftness",
+      "RegionMaskStrength",
+      "RegionMaskIgnoreFloor",
+      "RegionMaskShow",
+      "MotionFade",
+      "MotionFadeStart",
+      "MotionFadeEnd",
+      "MotionFadeSkipModel",
+      "JbuUpsample",
+      "JbuSigma"
+     ],
+     "notes": [
+      "Adds frame-generation controls, speckle cleanup, region masks and up to 30 passes."
+     ]
+    },
+    {
+     "tag": "v1.2.1",
+     "asset": "OptiScaler-DLSS5-1.2.1-win-x64.zip",
+     "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/OptiScaler-DLSS5-1.2.1-win-x64.zip",
+     "sha256": "0d5b24887ea2c622754da68efc76ef55ae42b5d3be350a8d43cafbabb6747ec6",
+     "size": 6456692,
+     "root": "DLSS5-Optimised",
+     "files": {
+      "OptiScaler.dll": "ad143c5bd6e5fab4d1abd8b048c424e9ddceabf1a864e0e0695c01a0dc82b4c9",
+      "OptiScaler.ini": "080057b315c4f0df80a966cd55be6ce12c70f55d37ca9b0b217fee8d155258e2",
+      "nvngx.dll_dlssnr.dll": "87408102bc7b6a740c2f771deb131a606424df08165d4b9ab34c2742c2a42ea0"
+     },
+     "version": "1.2.1",
+     "channel": "stable",
+     "published": "2026-10-10",
+     "source_commit": "6bfc4389c25054ef6747df6e6b1b470e9541c4da",
+     "settings": [
+      "ToggleKey",
+      "CompareKey",
+      "ShowStats",
+      "PreSr",
+      "PreSrReduced",
+      "Enabled",
+      "TransferStrength",
+      "ColourStrength",
+      "WhitePointScale",
+      "MaxRatio",
+      "WorkingScale",
+      "ScalingDownscaler",
+      "DebugView",
+      "AutoCapture",
+      "Preset",
+      "Style",
+      "Passes",
+      "Intensity",
+      "LocalStructure",
+      "LocalTone",
+      "SkinStructure",
+      "AutoMask",
+      "CacheEnabled",
+      "CacheInterval",
+      "CacheAdaptive",
+      "CacheAdaptiveThreshold",
+      "CacheDepthTolerance",
+      "CacheColourTolerance",
+      "CacheHighDecay",
+      "CacheRefreshBlend",
+      "CacheLowGain",
+      "CacheHighGain",
+      "CacheBilateral",
+      "CacheStabilize",
+      "CacheDespeckle",
+      "CacheCrossfade",
+      "CacheSoftRefresh",
+      "CacheTemporal",
+      "CacheLowTemporal",
+      "CacheModelHistory",
+      "CacheDebugView",
+      "CacheDumpFrames",
+      "CacheFingerprint",
+      "CacheContext",
+      "CacheFingerprintTolerance",
+      "CacheSurfaceFill",
+      "CacheCrossfadeFrames",
+      "CacheGuided",
+      "CacheGuidedStrength",
+      "CacheAging",
+      "CacheAgeHalfLife",
+      "CacheAgeNeutral",
+      "CacheAdaptiveSpeed",
+      "CacheAdaptiveMin",
+      "CacheAntiPop",
+      "CacheAntiPopRate",
+      "CacheMotionPriority",
+      "CacheBudgetMs",
+      "CacheStillMax",
+      "CacheStillHold",
+      "CacheNoiseAware",
+      "CacheAsync",
+      "JbuUpsample",
+      "JbuSigma"
+     ],
+     "notes": [
+      "Fixes the x8 preset brightness jump of 1.2.0."
+     ]
+    },
+    {
+     "tag": "v1.2.0",
+     "asset": "OptiScaler-DLSS5-1.2.0-win-x64.zip",
+     "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.0/OptiScaler-DLSS5-1.2.0-win-x64.zip",
+     "sha256": "48dd0d9f2701237b7c9b0af652631efad2d8c4e0f5886dd088d31d3a3e4de2a3",
+     "size": 6460029,
+     "root": "DLSS5-Optimised",
+     "files": {
+      "OptiScaler.dll": "2f86184646511a3e0e22ed93999c6acc1a5171f9fadfa70feca7004126737a7a",
+      "OptiScaler.ini": "080057b315c4f0df80a966cd55be6ce12c70f55d37ca9b0b217fee8d155258e2",
+      "nvngx.dll_dlssnr.dll": "87408102bc7b6a740c2f771deb131a606424df08165d4b9ab34c2742c2a42ea0"
+     },
+     "version": "1.2.0",
+     "channel": "stable",
+     "published": "2026-10-10",
+     "source_commit": "44c921059c09272593c11da40bc3d19a00e608a0",
+     "settings": [
+      "ToggleKey",
+      "CompareKey",
+      "ShowStats",
+      "PreSr",
+      "PreSrReduced",
+      "Enabled",
+      "TransferStrength",
+      "ColourStrength",
+      "WhitePointScale",
+      "MaxRatio",
+      "WorkingScale",
+      "ScalingDownscaler",
+      "DebugView",
+      "AutoCapture",
+      "Preset",
+      "Style",
+      "Passes",
+      "Intensity",
+      "LocalStructure",
+      "LocalTone",
+      "SkinStructure",
+      "AutoMask",
+      "CacheEnabled",
+      "CacheInterval",
+      "CacheAdaptive",
+      "CacheAdaptiveThreshold",
+      "CacheDepthTolerance",
+      "CacheColourTolerance",
+      "CacheHighDecay",
+      "CacheRefreshBlend",
+      "CacheLowGain",
+      "CacheHighGain",
+      "CacheBilateral",
+      "CacheStabilize",
+      "CacheDespeckle",
+      "CacheCrossfade",
+      "CacheSoftRefresh",
+      "CacheTemporal",
+      "CacheLowTemporal",
+      "CacheModelHistory",
+      "CacheDebugView",
+      "CacheDumpFrames",
+      "CacheFingerprint",
+      "CacheContext",
+      "CacheFingerprintTolerance",
+      "CacheSurfaceFill",
+      "CacheCrossfadeFrames",
+      "CacheGuided",
+      "CacheGuidedStrength",
+      "CacheAging",
+      "CacheAgeHalfLife",
+      "CacheAgeNeutral",
+      "CacheAdaptiveSpeed",
+      "CacheAdaptiveMin",
+      "CacheAntiPop",
+      "CacheAntiPopRate",
+      "CacheMotionPriority",
+      "CacheBudgetMs",
+      "CacheStillMax",
+      "CacheStillHold",
+      "CacheNoiseAware",
+      "CacheAsync",
+      "JbuUpsample",
+      "JbuSigma"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "optiscaler-dlssnr",
+   "role": "consumer_optiscaler",
+   "name": "OptiScaler DLSSNR (Dagherbou)",
+   "repository": "Dagherbou/OptiScaler_DLSSNR",
+   "license": "GPL-3.0",
+   "homepage": "https://github.com/Dagherbou/OptiScaler_DLSSNR",
+   "features": [],
+   "description": "The original OptiScaler DLSS Neural Rendering fork. Runs the model right after the game's upscaler; bundles OptiScaler's FSR/XeSS dependencies.",
+   "release": {
+    "tag": "^v(\\d+\\.\\d+\\.\\d+(?:-[\\w.]+)?)$",
+    "asset": "^OptiScaler-DLSSNR-.*\\.zip$",
+    "root": "",
+    "files": [
+     "OptiScaler.dll",
+     "OptiScaler.ini",
+     "nvngx.dll_dlssnr.dll",
+     "OptiScaler/amd_fidelityfx_framegeneration_dx12.dll",
+     "OptiScaler/amd_fidelityfx_loader_dx12.dll",
+     "OptiScaler/amd_fidelityfx_upscaler_dx12.dll",
+     "OptiScaler/amd_fidelityfx_vk.dll",
+     "OptiScaler/libxell.dll",
+     "OptiScaler/libxess.dll",
+     "OptiScaler/libxess_dx11.dll",
+     "OptiScaler/libxess_fg.dll",
+     "OptiScaler/D3D12_OptiScaler/D3D12Core.dll"
+    ]
+   },
+   "versions": [
+    {
+     "tag": "v0.2.0-patch1",
+     "asset": "OptiScaler-DLSSNR-v0.2.0-onimusha-fix.zip",
+     "url": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-patch1/OptiScaler-DLSSNR-v0.2.0-onimusha-fix.zip",
+     "sha256": "5db547216fa8a7dbd8ab0a193da1e3bce0ea4bd71f91189afa4ed2ede8bb9561",
+     "size": 130480693,
+     "root": "",
+     "files": {
+      "OptiScaler.dll": "114a1d18e79d90a011406b9467b4b6dc4d4948487c4b30289311def311174bce",
+      "OptiScaler.ini": "27af5289887b90403eef25b15d8295b35c72e1a26d13e83acd0daa28129bfff6",
+      "nvngx.dll_dlssnr.dll": "17cf51d25d142d0be15fcac945cc928c37849a1cb61011cb9c742d72df86647c",
+      "OptiScaler/amd_fidelityfx_framegeneration_dx12.dll": "02297beedd285e822d3a64f314cf00faf378dcec0edc47ff0c4dd71b3a8c2f18",
+      "OptiScaler/amd_fidelityfx_loader_dx12.dll": "e2d85aa05a9bd9ed8b38935fdf5199372cca6f74c12015143bb6f945ee1608aa",
+      "OptiScaler/amd_fidelityfx_upscaler_dx12.dll": "d0dcccc74a43c44ba435b7a369b456e0970d8a4464e4bd683119b374f2c9fb46",
+      "OptiScaler/amd_fidelityfx_vk.dll": "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78",
+      "OptiScaler/libxell.dll": "d2030dcd694fda8f2ec7e044b13e6db8f0b56d4ba9113a5efad334e3f3ded8c7",
+      "OptiScaler/libxess.dll": "251659dd84a3e84de67c886a4186e01f3eca49b00641906fe38bb6b807e5d5b7",
+      "OptiScaler/libxess_dx11.dll": "c7cfe86f0c9d94e4fb3696d3cd5035e2bbb6a8b1b0572f8b7395a4cdfd0c625e",
+      "OptiScaler/libxess_fg.dll": "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27",
+      "OptiScaler/D3D12_OptiScaler/D3D12Core.dll": "07d286c306f8117321422affd9e6388c12d0fb4be1c7fc689d9e899324feeb24"
+     },
+     "version": "0.2.0-patch1",
+     "channel": "stable",
+     "published": "2026-09-04",
+     "asset_label": "0.2.0 (Onimusha fix)",
+     "settings": [
+      "ToggleKey",
+      "Enabled",
+      "TransferStrength",
+      "ColourStrength",
+      "WhitePointScale",
+      "MaxRatio",
+      "WorkingScale",
+      "ScalingDownscaler",
+      "DebugView",
+      "AutoCapture",
+      "Preset",
+      "Style",
+      "Intensity",
+      "LocalStructure",
+      "LocalTone",
+      "SkinStructure",
+      "AutoMask"
+     ]
+    },
+    {
+     "tag": "v0.2.0-dlssnr",
+     "asset": "OptiScaler-DLSSNR-v0.2.0.zip",
+     "url": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-dlssnr/OptiScaler-DLSSNR-v0.2.0.zip",
+     "sha256": "8eece7a4d7de6de5917f0c99ac60540b2d77022e7699bba717b0a6d9e1829bce",
+     "size": 130486024,
+     "root": "",
+     "files": {
+      "OptiScaler.dll": "8f526752d82c9cba99bf747a216a8caccd59a585d9ed0e217a8d47ab3c7c4998",
+      "OptiScaler.ini": "27af5289887b90403eef25b15d8295b35c72e1a26d13e83acd0daa28129bfff6",
+      "nvngx.dll_dlssnr.dll": "17cf51d25d142d0be15fcac945cc928c37849a1cb61011cb9c742d72df86647c",
+      "OptiScaler/amd_fidelityfx_framegeneration_dx12.dll": "02297beedd285e822d3a64f314cf00faf378dcec0edc47ff0c4dd71b3a8c2f18",
+      "OptiScaler/amd_fidelityfx_loader_dx12.dll": "e2d85aa05a9bd9ed8b38935fdf5199372cca6f74c12015143bb6f945ee1608aa",
+      "OptiScaler/amd_fidelityfx_upscaler_dx12.dll": "d0dcccc74a43c44ba435b7a369b456e0970d8a4464e4bd683119b374f2c9fb46",
+      "OptiScaler/amd_fidelityfx_vk.dll": "a1624cc4238fef046f30c4d80ce3f47be63fc5f5373f49e3ee9edb9960f54c78",
+      "OptiScaler/libxell.dll": "d2030dcd694fda8f2ec7e044b13e6db8f0b56d4ba9113a5efad334e3f3ded8c7",
+      "OptiScaler/libxess.dll": "251659dd84a3e84de67c886a4186e01f3eca49b00641906fe38bb6b807e5d5b7",
+      "OptiScaler/libxess_dx11.dll": "c7cfe86f0c9d94e4fb3696d3cd5035e2bbb6a8b1b0572f8b7395a4cdfd0c625e",
+      "OptiScaler/libxess_fg.dll": "ec5e0c65e075570c6ede72618bb666d0be0c2e10b2ea9762c0fe8cb8e375ab27",
+      "OptiScaler/D3D12_OptiScaler/D3D12Core.dll": "07d286c306f8117321422affd9e6388c12d0fb4be1c7fc689d9e899324feeb24"
+     },
+     "version": "0.2.0",
+     "channel": "stable",
+     "published": "2026-09-03",
+     "settings": [
+      "ToggleKey",
+      "Enabled",
+      "TransferStrength",
+      "ColourStrength",
+      "WhitePointScale",
+      "MaxRatio",
+      "WorkingScale",
+      "ScalingDownscaler",
+      "DebugView",
+      "AutoCapture",
+      "Preset",
+      "Style",
+      "Intensity",
+      "LocalStructure",
+      "LocalTone",
+      "SkinStructure",
+      "AutoMask"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "renodx-dlss5",
+   "role": "consumer_renodx",
+   "name": "RenoDX DLSS 5 add-on",
+   "repository": "RankFTW/rhi-repo",
+   "license": "RenoDX add-on (published by its authors in the RenoDX Discord, mirrored by RHI)",
+   "homepage": "https://github.com/clshortfuse/renodx",
+   "features": [],
+   "description": "ReShade add-on that runs DLSS 5 Neural Rendering on the DLSS evaluate a game or DLSS5-Feeder makes. Configured in ReShade.ini [RenoDX.DLSS5].",
+   "release": {
+    "tag": "^renodx-dlss5-(\\d[\\w.\\-]*)$",
+    "asset": "^renodx-dlss5_.*\\.zip$",
+    "root": "",
+    "files": [
+     "renodx-dlss5.addon64"
+    ]
+   },
+   "versions": [
+    {
+     "tag": "renodx-dlss5-7.0.0-rc8",
+     "asset": "renodx-dlss5_7.0.0-rc8.zip",
+     "url": "https://github.com/RankFTW/rhi-repo/releases/download/renodx-dlss5-7.0.0-rc8/renodx-dlss5_7.0.0-rc8.zip",
+     "sha256": "c0821162ebcc24db29dfd1ad6e45214e9f118e40de510f05f0981e0c9ea70639",
+     "size": 630308,
+     "root": "",
+     "files": {
+      "renodx-dlss5.addon64": "ff8b9738738265e09f01a1c470a0cb0a59eb021b2b23797c3df7cea722a724b6"
+     },
+     "version": "7.0.0-rc8",
+     "channel": "stable",
+     "recommended": true,
+     "settings": [
+      "NeuralUplift",
+      "NRResolutionScale",
+      "NRPasses",
+      "NRStyle",
+      "NRIntensity",
+      "EnableHooks",
+      "NREnableUpscaling"
+     ],
+     "notes": [
+      "The build DLSS5-Feeder 1.19 pins and measured 300/300 evaluates on driver 617.14."
+     ]
+    },
+    {
+     "tag": "renodx-dlss5-8.5.0-rc10",
+     "asset": "renodx-dlss5_8.5.0-rc10.zip",
+     "url": "https://github.com/RankFTW/rhi-repo/releases/download/renodx-dlss5-8.5.0-rc10/renodx-dlss5_8.5.0-rc10.zip",
+     "sha256": "a745040cb2e93e3a1500a6c5a322972acc4c5c667108fcea31c748285d6364a9",
+     "size": 1129182,
+     "root": "",
+     "files": {
+      "renodx-dlss5.addon64": "dcd93881e976ad033d83c2bb01f4bc3e4ddc59c15fe0dd4ca165bc5fc7d1ac68"
+     },
+     "version": "8.5.0-rc10",
+     "channel": "prerelease",
+     "config_version": 7,
+     "settings": [
+      "NeuralUplift",
+      "NRResolutionScale",
+      "NRPasses",
+      "NRStyle",
+      "NRIntensity",
+      "EnableHooks",
+      "NREnableUpscaling"
+     ],
+     "notes": [
+      "Newest build mirrored by RHI. Uses ini ConfigVersion 7."
+     ]
+    },
+    {
+     "tag": "renodx-dlss5-6.5.3",
+     "asset": "renodx-dlss5_6.5.3.zip",
+     "url": "https://github.com/RankFTW/rhi-repo/releases/download/renodx-dlss5-6.5.3/renodx-dlss5_6.5.3.zip",
+     "sha256": "553b1619b9e5ddfbcb4ebc7f2f3bffff9256a48a25b988f4817f5c63f4caa1de",
+     "size": 370292,
+     "root": "",
+     "files": {
+      "renodx-dlss5.addon64": "342341f669f1d64e0c70c8593a07a2fab5075e073dfae97c331c9a6776260a0a"
+     },
+     "version": "6.5.3",
+     "channel": "stable",
+     "settings": [
+      "NeuralUplift",
+      "NRResolutionScale",
+      "NRPasses",
+      "NRStyle",
+      "NRIntensity",
+      "EnableHooks",
+      "NREnableUpscaling"
+     ],
+     "notes": [
+      "Last non-RC build; v6.1 and newer survive driver 616.64+."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "dlss5-feeder",
+   "role": "feeder",
+   "name": "DLSS5-Feeder",
+   "repository": "jlrouzies-fr/DLSS5-Feeder",
+   "license": "MIT",
+   "homepage": "https://github.com/jlrouzies-fr/DLSS5-Feeder",
+   "features": [],
+   "description": "ReShade add-on that builds a complete DLSS request from the frame, ReShade depth and estimated motion vectors for games without DLSS.",
+   "release": {
+    "tag": "^v(\\d+\\.\\d+\\.\\d+(?:-[\\w.]+)?)$",
+    "asset": "^DLSS5-Feeder-(?P<v>[\\w.\\-]+)\\.zip$",
+    "root": "",
+    "files": [
+     "dlss5-feed.addon64",
+     "reshade-shaders/Shaders/DLSS5_Feed.fx"
+    ]
+   },
+   "versions": [
+    {
+     "tag": "v1.19.0",
+     "asset": "dlss5-feeder-1.19.0.zip",
+     "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.19.0/dlss5-feeder-1.19.0.zip",
+     "sha256": "9cc19e28f8fb4e216ea61621fdf6443e207e338ec639979ab335503c75f48f36",
+     "size": 503554,
+     "root": "",
+     "files": {
+      "dlss5-feed.addon64": "2b8c905012fd464ddf0554c6b178cba55030ec10eb917acdcee0e7a2376fe4dd",
+      "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+     },
+     "version": "1.19.0",
+     "channel": "stable",
+     "published": "2026-10-11",
+     "recommended": true,
+     "source_commit": "3c09eabcd138a68d144b6cc396a23e6b493eea4d",
+     "source_archive_sha256": "e1559e5291074d00cf8a42a54d2a3c647a26c73a4a46ce605469b5525444ba6b"
+    },
+    {
+     "tag": "v1.18.0-beta.2",
+     "asset": "dlss5-feeder-1.18.0-beta.2.zip",
+     "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.18.0-beta.2/dlss5-feeder-1.18.0-beta.2.zip",
+     "sha256": "4d459f902d5a8faace03c6909962334e800a58b73e0aee49eb1b30a3572f43dc",
+     "size": 503310,
+     "root": "",
+     "files": {
+      "dlss5-feed.addon64": "12011433dbdcc4ef42666b66d1c0a813c09b92f72a0e0ede05d9953973b29c0d",
+      "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+     },
+     "version": "1.18.0-beta.2",
+     "channel": "prerelease",
+     "published": "2026-10-06"
+    },
+    {
+     "tag": "v1.17.0",
+     "asset": "dlss5-feeder-1.17.0.zip",
+     "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.17.0/dlss5-feeder-1.17.0.zip",
+     "sha256": "11a96b36ae89ef75b3cff0e03849db35591143fe4df171986502905809469e12",
+     "size": 390753,
+     "root": "",
+     "files": {
+      "dlss5-feed.addon64": "6854d012eac307021cd31c978bafd42f1e22c5b7b2922c80e0a0010d428a3fd7",
+      "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+     },
+     "version": "1.17.0",
+     "channel": "stable"
+    }
+   ]
+  },
+  {
+   "id": "dlss5-feeder-x86",
+   "role": "feeder32",
+   "name": "DLSS5-Feeder (32-bit)",
+   "repository": "jlrouzies-fr/DLSS5-Feeder",
+   "license": "MIT",
+   "homepage": "https://github.com/jlrouzies-fr/DLSS5-Feeder",
+   "features": [],
+   "description": "For 32-bit games: dlss5-feed.addon32 runs in the game's 32-bit ReShade and hands every frame over shared GPU textures to host64\\dlss5-feed-host64.exe, which runs NGX and the neural consumer.",
+   "versions": [
+    {
+     "version": "1.19.0",
+     "tag": "v1.19.0",
+     "asset": "dlss5-feeder-1.19.0.zip",
+     "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.19.0/dlss5-feeder-1.19.0.zip",
+     "sha256": "9cc19e28f8fb4e216ea61621fdf6443e207e338ec639979ab335503c75f48f36",
+     "size": 503554,
+     "channel": "stable",
+     "published": "2026-10-11",
+     "recommended": true,
+     "files": {
+      "dlss5-feed.addon32": "34c767bd53a99f51a6cb5d87b267734e04314d16bf495a6c69ab98acd62d0874",
+      "host64/dlss5-feed-host64.exe": "79e427430c5c0102f6c7a557155b706ad51b0c40933f6e245fce922bf5b1401e",
+      "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+     },
+     "notes": [
+      "Same release archive as the 64-bit Feeder: dlss5-feed.addon32 beside the game, host64\\dlss5-feed-host64.exe runs NGX."
+     ]
+    },
+    {
+     "version": "1.18.0-beta.2",
+     "tag": "v1.18.0-beta.2",
+     "asset": "dlss5-feeder-1.18.0-beta.2.zip",
+     "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.18.0-beta.2/dlss5-feeder-1.18.0-beta.2.zip",
+     "sha256": "4d459f902d5a8faace03c6909962334e800a58b73e0aee49eb1b30a3572f43dc",
+     "size": 503310,
+     "channel": "prerelease",
+     "published": "2026-10-06",
+     "files": {
+      "dlss5-feed.addon32": "fa2f0ca58fe0522db527627b7e53a0cfad6c6bfabd87995edaae2923f957d050",
+      "host64/dlss5-feed-host64.exe": "5a8dc1813b636d97056681bbeefac47ca8c02fa09456e353d87811513c795b42",
+      "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+     },
+     "notes": [
+      "Same release archive as the 64-bit Feeder: dlss5-feed.addon32 beside the game, host64\\dlss5-feed-host64.exe runs NGX."
+     ]
+    },
+    {
+     "version": "1.17.0",
+     "tag": "v1.17.0",
+     "asset": "dlss5-feeder-1.17.0.zip",
+     "url": "https://github.com/jlrouzies-fr/DLSS5-Feeder/releases/download/v1.17.0/dlss5-feeder-1.17.0.zip",
+     "sha256": "11a96b36ae89ef75b3cff0e03849db35591143fe4df171986502905809469e12",
+     "size": 390753,
+     "channel": "stable",
+     "files": {
+      "dlss5-feed.addon32": "bfe24218be719cf5b91d829283953432907922333280931b755d83ac793fd8b2",
+      "host64/dlss5-feed-host64.exe": "c835754277a0590780d846443f314a83a30e2d2815ee0b2f7c18f1a24f252936",
+      "reshade-shaders/Shaders/DLSS5_Feed.fx": "c4ba1610df8e1593faa7c203d6d0517058d3a8ecf2dfda18ca67849844391456"
+     },
+     "notes": [
+      "Same release archive as the 64-bit Feeder: dlss5-feed.addon32 beside the game, host64\\dlss5-feed-host64.exe runs NGX."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "reshade",
+   "role": "reshade",
+   "name": "ReShade (full add-on support)",
+   "repository": "crosire/reshade",
+   "license": "BSD-3-Clause",
+   "homepage": "https://reshade.me",
+   "features": [],
+   "description": "Post-processing injector that loads the DLSS 5 add-ons. Add-on support is required.",
+   "versions": [
+    {
+     "version": "6.8.0",
+     "label": "6.8.0 (AKENO build from source)",
+     "source": "bundled",
+     "bundle_role": "reshade",
+     "channel": "stable",
+     "recommended": true,
+     "notes": [
+      "Built from crosire/reshade v6.8.0 (18deaa5) with full add-on support by AKENO CI."
+     ]
+    },
+    {
+     "version": "6.8.0",
+     "label": "6.8.0 (official reshade.me add-on setup)",
+     "source": "reshade_setup",
+     "url": "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe",
+     "channel": "stable",
+     "notes": [
+      "ReShade64.dll is taken from the official setup and checked for ReShade 6.8.0 identity and add-on exports."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "reshade-x86",
+   "role": "reshade32",
+   "name": "ReShade 32-bit (full add-on support)",
+   "repository": "crosire/reshade",
+   "license": "BSD-3-Clause",
+   "homepage": "https://reshade.me",
+   "features": [],
+   "description": "32-bit ReShade with add-on support, loaded by the 32-bit game; it loads dlss5-feed.addon32.",
+   "versions": [
+    {
+     "version": "6.8.0",
+     "label": "6.8.0 (AKENO build from source)",
+     "source": "bundled",
+     "bundle_role": "reshade32",
+     "channel": "stable",
+     "recommended": true,
+     "notes": [
+      "Built from crosire/reshade v6.8.0 (18deaa5) for 32-bit with full add-on support by AKENO CI."
+     ]
+    },
+    {
+     "version": "6.8.0",
+     "label": "6.8.0 (official reshade.me add-on setup)",
+     "source": "reshade_setup",
+     "url": "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe",
+     "channel": "stable",
+     "notes": [
+      "ReShade32.dll is taken from the official setup and checked for ReShade 6.8.0 identity, 32-bit and add-on exports."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "dh-uber-motion",
+   "role": "motion",
+   "name": "dh_uber_motion (AlucardDH)",
+   "repository": "AlucardDH/dh-reshade-shaders",
+   "license": "GPL-2.0",
+   "homepage": "https://github.com/AlucardDH/dh-reshade-shaders",
+   "features": [],
+   "description": "Estimates motion vectors for the Feeder (provider 0, texMotionVectors).",
+   "versions": [
+    {
+     "version": "0.2.0",
+     "label": "0.2.0",
+     "source": "bundled",
+     "bundle_role": "motion_provider",
+     "channel": "stable",
+     "recommended": true,
+     "provider_id": 0,
+     "technique": "DH_UBER_MOTION_020",
+     "shader": "dh_uber_motion.fx"
+    }
+   ]
+  },
+  {
+   "id": "nvngx-dlss",
+   "role": "sr_runtime",
+   "name": "NVIDIA DLSS Super Resolution runtime",
+   "repository": "RankFTW/rhi-repo",
+   "license": "NVIDIA DLSS SDK runtime (mirrored by RHI)",
+   "homepage": "https://github.com/RankFTW/rhi-repo",
+   "features": [],
+   "description": "nvngx_dlss.dll. DLSS5-Feeder runs a real DLSS DLAA evaluate with it.",
+   "release": {
+    "tag": "^dlss-(\\d+\\.\\d+(?:\\.\\d+)*)$",
+    "asset": "^nvngx_dlss_.*\\.zip$",
+    "root": "",
+    "files": [
+     "nvngx_dlss.dll"
+    ]
+   },
+   "versions": [
+    {
+     "tag": "dlss-310.9.16",
+     "asset": "nvngx_dlss_310.9.16.zip",
+     "url": "https://github.com/RankFTW/rhi-repo/releases/download/dlss-310.9.16/nvngx_dlss_310.9.16.zip",
+     "sha256": "1823ec911c77482e6731447dfb0db3def8aa710e092f59f58c4c4c55285d492d",
+     "size": 44480231,
+     "root": "",
+     "files": {
+      "nvngx_dlss.dll": "858ccff96360c3098db9264cd6f13d04a027e09b6ce7ad5bbc297570e824b4f2"
+     },
+     "version": "310.9.16",
+     "channel": "stable",
+     "signed": "nvidia",
+     "recommended": true
+    },
+    {
+     "tag": "dlss-310.9.1",
+     "asset": "nvngx_dlss_310.9.1.zip",
+     "url": "https://github.com/RankFTW/rhi-repo/releases/download/dlss-310.9.1/nvngx_dlss_310.9.1.zip",
+     "sha256": "aaba83b288bd145c3808e8d7a0ba03cc8c8676d18ad984b1bfa6563046a3ba37",
+     "size": 30263723,
+     "root": "",
+     "files": {
+      "nvngx_dlss.dll": "3975567b8943c53acce397f2b72380092f84f162d00b0d2c7d08a1025c563983"
+     },
+     "version": "310.9.1",
+     "channel": "stable",
+     "signed": "nvidia",
+     "notes": [
+      "The SR build the DLSS5-Feeder installer pins."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "nvngx-dlssnr",
+   "role": "nr_runtime",
+   "name": "DLSS 5 Neural Rendering model",
+   "repository": "RankFTW/rhi-repo",
+   "license": "NVIDIA runtime / community builds (mirrored by RHI)",
+   "homepage": "https://github.com/RankFTW/rhi-repo",
+   "features": [],
+   "description": "nvngx_dlssnr.dll, the neural model every DLSS 5 consumer drives. NVIDIA's own build creates the neural feature on RTX 50 only; community builds exist for older RTX cards.",
+   "release": {
+    "tag": "^dlssnr-(.+)$",
+    "asset": "^nvngx_dlssnr_.*\\.zip$",
+    "root": "",
+    "files": [
+     "nvngx_dlssnr.dll"
+    ]
+   },
+   "versions": [
+    {
+     "tag": "dlssnr-310.8.0",
+     "asset": "nvngx_dlssnr_310.8.0.zip",
+     "url": "https://github.com/RankFTW/rhi-repo/releases/download/dlssnr-310.8.0/nvngx_dlssnr_310.8.0.zip",
+     "sha256": "388c0a7912e15ec911b9c9e11a692142b11fe387ddf2b637d8c358138fffb3ac",
+     "size": 109425288,
+     "root": "",
+     "files": {
+      "nvngx_dlssnr.dll": "e16bcf15e16e13f527491cdf7845b2fe6521a738d8f7c9c721866a8496e1fc8e"
+     },
+     "version": "310.8.0",
+     "label": "310.8.0 (NVIDIA)",
+     "channel": "stable",
+     "signed": "nvidia",
+     "gpus": [
+      "RTX 50"
+     ],
+     "recommended_for": [
+      "RTX 50"
+     ],
+     "notes": [
+      "Unmodified NVIDIA build. Refuses RTX 20/30/40 with 0xbad00001 (DLSS5-Feeder #131)."
+     ]
+    },
+    {
+     "tag": "dlssnr-310.8.SF-v2",
+     "asset": "nvngx_dlssnr_310.8.SF-v2.zip",
+     "url": "https://github.com/RankFTW/rhi-repo/releases/download/dlssnr-310.8.SF-v2/nvngx_dlssnr_310.8.SF-v2.zip",
+     "sha256": "1da35941894994eb087e017577829e492454e9bae3a6a9397027069ceb74955c",
+     "size": 116693212,
+     "root": "",
+     "files": {
+      "nvngx_dlssnr.dll": "6eb209e764f39872625debd6abaf45e2bb6322f6f270f781f70c059ae30b3927"
+     },
+     "version": "310.8.2",
+     "label": "310.8.2 (SF-v2 community build, RTX 20-50)",
+     "channel": "community",
+     "signed": "modified",
+     "gpus": [
+      "RTX 20",
+      "RTX 30",
+      "RTX 40",
+      "RTX 50"
+     ],
+     "recommended_for": [
+      "RTX 20",
+      "RTX 30",
+      "RTX 40"
+     ],
+     "notes": [
+      "Community build listed by RHI for RTX 20/30/40/50; the build Skynizz's installer looks for. Not signed by NVIDIA."
+     ]
+    },
+    {
+     "tag": "dlssnr-310.8.0-RTX40",
+     "asset": "nvngx_dlssnr_310.8.0-RTX40.zip",
+     "url": "https://github.com/RankFTW/rhi-repo/releases/download/dlssnr-310.8.0-RTX40/nvngx_dlssnr_310.8.0-RTX40.zip",
+     "sha256": "46124cfaef532ad5f6da07494772ea8c1b3e719f934e254385697f38d1289e3f",
+     "size": 110604522,
+     "root": "",
+     "files": {
+      "nvngx_dlssnr.dll": "4b8d19bc3eff58a084f5eca7489c921501c203450169fb82ff4f649a4482ba05"
+     },
+     "version": "310.8.0-RTX40",
+     "label": "310.8.0 (RTX 40 community build)",
+     "channel": "community",
+     "signed": "modified",
+     "gpus": [
+      "RTX 40"
+     ],
+     "notes": [
+      "Modified 310.8.0 for RTX 40 cards. Not signed by NVIDIA."
+     ]
+    },
+    {
+     "tag": "dlssnr-310.8.Lecram",
+     "asset": "nvngx_dlssnr_310.8.Lecram.zip",
+     "url": "https://github.com/RankFTW/rhi-repo/releases/download/dlssnr-310.8.Lecram/nvngx_dlssnr_310.8.Lecram.zip",
+     "sha256": "ddb64e5545ba3f217c32555d2eb8fdfe76b9510d2256f13e8a5ecb1a9650ca54",
+     "size": 116658260,
+     "root": "",
+     "files": {
+      "nvngx_dlssnr.dll": "f95feb54137ea11979f9b4ec4f00afd84b5c98a5624d3388fbf6a87714a39fcc"
+     },
+     "version": "310.8.3",
+     "label": "310.8.3 (Lecram community build, RTX 50)",
+     "channel": "community",
+     "signed": "modified",
+     "gpus": [
+      "RTX 50"
+     ],
+     "notes": [
+      "The build the DLSS5-Feeder installer downloads. RTX 50 only, like NVIDIA's."
+     ]
+    }
+   ]
+  },
+  {
+   "id": "dgvoodoo2",
+   "role": "translator",
+   "name": "dgVoodoo2",
+   "repository": "dege-diosg/dgVoodoo2",
+   "license": "Freeware (dgVoodoo2 by Dege, downloaded from its official GitHub release)",
+   "homepage": "http://dege.freeweb.hu/dgVoodoo2/",
+   "features": [],
+   "description": "Translates Direct3D 8/9 to Direct3D 11 so ReShade and the Feeder can work with the game.",
+   "versions": [
+    {
+     "version": "2.87.5",
+     "tag": "v2.87.5",
+     "asset": "dgVoodoo2_87_5.zip",
+     "url": "https://github.com/dege-diosg/dgVoodoo2/releases/download/v2.87.5/dgVoodoo2_87_5.zip",
+     "sha256": "5ffde6927f7355ca3fdd5d785b581256a8e6539fa13e395a891ade6ba1040850",
+     "size": 9268078,
+     "channel": "stable",
+     "files": {
+      "MS/x86/D3D9.dll": "6a0ca214784be04b7c8b547105aa9d79acf4dc26c0b6f8702b437ddca54058b2",
+      "MS/x86/D3D8.dll": "d03e2562178db1fcf3493fc0a0b23a465e35c55d73adb3ec095be866cd662704",
+      "MS/x64/D3D9.dll": "0b3485614a56fff27cf66c1cee670979defe4103342884203e9726f455a5b091",
+      "dgVoodoo.conf": "45cc0eb8e6ed4f067aca1b2e4ac1268dfbd164bbbd06d264c53e8a60642c4dbf"
+     },
+     "recommended": true
+    },
+    {
+     "version": "2.87.4",
+     "tag": "v2.87.4",
+     "asset": "dgVoodoo2_87_4.zip",
+     "url": "https://github.com/dege-diosg/dgVoodoo2/releases/download/v2.87.4/dgVoodoo2_87_4.zip",
+     "sha256": "74aeb464d829db80e3f4aa8fae235e6e3b38fc01188776c5c2376bb0dea0956e",
+     "size": 9235426,
+     "channel": "stable",
+     "files": {
+      "MS/x86/D3D9.dll": "db1c445f7bcf699df1e175e974c779bdc7e19a468680a44884b1ab7078888d04",
+      "MS/x86/D3D8.dll": "d6e8931e785e267f926c049d4d1257b00771e2de8c57c8f39e434ddf6185df06",
+      "MS/x64/D3D9.dll": "ca777d0e1be467091d851d5dd41293f90c254beb35247e365fccc053abfc5678",
+      "dgVoodoo.conf": "3c7da2fac3eaad369df468e80c9ba9c4db632c419799b32bbc31279d10985801"
+     }
+    }
+   ]
+  }
+ ]
+}

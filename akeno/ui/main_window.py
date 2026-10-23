@@ -20,9 +20,11 @@ from akeno.i18n import t
 from akeno.ui import art, assets, icons, theme
 from akeno.ui.widgets import StatusPill, confirm, info, label
 
-NAV = [("dashboard", "Dashboard", "home"), ("hardware", "Hardware Scan", "chip"), ("library", "My Games", "gamepad"),
-       ("profiles", "Smart Profiles", "sliders"), ("benchmark", "Benchmark", "chart"),
-       ("install", "Secure Install", "shield"), ("backups", "Backups", "database"), ("settings", "Settings", "gear")]
+NAV = [("library", "My Games", "gamepad"), ("fivem", "FiveM Legacy", "fivem"), ("installed", "Installed Mods", "layers"),
+       ("downloads", "Downloads", "download"), ("backups", "Restore / Backups", "restore"),
+       ("hardware", "Hardware", "chip"), ("advanced", "Advanced", "gauge"), ("settings", "Settings", "gear")]
+# Pages shown as tabs of "Advanced" (diagnostics and the v1 per-backend installer).
+ADVANCED = ("dashboard", "benchmark", "profiles", "install")
 
 MAX_CONTENT_WIDTH = 2300          # ultrawide: centre the page instead of stretching cards to 3000+ px
 # (window height threshold, header height, title pt, subtitle pt)
@@ -248,6 +250,9 @@ class PageHost(QWidget):
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        if not getattr(page, "scrolls", True):
+            # the page fills the window and scrolls its own parts (My Games: list and game page)
+            self.scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         wrap = QWidget()
         self.wrap_layout = QHBoxLayout(wrap)
         self.wrap_layout.setContentsMargins(20, 16, 20, 12)
@@ -305,11 +310,15 @@ class MainWindow(QMainWindow):
         self.resize(w, h)
 
     def _build(self) -> None:
+        from akeno.ui.pages.advanced import AdvancedPage
         from akeno.ui.pages.backups import BackupsPage
         from akeno.ui.pages.benchmark import BenchmarkPage
         from akeno.ui.pages.dashboard import DashboardPage
+        from akeno.ui.pages.downloads import DownloadsPage
+        from akeno.ui.pages.fivem import FiveMPage
         from akeno.ui.pages.hardware import HardwarePage
         from akeno.ui.pages.install import InstallPage
+        from akeno.ui.pages.installed import InstalledPage
         from akeno.ui.pages.library import LibraryPage
         from akeno.ui.pages.profiles import ProfilesPage
         from akeno.ui.pages.settings import SettingsPage
@@ -335,15 +344,22 @@ class MainWindow(QMainWindow):
         self.statusBar().setSizeGripEnabled(True)
         self.pages = {}
         self.hosts = {}
-        for key, cls in (("dashboard", DashboardPage), ("hardware", HardwarePage), ("library", LibraryPage),
-                         ("profiles", ProfilesPage), ("benchmark", BenchmarkPage), ("install", InstallPage),
-                         ("backups", BackupsPage), ("settings", SettingsPage)):
+        advanced = {}
+        for key, cls in (("dashboard", DashboardPage), ("benchmark", BenchmarkPage), ("profiles", ProfilesPage),
+                         ("install", InstallPage)):
             page = cls(self.ctl, self)
+            page.setObjectName(f"page_{key}")
+            advanced[key] = page
+        main = {"library": LibraryPage, "fivem": FiveMPage, "installed": InstalledPage, "downloads": DownloadsPage,
+                "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage}
+        for key, _, _ in NAV:
+            page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")
             host = PageHost(page)
             self.pages[key] = page
             self.hosts[key] = host
             self.stack.addWidget(host)
+        self.pages.update(advanced)
         self._apply_density()
 
     def resizeEvent(self, e):
@@ -363,16 +379,24 @@ class MainWindow(QMainWindow):
 
     def go(self, key: str) -> None:
         keys = [k for k, _, _ in NAV]
+        tab = None
+        if key in ADVANCED:
+            key, tab = "advanced", key
         if key not in keys:
             return
         self.stack.setCurrentIndex(keys.index(key))
         self.sidebar.select(key)
         page = self.pages[key]
-        if hasattr(page, "on_show"):
+        if tab:
+            page.show_tab(tab)
+        elif hasattr(page, "on_show"):
             page.on_show()
 
     def current_page(self) -> str:
-        return [k for k, _, _ in NAV][self.stack.currentIndex()]
+        key = [k for k, _, _ in NAV][self.stack.currentIndex()]
+        if key == "advanced":
+            return self.pages["advanced"].keys[self.pages["advanced"].tabs.currentIndex()]
+        return key
 
     def open_profile(self, profile_id: str) -> None:
         self.go("profiles")
@@ -395,6 +419,9 @@ class MainWindow(QMainWindow):
         def work():
             if tx["kind"] == "snapshot":
                 return self.s.restore_snapshot(tx_id, force=True)
+            if tx["backend_id"] == "stack" and tx["state"] == "installed" and tx["kind"] in ("install", "swap"):
+                # the stack also takes back what lives outside the transaction (FiveM's ReShade notice, its logs)
+                return self.s.stack.uninstall(tx["game_id"], force=force)
             return self.s.restore(tx_id, force=force)
 
         def done(res):
@@ -405,7 +432,8 @@ class MainWindow(QMainWindow):
         self.ctl.run("restore", work, done, lambda e: info(self, t("Restore"), str(e), error=True))
 
     def _header_status(self) -> None:
-        n = len([t_ for t_ in self.s.db.transactions() if t_["state"] == "installed"])
+        # one game with an install plus later preset changes is one managed install, not a transaction count
+        n = len({t_["game_id"] for t_ in self.s.db.transactions() if t_["state"] == "installed"})
         text = t("Compatibility DB {v}", v=self.s.compat_db.version)
         if n:
             text += " · " + t("{n} managed install(s)", n=n)

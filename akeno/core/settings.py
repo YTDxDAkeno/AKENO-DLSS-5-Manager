@@ -14,6 +14,8 @@ DEFAULTS: dict[str, Any] = {
     "launch_with_windows": False,
     "check_app_updates": False,         # off by default: AKENO does not phone home unless asked
     "auto_update_compat_db": False,
+    "check_mod_updates": False,         # daily GitHub release check for newer mod versions (never auto-installs)
+    "github_token": "",                 # optional; raises GitHub's API rate limit for update checks
     "compat_db_url": "https://raw.githubusercontent.com/YTDxDAkeno/AKENO-DLSS-5-Manager/main/akeno/data/compatibility.json",
     "cache_limit_mb": 1024,
     "backup_keep_per_game": 10,

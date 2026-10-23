@@ -136,15 +136,18 @@ class Installer:
         managed = self.managed_files(game.id, target_dir)
         if prior:
             conflicts=self.check_restore(prior['id'])
-            if conflicts:return TxResult(False,None,'failed',['Managed files or backups changed; review before updating.'],conflicts)
-        # Refuse to overwrite anything AKENO did not install, unless it is renamed away by approval.
+            hard=[c for c in conflicts if 'backup' in c.reason]
+            if hard or (conflicts and not plan.force):
+                return TxResult(False,None,'failed',['Managed files or backups changed; review before updating.'],conflicts)
+        approved = {r.lower() for r in plan.replace_foreign}
+        # Refuse to overwrite anything AKENO did not install, unless the user approved a backed-up replacement.
         for op in plan.ops:
             dst = _safe_join(target_dir, op.rel_path)
             explicit_swap=(plan.kind=='swap' and op.rel_path in plan.expected_originals and dst.is_file()
                            and not dst.is_symlink() and sha256_file(dst)==plan.expected_originals[op.rel_path])
             if plan.kind=='swap' and op.rel_path in plan.expected_originals and not explicit_swap:
                 return TxResult(False,None,'failed',['Original DLL changed after the swap preview: '+op.rel_path])
-            if dst.exists() and op.rel_path.lower() not in managed and not explicit_swap:
+            if dst.exists() and op.rel_path.lower() not in managed and not explicit_swap and op.rel_path.lower() not in approved:
                 return TxResult(False, None, "failed", [
                     msg("Installation blocked: {rel_path} already exists and was not installed by AKENO. AKENO never "
                         "overwrites files from other tools.", rel_path=op.rel_path)])
@@ -184,9 +187,9 @@ class Installer:
                         raise InstallError(f"Backup verification failed for {op.rel_path}.")
                     self.db.record_tx_file(tx, op.rel_path, "replace", original_sha256=orig_sha,
                                            original_size=st.st_size, original_mtime=st.st_mtime,
-                                           backup_path=str(bpath))
+                                           backup_path=str(bpath), file_kind=op.kind)
                 else:
-                    self.db.record_tx_file(tx, op.rel_path, "create")
+                    self.db.record_tx_file(tx, op.rel_path, "create", file_kind=op.kind)
             for name in plan.rename_away:
                 src = _safe_join(target_dir, name)
                 if src.exists():
@@ -302,7 +305,9 @@ class Installer:
         for rel, f in sorted(originals.items()):
             p = _safe_join(tx["target_dir"], rel)
             last = latest[rel]
-            if last["action"] in ("create", "replace") and last["installed_sha256"]:
+            # Mods rewrite their own configuration (OptiScaler/ReShade overlays save their ini files): expected.
+            tolerant = (last.get("file_kind") or f.get("file_kind")) == "config"
+            if last["action"] in ("create", "replace") and last["installed_sha256"] and not tolerant:
                 if last['installed_sha256']=='deleted':
                     if p.exists():out.append(RestoreConflict(rel,'recreated after managed removal'))
                 elif not p.exists():

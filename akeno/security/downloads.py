@@ -134,6 +134,10 @@ class DownloadManager:
                 if "allow-list" in str(exc) or "non-HTTPS" in str(exc):
                     raise
                 last = exc
+            except urllib.error.HTTPError as exc:
+                if 400 <= exc.code < 500 and exc.code not in (408, 416, 429):
+                    raise          # 404 / 403: retrying cannot help, and the caller explains it
+                last = exc
             except (urllib.error.URLError, OSError, TimeoutError) as exc:
                 last = exc
             log.info("download attempt %d failed: %s", attempt, last)
@@ -145,18 +149,43 @@ class DownloadManager:
         raise DownloadError(f"Download failed after {self.retries} attempts: {last}")
 
     def _attempt(self, url, sha256, dest: Path, limit, progress, token) -> DownloadResult:
+        """One HTTP attempt. A partial ``.part`` file from an interrupted attempt is resumed with a Range
+        request; it is discarded only when its bytes cannot belong to the pinned file."""
         part = dest.with_suffix(dest.suffix + ".part")
-        req = urllib.request.Request(url, headers={"User-Agent": f"AKENO-DLSS5-Manager/{__version__}"})
         h = hashlib.sha256()
         size = 0
+        if part.is_file() and 0 < part.stat().st_size < limit:
+            for chunk in iter_chunks(part):
+                h.update(chunk)
+                size += len(chunk)
+        else:
+            part.unlink(missing_ok=True)
+        headers = {"User-Agent": f"AKENO-DLSS5-Manager/{__version__}"}
+        if size:
+            headers["Range"] = f"bytes={size}-"
+        req = urllib.request.Request(url, headers=headers)
+        keep_part = True
         try:
-            with self.opener().open(req, timeout=self.timeout) as resp:
+            try:
+                resp = self.opener().open(req, timeout=self.timeout)
+            except urllib.error.HTTPError as exc:
+                if exc.code == 416 and size:      # the part is already complete (or bogus): restart cleanly
+                    part.unlink(missing_ok=True)
+                raise
+            with resp:
                 self.check_url(resp.geturl())
+                status = getattr(resp, "status", None) or getattr(resp, "code", None) or 200
+                if size and status != 206:
+                    h, size = hashlib.sha256(), 0      # server ignored the range: start over
+                    mode = "wb"
+                else:
+                    mode = "ab" if size else "wb"
                 total = resp.headers.get("Content-Length")
-                total_i = int(total) if total and total.isdigit() else None
+                total_i = int(total) + size if total and total.isdigit() else None
                 if total_i and total_i > limit:
+                    keep_part = False
                     raise DownloadError(f"File is larger than expected ({total_i} bytes); refusing it.")
-                with open(part, "wb") as out:
+                with open(part, mode) as out:
                     while True:
                         if token and token.cancelled:
                             raise Cancelled("Download cancelled.")
@@ -165,6 +194,7 @@ class DownloadManager:
                             break
                         size += len(chunk)
                         if size > limit:
+                            keep_part = False
                             raise DownloadError("Download exceeded its size limit; refusing it.")
                         h.update(chunk)
                         out.write(chunk)
@@ -172,16 +202,54 @@ class DownloadManager:
                             progress(size, total_i)
             digest = h.hexdigest()
             if digest != sha256:
+                keep_part = False
                 raise VerificationError(
                     f"SHA-256 mismatch: expected {sha256}, got {digest}. The file was discarded.")
             os.replace(part, dest)
             return DownloadResult(dest, digest, size, False)
         finally:
-            if part.exists():
+            if not keep_part and part.exists():
                 try:
                     part.unlink()
                 except OSError:
                     pass
+
+    def fetch_unpinned(self, url: str, name: str, max_size: int,
+                       progress: Callable[[int, int | None], None] | None = None,
+                       token: CancelToken | None = None) -> DownloadResult:
+        """Download a file whose hash is not known in advance (identity is checked by the caller).
+
+        Used only for the official ReShade setup, whose bytes AKENO then inspects. The result is stored under
+        its own SHA-256 so later runs reuse it."""
+        self.check_url(url)
+        tmp = self.cache / ("unpinned-" + "".join(c for c in name if c.isalnum() or c in "._-"))
+        req = urllib.request.Request(url, headers={"User-Agent": f"AKENO-DLSS5-Manager/{__version__}"})
+        h = hashlib.sha256()
+        size = 0
+        try:
+            with self.opener().open(req, timeout=self.timeout) as resp, open(tmp, "wb") as out:
+                self.check_url(resp.geturl())
+                total = resp.headers.get("Content-Length")
+                total_i = int(total) if total and total.isdigit() else None
+                while True:
+                    if token and token.cancelled:
+                        raise Cancelled("Download cancelled.")
+                    chunk = resp.read(256 * 1024)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > max_size:
+                        raise DownloadError("Download exceeded its size limit; refusing it.")
+                    h.update(chunk)
+                    out.write(chunk)
+                    if progress:
+                        progress(size, total_i)
+            digest = h.hexdigest()
+            dest = self.cached_path(digest, name)
+            os.replace(tmp, dest)
+            return DownloadResult(dest, digest, size, False)
+        finally:
+            tmp.unlink(missing_ok=True)
 
     def cache_size(self) -> int:
         return sum(p.stat().st_size for p in self.cache.glob("*") if p.is_file())

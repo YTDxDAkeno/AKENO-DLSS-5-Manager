@@ -100,8 +100,8 @@ class AppServices:
             except (TypeError, ValueError, KeyError):
                 self.system = None
 
-        from akeno.mods.service import ModManager
-        self.mods=ModManager(self)
+        from akeno.stack.service import StackManager
+        self.stack = StackManager(self)
 
     # -- hardware ------------------------------------------------------------------------------
     def scan_hardware(self) -> SystemInfo:
@@ -172,8 +172,7 @@ class AppServices:
         rows=self.db.get_setting('official_dll_inventory',{})
         matching=[r for r in rows.values() if r.get('name')==name and r.get('trust')=='nvidia_authenticated']
         if matching:
-            from akeno.mods.releases import version_key
-            return dict(max(matching,key=lambda r:version_key(r.get('version'))),trust='verified')
+            return dict(max(matching,key=lambda r:runtimes._version_key(r.get('version'))),trust='verified')
         return self.offline_bundle.official_runtime(name)
 
     def context(self, game: Game, staging: Path | None = None, allow_disable: list[str] | None = None) -> BackendContext:
@@ -323,9 +322,6 @@ class AppServices:
 
     def restore(self, tx_id: int, force: bool = False) -> TxResult:
         tx = self.db.get_transaction(tx_id)
-        if tx and tx['backend_id'].startswith('fivem_community:'):
-            from akeno.fivem.community_stack import restore
-            return restore(self,self.library.get(tx['game_id']),tx)
         if tx and tx["backend_id"].startswith("fivem_legacy:"):
             from akeno.fivem.discovery import inspect_installation
             installation = inspect_installation(Path(tx["target_dir"]).parent.parent)

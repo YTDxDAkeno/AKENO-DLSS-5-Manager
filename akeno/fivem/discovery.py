@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Iterable
 
 from akeno.core.models import Game, GraphicsApi, DetectedFile
-from akeno.games.analyzer import detect_api, detect_anti_cheat, KNOWN_FILES, PROXY_NAMES
+from akeno.games.analyzer import detect_anti_cheat, KNOWN_FILES, PROXY_NAMES
 from akeno.games.launchers import RawGame
 from akeno.games import pe
 from akeno.security.downloads import sha256_file
@@ -17,6 +17,7 @@ from .models import Edition, FiveMInstallation, InventoryFile
 from .paths import is_link
 
 MAX_FILES = 2000
+SKIPPED_DIRS = {"reshade-shaders", "shaders", "textures", "cache", "logs", "crashes"}
 MAX_FILE_BYTES = 256 * 1024 * 1024
 MAX_INVENTORY_BYTES = 512 * 1024 * 1024
 
@@ -67,16 +68,18 @@ def _inventory(app: Path, gta: Path | None) -> tuple[tuple[InventoryFile, ...], 
             depth = len(d.relative_to(root).parts)
             linked = [x for x in dirs if is_link(d / x)]
             errors.extend(f"Linked inventory directory: {d / x}" for x in linked)
-            dirs[:] = sorted(x for x in dirs if x not in linked) if recursive and depth < 3 else []
+            # Shader packs (often thousands of .fx files) and caches are content, not graphics hooks.
+            dirs[:] = sorted(x for x in dirs if x not in linked and x.casefold() not in SKIPPED_DIRS) \
+                if recursive and depth < 3 else []
             for name in sorted(files):
-                count += 1
-                if count > MAX_FILES:
-                    errors.append("Inventory limit reached; manual inspection required.")
-                    return tuple(found.values()), errors
                 p = d / name
                 kind = _kind(p, recursive)
                 if not kind:
                     continue
+                count += 1
+                if count > MAX_FILES:
+                    errors.append("Inventory limit reached; manual inspection required.")
+                    return tuple(found.values()), errors
                 try:
                     if not _regular(p) or p.stat().st_size > MAX_FILE_BYTES:
                         raise ValueError("linked, non-regular or oversized file")
@@ -136,13 +139,19 @@ def inspect_installation(path: str | Path) -> FiveMInstallation | None:
     inventory, inventory_errors = _inventory(app, gta)
     errors.extend(inventory_errors)
     game_exe = _child(gta, "GTA5.exe") if gta and edition == Edition.LEGACY else None
-    api, candidates, source = detect_api(str(game_exe)) if game_exe else (GraphicsApi.UNKNOWN, [], "unknown")
+    if edition == Edition.LEGACY:
+        # GTA5.exe's import table is packed; FiveM itself creates the D3D11 device (Cfx rage-graphics-five
+        # RenderHooks.cpp), and FiveM Legacy has no other renderer.
+        api, candidates, source = GraphicsApi.D3D11, ["d3d11"], "FiveM Legacy renderer (Cfx source)"
+    else:
+        api, candidates, source = GraphicsApi.UNKNOWN, [], "unknown"
     info = pe.parse(str(game_exe), with_version=False) if game_exe else None
     ac, details = detect_anti_cheat(str(app), str(app))
     # GTA Online anti-cheat in the separate GTA directory is not a FiveM attestation.
     # Any actual detection in FiveM remains a hard block; none_found is not permission.
     identity = hashlib.sha256(str(root).casefold().encode()).hexdigest()[:20]
-    game = Game(id=f"fivem:{identity}", name=f"FiveM ({edition.value})", install_dir=str(root),
+    title = {Edition.LEGACY: "FiveM Legacy", Edition.ENHANCED: "FiveM (GTA V Enhanced)"}.get(edition, "FiveM")
+    game = Game(id=f"fivem:{identity}", name=title, install_dir=str(root),
                 launcher="fivem", exe_path=str(launcher), api=api, api_candidates=candidates,
                 api_source=source, architecture=info.machine if info and info.valid else None,
                 anti_cheat=ac, anti_cheat_details=details,

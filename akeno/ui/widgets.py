@@ -4,17 +4,29 @@ from __future__ import annotations
 
 from typing import Callable, Iterable
 
-from PySide6.QtCore import QEasingCurve, QPointF, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
+from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
-from PySide6.QtWidgets import (QFrame, QGraphicsDropShadowEffect, QGridLayout, QHBoxLayout, QLabel, QPushButton,
+from PySide6.QtWidgets import (QFrame, QGraphicsDropShadowEffect, QGridLayout, QHBoxLayout, QLabel, QLayout, QPushButton,
                                QSizePolicy, QVBoxLayout, QWidget, QMessageBox)
 
 from akeno.i18n import t
 from akeno.ui import icons, theme
 
 
-def label(text: str = "", role: str | None = None, wrap: bool = False, selectable: bool = False) -> QLabel:
-    lb = QLabel(text)
+class _ShrinkLabel(QLabel):
+    """Word-wrapping label that prefers one line: it only wraps when its layout cannot give it that width."""
+
+    def sizeHint(self) -> QSize:
+        s = super().sizeHint()
+        m = self.contentsMargins()
+        return QSize(self.fontMetrics().horizontalAdvance(self.text()) + m.left() + m.right() + 2, s.height())
+
+
+def label(text: str = "", role: str | None = None, wrap: bool = False, selectable: bool = False,
+          shrink: bool = False) -> QLabel:
+    """``shrink``: one line when there is room, wrapped (instead of widening the page) when there is not."""
+    lb = _ShrinkLabel(text) if shrink else QLabel(text)
+    wrap = wrap or shrink
     if role:
         lb.setProperty("role", role)
     lb.setWordWrap(wrap)
@@ -101,6 +113,11 @@ class StatusPill(QLabel):
     def set(self, text: str, state: str) -> None:
         color = theme.STATE_COLORS.get(state, theme.TEXT_DIM)
         self.setText(f"<span style='color:{color}'>●</span>&nbsp;{text}")
+        # a sentence-long pill wraps instead of forcing the page wider than the window, and then grows in height
+        wrap = len(text) > 48
+        self.setWordWrap(wrap)
+        self.setSizePolicy(QSizePolicy.Policy.Maximum,
+                           QSizePolicy.Policy.Minimum if wrap else QSizePolicy.Policy.Fixed)
         self.setStyleSheet(f"QLabel {{ background: rgba(255,255,255,0.04); border: 1px solid {theme.BORDER_HI};"
                            f" border-radius: 11px; padding: 3px 10px; }}")
         self.setAccessibleName(text)
@@ -798,3 +815,127 @@ class WrapCheck(QWidget):
 
     def setChecked(self, on: bool) -> None:  # noqa: N802 (Qt naming)
         self.box.setChecked(on)
+
+
+class FlowLayout(QLayout):
+    """Left-to-right row that wraps onto the next line when it is too narrow (action buttons, preset chips), so
+    long translations or wide system fonts never force horizontal scrolling."""
+
+    def __init__(self, parent=None, spacing: int = 8):
+        super().__init__(parent)
+        self._items = []
+        self._gap = spacing
+        self.setContentsMargins(0, 0, 0, 0)
+
+    def addItem(self, item) -> None:
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, i):
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def takeAt(self, i):
+        return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:
+        return True
+
+    def heightForWidth(self, width: int) -> int:
+        return self._arrange(QRect(0, 0, width, 0), apply=False)
+
+    def setGeometry(self, rect) -> None:
+        super().setGeometry(rect)
+        self._arrange(rect, apply=True)
+
+    def _visible(self):
+        return [it for it in self._items if not (it.widget() is not None and it.widget().isHidden())]
+
+    def sizeHint(self) -> QSize:
+        items = self._visible()
+        m = self.contentsMargins()
+        w = sum(it.sizeHint().width() for it in items) + self._gap * max(0, len(items) - 1)
+        h = max((it.sizeHint().height() for it in items), default=0)
+        return QSize(w + m.left() + m.right(), h + m.top() + m.bottom())
+
+    def minimumSize(self) -> QSize:
+        size = QSize()
+        for it in self._visible():
+            size = size.expandedTo(it.minimumSize())
+        m = self.contentsMargins()
+        return size + QSize(m.left() + m.right(), m.top() + m.bottom())
+
+    def _arrange(self, rect, apply: bool) -> int:
+        m = self.contentsMargins()
+        area = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom())
+        lines: list[list] = [[]]
+        x = area.x()
+        for it in self._visible():
+            w = it.sizeHint().width()
+            if lines[-1] and x + w > area.right() + 1:
+                lines.append([])
+                x = area.x()
+            lines[-1].append(it)
+            x += w + self._gap
+        y = area.y()
+        for row in lines:
+            height = max((it.sizeHint().height() for it in row), default=0)
+            x = area.x()
+            for it in row:                 # items of different heights share the line's vertical centre
+                hint = it.sizeHint()
+                if apply:
+                    it.setGeometry(QRect(QPoint(x, y + (height - hint.height()) // 2), hint))
+                x += hint.width() + self._gap
+            y += height + self._gap
+        return max(0, y - self._gap) - rect.y() + m.bottom()
+
+
+class ResponsiveRow(QWidget):
+    """Cards side by side when they fit, stacked when the window is too narrow (150 % scaling, long
+    translations), so a page never needs horizontal scrolling."""
+
+    def __init__(self, spacing: int = 16):
+        super().__init__()
+        self._cards: list[tuple[QWidget, int]] = []
+        self._grid = QGridLayout(self)
+        self._grid.setContentsMargins(0, 0, 0, 0)
+        self._grid.setSpacing(spacing)
+        self._stacked: bool | None = None
+
+    def add(self, widget: QWidget, stretch: int = 1) -> None:
+        self._cards.append((widget, stretch))
+        self._place(bool(self._stacked))
+
+    def _side_by_side_width(self) -> int:
+        return (sum(w.minimumSizeHint().width() for w, _ in self._cards)
+                + self._grid.spacing() * max(0, len(self._cards) - 1))
+
+    def minimumSizeHint(self) -> QSize:
+        width = max((w.minimumSizeHint().width() for w, _ in self._cards), default=0)
+        return QSize(width, super().minimumSizeHint().height())
+
+    def resizeEvent(self, e) -> None:
+        super().resizeEvent(e)
+        stacked = e.size().width() < self._side_by_side_width()
+        if stacked != self._stacked:
+            QTimer.singleShot(0, lambda: self._place(stacked))   # not while the parent layout is resizing us
+
+    def _place(self, stacked: bool) -> None:
+        self._stacked = stacked
+        for w, _ in self._cards:
+            self._grid.removeWidget(w)
+        for c in range(len(self._cards)):
+            self._grid.setColumnStretch(c, 0)
+        for i, (w, stretch) in enumerate(self._cards):
+            if stacked:
+                self._grid.addWidget(w, i, 0)
+            else:
+                self._grid.addWidget(w, 0, i)
+                self._grid.setColumnStretch(i, stretch)
+        if stacked:
+            self._grid.setColumnStretch(0, 1)
+

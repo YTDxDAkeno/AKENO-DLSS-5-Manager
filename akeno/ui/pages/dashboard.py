@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 
 from PySide6.QtCore import Qt, QUrl
@@ -10,12 +11,14 @@ from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMenu
 
 from akeno.core.models import CompatStatus, HardwareSupport, Vendor
 from akeno.hardware.gpu_db import nr_hardware_support
-from akeno.i18n import t
+from akeno.i18n import msg, t
 from akeno.recommend.engine import Recommendation
+from akeno.stack import configs
 from akeno.benchmark.stats import consistency_label
 from akeno.ui import art, icons, theme
 from akeno.ui.widgets import (ActionTile, ArtPanel, Card, CheckRow, ElidedLabel, GradientText, KeyValueGrid, Meter,
-                              ProfileRow, Spinner, StatusPill, SubCard, button, clear_layout, info, label, scaled)
+                              ProfileRow, ResponsiveRow, Spinner, StatusPill, SubCard, button, clear_layout, info, label,
+                              scaled)
 
 SUPPORT_TEXT = {HardwareSupport.OFFICIAL: ("Officially supported", "ok"),
                 HardwareSupport.COMMUNITY: ("Community-supported", "ok"),
@@ -29,6 +32,8 @@ COMPAT_TEXT = {CompatStatus.CONFIRMED: ("Confirmed compatible", "ok"),
                CompatStatus.INCOMPATIBLE: ("Known incompatible", "fail"),
                CompatStatus.BLOCKED: ("Installation blocked for safety", "fail")}
 
+
+log = logging.getLogger(__name__)
 
 def fmt_gb(b: int | None) -> str:
     return t("Unknown") if not b else f"{b / 1024 ** 3:.0f} GB"
@@ -70,10 +75,13 @@ class DashboardPage(QWidget):
         self.win = window
         self.s = ctl.s
         self.density = 0
-        grid = QGridLayout(self)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setHorizontalSpacing(14)
-        grid.setVerticalSpacing(14)
+        page = QVBoxLayout(self)
+        page.setContentsMargins(0, 0, 0, 0)
+        page.setSpacing(14)
+        # card pairs side by side when they fit, stacked at 150 % scaling or with long translations
+        top_row, mid_row = ResponsiveRow(14), ResponsiveRow(14)
+        page.addWidget(top_row)
+        page.addWidget(mid_row, 1)
 
         # --- Detected hardware ---------------------------------------------------------------
         self.hw_spinner = Spinner()
@@ -97,7 +105,7 @@ class DashboardPage(QWidget):
         name_row.setSpacing(8)
         self.gpu_logo = QLabel()
         name_row.addWidget(self.gpu_logo)
-        self.gpu_name = label("", "h2")
+        self.gpu_name = label("", "h2", shrink=True)
         self.gpu_name.setStyleSheet("font-size: 14pt; font-weight: 700;")
         name_row.addWidget(self.gpu_name, 1)
         col.addLayout(name_row)
@@ -106,7 +114,7 @@ class DashboardPage(QWidget):
         col.addWidget(self.hw_grid)
         hw_body.addLayout(col, 1)
         self.hw_card.body.addLayout(hw_body)
-        grid.addWidget(self.hw_card, 0, 0, 1, 10)
+        top_row.add(self.hw_card, 10)
 
         # --- Game analysis --------------------------------------------------------------------
         self.btn_change = button(t("Change Game"), tip=t("Pick another installed game"))
@@ -119,7 +127,7 @@ class DashboardPage(QWidget):
         gb.addWidget(self.cover, 0, Qt.AlignmentFlag.AlignTop)
         gcol = QVBoxLayout()
         gcol.setSpacing(6)
-        self.game_name = label("", "h2")
+        self.game_name = label("", "h2", shrink=True)
         self.game_name.setStyleSheet("font-size: 14pt; font-weight: 700;")
         gcol.addWidget(self.game_name)
         prow = QHBoxLayout()
@@ -139,7 +147,7 @@ class DashboardPage(QWidget):
         gcol.addWidget(self.game_grid)
         gb.addLayout(gcol, 1)
         self.game_card.body.addLayout(gb)
-        grid.addWidget(self.game_card, 0, 10, 1, 10)
+        top_row.add(self.game_card, 10)
 
         # --- Smart recommendation ---------------------------------------------------------------
         self.rec_badge = StatusPill("", "pending")
@@ -182,7 +190,7 @@ class DashboardPage(QWidget):
         for sc in (self.perf_sub, self.cons_sub, self.vram_sub):
             subs.addWidget(sc, 1)
         self.rec_card.body.addLayout(subs)
-        grid.addWidget(self.rec_card, 1, 0, 1, 13)
+        mid_row.add(self.rec_card, 13)
 
         # --- Profile comparison ---------------------------------------------------------------
         self.cmp_card = Card(t("Profile Comparison"), "chart", theme.BLUE, fill=True)
@@ -192,14 +200,13 @@ class DashboardPage(QWidget):
         self.cmp_note = label(t("Values appear only after you measure them with a benchmark; estimates are labelled."),
                               "muted", wrap=True)
         self.cmp_card.body.addWidget(self.cmp_note)
-        grid.addWidget(self.cmp_card, 1, 13, 1, 7)
+        mid_row.add(self.cmp_card, 7)
 
         # --- Safety / verification --------------------------------------------------------------
         self.safe_card = Card()
         self.safe_card.setAccessibleName(t("Safety / Verification"))
         self.safe_card.outer.setContentsMargins(18, 12, 18, 12)
-        srow = QHBoxLayout()
-        srow.setSpacing(24)
+        srow = ResponsiveRow(24)          # the checks move below the title when the window is narrow
         shead = QHBoxLayout()
         shead.setSpacing(12)
         self.safe_icon = QLabel()
@@ -217,13 +224,15 @@ class DashboardPage(QWidget):
         swrap = QWidget()
         swrap.setFixedWidth(260)
         swrap.setLayout(shead)
-        srow.addWidget(swrap)
-        self.safe_grid = QGridLayout()
+        srow.add(swrap, 0)
+        checks = QWidget()
+        self.safe_grid = QGridLayout(checks)
+        self.safe_grid.setContentsMargins(0, 0, 0, 0)
         self.safe_grid.setHorizontalSpacing(26)
         self.safe_grid.setVerticalSpacing(6)
-        srow.addLayout(self.safe_grid, 1)
-        self.safe_card.body.addLayout(srow)
-        grid.addWidget(self.safe_card, 2, 0, 1, 20)
+        srow.add(checks, 1)
+        self.safe_card.body.addWidget(srow)
+        page.addWidget(self.safe_card)
 
         # --- Actions (pinned footer, always reachable) -------------------------------------------
         self.footer = QWidget()
@@ -244,14 +253,9 @@ class DashboardPage(QWidget):
         self.a_scan.clicked.connect(lambda: self.ctl.scan_hardware())
         self.a_analyze.clicked.connect(self._analyze)
         self.a_backup.clicked.connect(self._backup)
-        self.a_install.clicked.connect(lambda: self.ctl.navigate.emit("install"))
+        self.a_install.clicked.connect(self._install)
         self.a_restore.clicked.connect(self._restore)
         fl.addLayout(actions)
-        for c in range(20):
-            grid.setColumnStretch(c, 1)
-        grid.setRowStretch(0, 0)
-        grid.setRowStretch(1, 1)
-        grid.setRowStretch(2, 0)
 
         ctl.hardware_changed.connect(self.refresh)
         ctl.games_changed.connect(self.refresh)
@@ -309,8 +313,43 @@ class DashboardPage(QWidget):
         self._refresh_game(game)
         rec = self.s.recommendation(game)
         self._refresh_rec(game, rec)
+        self.stack_state = self._refresh_stack(game)
         self._refresh_cmp(game, rec)
         self._refresh_safety(game)
+
+    def _refresh_stack(self, game):
+        """My Games decides what gets installed; when it has a usable method this overview shows the same
+        recommendation instead of the diagnostic engine's verdict, so the two pages never disagree."""
+        if game is None:
+            return None
+        try:
+            st = self.s.stack.state(game.id)
+        except Exception as exc:          # noqa: BLE001 - the diagnostic verdict stays visible
+            log.info("stack state unavailable for the overview: %s", exc)
+            return None
+        m = st.installed and next((x for x in st.methods if x.recipe.id == st.installed["params"].get("recipe")), None)
+        m = m or st.recommended
+        if m is None or not m.available:
+            return None
+        consumer = next((r.version for r in m.roles if r.role == m.recipe.consumer_role), None)
+        features = self.s.stack.catalog.component(consumer.component).features if consumer else frozenset()
+        family = "renodx" if m.recipe.consumer_role == "consumer_renodx" else "optiscaler"
+        try:
+            scale = configs.model_scale(family, st.preset, features, st.api, m.recipe.uses_feeder)
+        except (KeyError, ValueError):
+            scale = None
+        self.hero_title.setText(t("Recommended DLSS 5 setup for this game"))
+        self.hero_value.setText(f"{scale * 100:.0f}%" if scale else "—")
+        self.hero_value.setToolTip(t("Neural model resolution of the selected quality preset."))
+        self.hero_profile.set(f"{t(m.recipe.name)} · {t(configs.PRESET_LABELS[st.preset])}",
+                              "ok" if st.installed else "info")
+        lead = t("Installed.") if st.installed else t("Install it from {page}.",
+                                                       page=t("FiveM Legacy") if game.launcher == "fivem"
+                                                       else t("My Games"))
+        self.hero_text.setText(t(m.recipe.summary) + "\n• " + lead)
+        self.hero_text.setToolTip(t(m.recipe.summary))
+        self.rec_badge.set(t("Same as My Games"), "ok")
+        return st
 
     def _refresh_hw(self) -> None:
         sysinfo = self.s.system
@@ -545,14 +584,15 @@ class DashboardPage(QWidget):
     def _refresh_safety(self, game) -> None:
         clear_layout(self.safe_grid)
         r = self.s.readiness(game)
+        items = self._stack_checks(r.items)
         rows = 2
-        for i, it in enumerate(r.items):
+        for i, it in enumerate(items):
             self.safe_grid.addWidget(CheckRow(it.state, t(it.title), t(it.detail), compact=True), i % rows, i // rows)
-        cols = max(1, (len(r.items) + rows - 1) // rows)
+        cols = max(1, (len(items) + rows - 1) // rows)
         for c in range(cols):
             self.safe_grid.setColumnStretch(c, 1)
-        done = sum(1 for it in r.items if it.state == "ok")
-        self.safe_sub.setText(t("{n} of {m} checks passed", n=done, m=len(r.items)) if r.items else "")
+        done = sum(1 for it in items if it.state == "ok")
+        self.safe_sub.setText(t("{n} of {m} checks passed", n=done, m=len(items)) if items else "")
         active = self.s.installer.active_install(game.id) if game else None
         self.a_install.setEnabled(r.can_install or r.can_resolve)
         if r.can_resolve:
@@ -568,13 +608,44 @@ class DashboardPage(QWidget):
                                   t("Nothing installed by AKENO for this game."))
         self.a_backup.setEnabled(bool(game and game.exe_path))
         self.a_analyze.setEnabled(not self.ctl.is_busy("analyze"))
+        st = getattr(self, "stack_state", None)
+        if st is not None:
+            # the community stack installs from My Games / FiveM Legacy; the expert installer stays in its tab
+            self.a_install.setEnabled(True)
+            self.a_install.s.setText(t("Open in {page}", page=t("FiveM Legacy") if game.launcher == "fivem"
+                                       else t("My Games")))
+            self.a_install.setToolTip(t("Install, change presets and switch versions there."))
+            active = active or st.installed
         notes = []
-        if not r.can_install and not r.can_resolve and r.reasons:
+        if st is None and not r.can_install and not r.can_resolve and r.reasons:
             notes.append(t("Install unavailable: ") + t(r.reasons[0]))
         if not active and game:
             notes.append(t("Restore unavailable: nothing installed by AKENO for this game."))
         self.action_note.set_text("   ·   ".join(notes))
         self.action_note.setVisible(bool(notes))
+
+    def _stack_checks(self, legacy: list) -> list:
+        """With a My Games method available, the checks describe that method (its pinned downloads, its model
+        build), not the old per-backend installer's runtime import or server-permission state."""
+        st = getattr(self, "stack_state", None)
+        if st is None:
+            return legacy
+        from akeno.services import CheckItem
+        m = next((x for x in st.methods if st.installed and x.recipe.id == st.installed["params"].get("recipe")),
+                 None) or st.recommended
+        nr = next((rc for rc in m.roles if rc.role == "nr_runtime"), None)
+        items = [CheckItem("source", "ok", "Source verified",
+                           msg("{method}: every file is pinned to the SHA-256 of its original release.",
+                               method=m.recipe.name))]
+        if nr and nr.version:
+            items.append(CheckItem("runtime", "ok" if nr.state == "ready" else "pending",
+                                   "DLSS 5 model ready" if nr.state == "ready" else "DLSS 5 model is downloaded on install",
+                                   nr.version.display))
+        items += [it for it in legacy if it.key in ("backup", "community")]
+        items.append(CheckItem("compat", "ok" if m.available else "fail",
+                               "Installed" if st.installed else ("Method available" if m.available else "Blocked"),
+                               msg(m.blockers[0].message) if m.blockers else msg(m.recipe.name)))
+        return items
 
     # -- actions -------------------------------------------------------------------------------
     def _change_game_menu(self) -> None:
@@ -609,6 +680,13 @@ class DashboardPage(QWidget):
             self.ctl.installs_changed.emit()
             info(self, t("Create Backup"), t(res.messages[0]) if res.messages else "", error=not res.ok)
         self.ctl.run("backup", lambda: self.s.create_snapshot(g), done)
+
+    def _install(self) -> None:
+        g = self.s.selected_game()
+        if getattr(self, "stack_state", None) is not None and g is not None:
+            self.ctl.navigate.emit("fivem" if g.launcher == "fivem" else "library")
+        else:
+            self.ctl.navigate.emit("install")
 
     def _restore(self) -> None:
         g = self.s.selected_game()

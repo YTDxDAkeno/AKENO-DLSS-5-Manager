@@ -101,7 +101,9 @@ class SystemInfo:
 
 
 class GraphicsApi(str, Enum):
+    D3D8 = "d3d8"
     D3D9 = "d3d9"
+    D3D10 = "d3d10"
     D3D11 = "d3d11"
     D3D12 = "d3d12"
     VULKAN = "vulkan"
@@ -111,8 +113,8 @@ class GraphicsApi(str, Enum):
     @property
     def label(self) -> str:
         return {
-            "d3d9": "DirectX 9", "d3d11": "DirectX 11", "d3d12": "DirectX 12",
-            "vulkan": "Vulkan", "opengl": "OpenGL", "unknown": "Unknown",
+            "d3d8": "DirectX 8", "d3d9": "DirectX 9", "d3d10": "DirectX 10", "d3d11": "DirectX 11",
+            "d3d12": "DirectX 12", "vulkan": "Vulkan", "opengl": "OpenGL", "unknown": "Unknown",
         }[self.value]
 
 
@@ -151,6 +153,7 @@ class Game:
     anti_cheat_details: list[str] = field(default_factory=list)
     is_running: bool | None = None
     analyzed_at: str | None = None
+    analysis_version: int = 0          # analyzer.ANALYSIS_VERSION that produced this record
     artwork_path: str | None = None
     notes: list[str] = field(default_factory=list)
 

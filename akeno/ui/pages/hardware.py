@@ -17,13 +17,9 @@ from akeno.hardware.gpu_db import nr_hardware_support
 from akeno.i18n import t
 from akeno.ui import art, theme
 from akeno.ui.pages.dashboard import SUPPORT_TEXT, fmt_gb
-from akeno.ui.widgets import (Card, KeyValueGrid, Spinner, StatusPill, button, clear_layout, confirm, info, label,
+from akeno.ui.stack_panel import error_text, mib
+from akeno.ui.widgets import (Card, KeyValueGrid, ResponsiveRow, Spinner, StatusPill, button, clear_layout, confirm, info, label,
                               status_badge)
-
-
-R_LABEL = {"resolvable_local": "found on this PC — Resolve imports it",
-           "resolvable_download": "Resolve downloads and verifies it", "manual": "needs a manual step",
-           "blocked": "blocked", "unknown": "not searched yet"}
 
 
 def collect_diagnostics(s) -> dict:
@@ -91,12 +87,11 @@ class HardwarePage(QWidget):
         self.gpu_box = QVBoxLayout()
         self.gpu_box.setSpacing(12)
         lay.addLayout(self.gpu_box)
-        srow = QHBoxLayout()
-        srow.setSpacing(16)
+        srow = ResponsiveRow()
         self.nr_card = Card(t("DLSS 5 Neural Rendering on this GPU"), "sparkle", theme.VIOLET)
         self.nr_grid = KeyValueGrid(190)
         self.nr_card.body.addWidget(self.nr_grid)
-        srow.addWidget(self.nr_card, 6)
+        srow.add(self.nr_card, 6)
         self.mx_card = Card(t("DLSS technologies by GPU generation"), "layers", theme.CYAN)
         self.mx_grid = QGridLayout()
         self.mx_grid.setHorizontalSpacing(14)
@@ -105,19 +100,18 @@ class HardwarePage(QWidget):
         self.mx_card.body.addWidget(label(t("✓ = officially supported by NVIDIA. Neural Rendering is not an official "
                                             "NVIDIA integration on any GPU; its row shows what upstream projects "
                                             "documented with NVIDIA's signed runtime."), "muted", wrap=True))
-        srow.addWidget(self.mx_card, 5)
-        lay.addLayout(srow)
-        row = QHBoxLayout()
-        row.setSpacing(16)
+        srow.add(self.mx_card, 5)
+        lay.addWidget(srow)
+        row = ResponsiveRow()
         self.sys_card = Card(t("System"), "cpu", theme.BLUE)
         self.sys_grid = KeyValueGrid(170)
         self.sys_card.body.addWidget(self.sys_grid)
-        row.addWidget(self.sys_card, 1)
+        row.add(self.sys_card, 1)
         self.disp_card = Card(t("Displays"), "monitor", theme.CYAN)
         self.disp_grid = KeyValueGrid(170)
         self.disp_card.body.addWidget(self.disp_grid)
-        row.addWidget(self.disp_card, 1)
-        lay.addLayout(row)
+        row.add(self.disp_card, 1)
+        lay.addWidget(row)
         self.err_card = Card(t("Detection notes"), "info", theme.AMBER)
         self.err_text = label("", "dim", wrap=True, selectable=True)
         self.err_card.body.addWidget(self.err_text)
@@ -221,30 +215,51 @@ class HardwarePage(QWidget):
         sup = support.gpu_support(gpu, version, bool(rt or cand), self.s.compat_db.nr_runtimes())
         state = {"ok": "ok", "warn": "warn", "fail": "fail"}.get(sup.community_state, "unknown")
         game = self.s.selected_game()
-        plan = self.s.dependency_plan(game) if game else None
-        missing = [f"{t(d.title)} — {t(R_LABEL.get(d.state, d.state))}" for d in (plan.items if plan else [])
-                   if d.required and not d.satisfied]
         verification = self._verification()
-        rt_text = t("Not available yet")
-        if rt:
-            rt_text = t("{f} {v} (imported, NVIDIA-signed)", f=runtimes.NR_RUNTIME, v=rt.get("version") or "")
-        elif cand:
-            rt_text = t("{f} {v} found on this PC (not imported yet)", f=runtimes.NR_RUNTIME, v=cand.version or "")
-        if sup.runtime and sup.runtime.state in ("works", "fails"):
-            rt_text += "\n" + t(sup.runtime.text)
         rows = [
             (t("Official status"), StatusPill(t("No official NVIDIA support for these mods"), "warn")),
             (t("Community status"), StatusPill(t(sup.community), state)),
-            (t("NVIDIA runtime"), rt_text),
-            (t("Required backend"), "\n".join(t(b) for b in sup.backends) or "—"),
-            (t("Missing dependencies") + (f" ({game.name})" if game else ""),
-             "\n".join(missing) if missing else (t("None") if plan else t("Select a game first."))),
+            *self._stack_rows(gpu, game),
             (t("Known limitations"), "\n".join(t(x) for x in sup.limitations) or "—"),
             (t("Performance recommendations"), "\n".join(t(x) for x in sup.recommendations) or "—"),
             (t("Actual verification"), verification),
         ]
         self.nr_grid.set_rows(rows)
         self._refresh_matrix(gpu.generation if gpu else None)
+
+    def _stack_rows(self, gpu, game) -> list:
+        """What My Games installs for this GPU and the selected game (the same engine, so the pages agree)."""
+        stack = self.s.stack
+        rows = []
+        model = stack.model_for(gpu)
+        if model:
+            ready = stack.store.is_ready(model)
+            text = model.display + " · " + (t("Ready") if ready else t("Download {size}", size=mib(model.size)))
+            if model.signed == "modified":
+                text += "\n" + t("Community build, not signed by NVIDIA")
+            rows.append((t("DLSS 5 model for this GPU"), text))
+        recipes = [r for r in stack.catalog.recipes.values() if r.target == "game"]
+        rows.append((t("Methods"), "\n".join(t(r.name) for r in recipes) + "\n" + t("FiveM Legacy: on its own page")))
+        if game is None:
+            rows.append((t("Selected game"), t("Select a game first.")))
+            return rows
+        try:
+            st = stack.state(game.id)
+        except Exception as exc:              # noqa: BLE001 - shown as text, the page stays usable
+            rows.append((game.name, error_text(exc)))
+            return rows
+        m = st.selected or st.recommended
+        if st.installed:
+            text = t("Installed") + f": {t(m.recipe.name) if m else ''}"
+        elif m and m.available:
+            text = t("{method} · download {size}", method=t(m.recipe.name), size=mib(m.download_bytes)) \
+                if m.download_bytes else t(m.recipe.name)
+        elif m and m.blockers:
+            text = t(m.blockers[0].message)
+        else:
+            text = t("No method fits this game.")
+        rows.append((game.name, text))
+        return rows
 
     def _verification(self):
         """Log-based result for the most recent AKENO installation (any game); never inferred."""

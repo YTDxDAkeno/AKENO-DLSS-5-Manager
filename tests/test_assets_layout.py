@@ -115,42 +115,49 @@ def _settle(qtbot, win, w, h):
     qtbot.wait(150)
 
 
-def test_dashboard_fits_maximised_1920x1080_without_scrolling(window, qtbot):
+def _game_panel(win, qtbot):
+    win.go("library")
+    page = win.pages["library"]
+    qtbot.waitUntil(lambda: page.panel is not None and page.panel.state is not None, timeout=15000)
+    return page.panel
+
+
+def test_my_games_install_action_visible_at_1920x1080(window, qtbot):
     win = window
     _settle(qtbot, win, 1920, 1009)
-    win.go("dashboard")
+    panel = _game_panel(win, qtbot)
     qtbot.wait(100)
-    host = win.hosts["dashboard"]
-    assert host.scroll.verticalScrollBar().maximum() == 0, "dashboard must fit a maximised 1920x1080 window"
     assert win.header.height() == 110
-    dash = win.pages["dashboard"]
-    for card in (dash.hw_card, dash.game_card, dash.rec_card, dash.cmp_card, dash.safe_card):
-        assert card.height() < 420, f"{card.accessibleName()} is too tall ({card.height()} px)"
+    btn = panel.btn_install
+    host = win.hosts["library"]
+    bottom = btn.mapTo(host, btn.rect().bottomLeft()).y()
+    assert btn.isVisible() and bottom <= host.height(), "Install must be visible without scrolling at 1920x1080"
 
 
-def test_actions_stay_reachable_at_150_percent_scaling(window, qtbot):
+def test_game_page_scrolls_and_header_compacts_at_150_percent(window, qtbot):
     win = window
     _settle(qtbot, win, 1280, 680)          # 1920x1080 at 150 % (logical pixels, taskbar subtracted)
-    win.go("dashboard")
+    _game_panel(win, qtbot)
     qtbot.wait(100)
-    dash = win.pages["dashboard"]
-    tile = dash.a_scan
-    bottom = tile.mapTo(win, tile.rect().bottomLeft()).y()
-    assert tile.isVisible() and bottom <= win.height(), "pinned action buttons must stay on screen"
     assert win.header.height() < 110, "short windows get the compact header"
-    assert win.hosts["dashboard"].scroll.verticalScrollBar().maximum() > 0, "content scrolls when it must"
+    page = win.pages["library"]
+    host = win.hosts["library"].scroll
+    assert host.verticalScrollBar().maximum() == 0, "My Games itself never scrolls; its list and game page do"
+    assert page.detail_scroll.verticalScrollBar().maximum() > 0, "the game page scrolls when it must"
+    assert host.widget().minimumSizeHint().width() <= host.viewport().width(), "no horizontal overflow"
+    assert page.detail_scroll.widget().minimumSizeHint().width() <= page.detail_scroll.viewport().width()
 
 
 def test_ultrawide_content_is_capped_and_centred(window, qtbot):
     from akeno.ui.main_window import MAX_CONTENT_WIDTH
     win = window
     _settle(qtbot, win, 3440, 1400)
-    win.go("dashboard")
+    win.go("library")
     qtbot.wait(100)
-    page = win.pages["dashboard"]
+    page = win.pages["library"]
     assert page.width() <= MAX_CONTENT_WIDTH
-    left = page.mapTo(win.hosts["dashboard"], page.rect().topLeft()).x()
-    right = win.hosts["dashboard"].width() - (left + page.width())
+    left = page.mapTo(win.hosts["library"], page.rect().topLeft()).x()
+    right = win.hosts["library"].width() - (left + page.width())
     assert abs(left - right) < 30
 
 
@@ -171,7 +178,6 @@ def test_install_wizard_groups_checks_and_explains_blocks(window, qtbot):
     assert not page.btn_install.isEnabled()
     assert "nvngx_dlssnr.dll" in page.why.text()
     assert page.btn_resolve.isEnabled()
-    assert win.hosts["install"].scroll.verticalScrollBar().maximum() == 0, "wizard fits at 1920x1080"
     page.sec_deps.toggle()
     assert page.sec_deps.expanded
     # while a runtime search runs, neither Resolve nor Install may start a second one silently
@@ -205,3 +211,21 @@ def test_high_dpi_screenshot_render_from_source(tmp_path, akeno_home):
     from PySide6.QtGui import QImage
     img = QImage(str(out / "dashboard.png"))
     assert img.width() == 1920 and img.height() == 1080, "1280x720 logical at 150 % = 1920x1080 physical"
+
+
+def test_no_page_scrolls_sideways_at_150_percent_in_german(window, qtbot):
+    """1280x680 logical pixels is a 1080p screen at 150 %; German has the longest labels."""
+    win = window
+    win.ctl.set_setting("language", "de")
+    qtbot.waitUntil(lambda: win.sidebar.buttons["advanced"].text().strip() == "Erweitert", timeout=5000)
+    _settle(qtbot, win, 1280, 680)
+    too_wide = []
+    for key in list(win.pages):
+        win.go(key)
+        qtbot.wait(150)
+        host = win.hosts.get(key) or win.hosts["advanced"]
+        need, have = host.scroll.widget().minimumSizeHint().width(), host.scroll.viewport().width()
+        if need > have:
+            too_wide.append(f"{key}: {need} > {have}")
+    win.ctl.set_setting("language", "en")
+    assert not too_wide, too_wide

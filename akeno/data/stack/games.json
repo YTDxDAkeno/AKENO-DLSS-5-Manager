@@ -1,0 +1,105 @@
+{
+ "schema": 3,
+ "games": [
+  {
+   "id": "borderlands4",
+   "name": "Borderlands 4",
+   "steam_app_ids": ["1285190"],
+   "executables": ["OakGame/Binaries/Win64/Borderlands4.exe", "OakGame/Binaries/Win64/Borderlands4-Win64-Shipping.exe",
+                   "OakGame/Binaries/WinGDK/Borderlands4.exe"],
+   "api": "d3d12",
+   "upscalers": ["dlss"],
+   "recipes": ["optiscaler", "renodx"],
+   "renodx": {"EnableHooks": "1"},
+   "notes": ["DirectX 12 only (Unreal Engine 5). Its .exe also links d3d11.dll, which is why an import scan alone reads DirectX 11.",
+             "Unreal Engine 5 with DLSS through NVIDIA Streamline; RenoDX DLSS 5 needs EnableHooks=1 there (AKENO sets it).",
+             "Use single-player/offline sessions for testing."]
+  },
+  {
+   "id": "cyberpunk2077",
+   "name": "Cyberpunk 2077",
+   "steam_app_ids": ["1091500"],
+   "executables": ["bin/x64/Cyberpunk2077.exe"],
+   "api": "d3d12",
+   "upscalers": ["dlss", "fsr", "xess"],
+   "recipes": ["optiscaler", "renodx"],
+   "renodx": {"EnableHooks": "1"},
+   "notes": ["With path tracing and Ray Reconstruction, OptiScaler DLSS 5 runs after the upscaler automatically (no pre-SR)."]
+  },
+  {
+   "id": "rdr2",
+   "name": "Red Dead Redemption 2",
+   "steam_app_ids": ["1174180"],
+   "executables": ["RDR2.exe"],
+   "api": "d3d12",
+   "upscalers": ["dlss", "fsr"],
+   "recipes": ["optiscaler", "renodx"],
+   "notes": ["Select DirectX 12 in the game's graphics settings. Story mode only: Red Dead Online is protected."]
+  },
+  {
+   "id": "control",
+   "name": "Control",
+   "steam_app_ids": ["870780"],
+   "executables": ["Control_DX12.exe"],
+   "api": "d3d12",
+   "upscalers": ["dlss"],
+   "recipes": ["optiscaler", "renodx"],
+   "notes": ["Start the DirectX 12 executable (Control_DX12.exe). The Skynizz presets were measured in Control."]
+  },
+  {
+   "id": "witcher3",
+   "name": "The Witcher 3: Wild Hunt",
+   "steam_app_ids": ["292030"],
+   "executables": ["bin/x64_dx12/witcher3.exe"],
+   "api": "d3d12",
+   "upscalers": ["dlss", "fsr"],
+   "recipes": ["optiscaler", "renodx"],
+   "notes": ["DirectX 12 (next-gen) executable. The DirectX 11 executable has no DLSS; use the Feeder recipe there."]
+  },
+  {
+   "id": "witcher3-dx11",
+   "name": "The Witcher 3: Wild Hunt (DirectX 11)",
+   "steam_app_ids": ["292030"],
+   "executables": ["bin/x64/witcher3.exe"],
+   "api": "d3d11",
+   "upscalers": [],
+   "recipes": ["feeder", "feeder_optiscaler"],
+   "notes": ["The DirectX 11 executable has no DLSS of its own, so DLSS5-Feeder supplies the inputs."]
+  },
+  {
+   "id": "gta5-legacy",
+   "name": "Grand Theft Auto V Legacy",
+   "steam_app_ids": ["271590"],
+   "executables": ["GTA5.exe"],
+   "api": "d3d11",
+   "upscalers": [],
+   "recipes": ["feeder", "feeder_optiscaler"],
+   "reshade_definitions": {"RESHADE_DEPTH_INPUT_IS_REVERSED": "1", "RESHADE_DEPTH_LINEARIZATION_FAR_PLANE": "1000.0",
+                           "RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN": "0", "RESHADE_DEPTH_INPUT_IS_LOGARITHMIC": "0"},
+   "notes": ["Story Mode only. GTA Online uses BattlEye; do not go online with graphics mods installed.",
+             "FiveM is a separate entry: FiveM never loads mods from the GTA V folder."]
+  },
+  {
+   "id": "gta5-enhanced",
+   "name": "Grand Theft Auto V Enhanced",
+   "steam_app_ids": ["3240220"],
+   "executables": ["GTA5_Enhanced.exe"],
+   "api": "d3d12",
+   "upscalers": ["dlss", "fsr"],
+   "recipes": ["optiscaler", "renodx"],
+   "notes": ["Story Mode only. GTA Online uses BattlEye; do not go online with graphics mods installed."]
+  },
+  {
+   "id": "fivem-legacy",
+   "name": "FiveM Legacy",
+   "launcher": "fivem",
+   "api": "d3d11",
+   "upscalers": [],
+   "recipes": ["fivem"],
+   "reshade_definitions": {"RESHADE_DEPTH_INPUT_IS_REVERSED": "1", "RESHADE_DEPTH_LINEARIZATION_FAR_PLANE": "1000.0",
+                           "RESHADE_DEPTH_INPUT_IS_UPSIDE_DOWN": "0", "RESHADE_DEPTH_INPUT_IS_LOGARITHMIC": "0"},
+   "feeder": {"preset": "5"},
+   "notes": ["FiveM renders GTA V Legacy through Direct3D 11 (Cfx rage-graphics-five) and loads graphics mods only from FiveM.app\\plugins."]
+  }
+ ]
+}

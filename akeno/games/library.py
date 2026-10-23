@@ -107,6 +107,10 @@ class GameLibrary:
         self.db.upsert_game(game.to_dict(), manual=True)
         return game
 
+    def stale_games(self) -> list[Game]:
+        """Games analysed by an older AKENO (their renderer or executable may be outdated)."""
+        return [g for g in self.games() if g.launcher != "fivem" and g.analysis_version < analyzer.ANALYSIS_VERSION]
+
     def reanalyze(self, game_id: str) -> Game | None:
         g = self.get(game_id)
         if not g:

@@ -109,12 +109,17 @@ def main(argv: list[str] | None = None) -> int:
         if not services.library.games() or services.settings.get("rescan_on_start"):
             # the runtime search also looks in library games, so it runs after the library scan
             ctl.scan_games(on_done=lambda games: ctl.discover_dependencies())
+        elif stale := services.library.stale_games():
+            # records from an older AKENO (e.g. a renderer read from the import table) are refreshed once
+            ctl.run("games", lambda: [services.library.reanalyze(g.id) for g in stale],
+                    lambda _: (ctl.games_changed.emit(), ctl.discover_dependencies()), silent=True)
         else:
             ctl.discover_dependencies()
         if services.settings.get("auto_update_compat_db"):
             win.pages["settings"].update_compat()
         if services.settings.get("check_app_updates"):
             win.pages["settings"].check_updates()
+        win.pages["downloads"].auto_check()
 
     if args.smoke_test:
         return smoke_test(app, ctl, win)
@@ -217,6 +222,7 @@ def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
     app.processEvents()
     dialog.grab().save(os.path.join(out_dir, "bandukids-runtime.png"))
     dialog.close()
+    workers.drain(30000)               # no background result may arrive after the window is gone
     print(f"saved screenshots to {out_dir}")
     return 0
 
