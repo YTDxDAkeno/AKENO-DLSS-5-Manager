@@ -56,7 +56,7 @@ def test_keyboard_shortcuts_and_accessible_names(app_window, qtbot):
             assert b.accessibleName() or b.text()
 
 
-def test_dashboard_shows_real_data_and_wired_actions(app_window, qtbot):
+def test_dashboard_shows_real_data_and_wired_actions(app_window, qtbot, monkeypatch):
     win, ctl, svc = app_window
     dash = win.pages["dashboard"]
     assert "RTX 3080" in dash.gpu_name.text()
@@ -64,10 +64,18 @@ def test_dashboard_shows_real_data_and_wired_actions(app_window, qtbot):
     # every action tile has a click handler
     for tile in (dash.a_scan, dash.a_analyze, dash.a_backup, dash.a_install, dash.a_restore):
         assert tile.receivers("2clicked(bool)") > 0
-    # no runtime imported -> install must be disabled with a reason
+    # the community stack can install this game (its runtime is a pinned download), so the overview agrees with
+    # My Games and its Install tile opens My Games instead of reporting the missing local runtime
+    assert dash.stack_state is not None and dash.stack_state.recommended.available
+    assert dash.a_install.isEnabled() and "My Games" in dash.a_install.s.text()
+    assert not dash.a_restore.isEnabled()
+    # without a usable stack method the diagnostic verdict stays: install disabled with its reason
+    from akeno.stack.errors import StackError
+    monkeypatch.setattr(svc.stack, "state", lambda gid: (_ for _ in ()).throw(StackError("no stack")))
+    dash.refresh()
+    assert dash.stack_state is None
     assert not dash.a_install.isEnabled()
     assert "nvngx_dlssnr.dll" in dash.a_install.toolTip()
-    assert not dash.a_restore.isEnabled()
     # fixture benchmarks are labelled as measured basis, never invented when absent
     assert dash.hero_value.text().endswith("%") or dash.hero_value.text() in ("Off", "—")
 

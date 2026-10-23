@@ -416,6 +416,9 @@ class MainWindow(QMainWindow):
         def work():
             if tx["kind"] == "snapshot":
                 return self.s.restore_snapshot(tx_id, force=True)
+            if tx["backend_id"] == "stack" and tx["state"] == "installed" and tx["kind"] in ("install", "swap"):
+                # the stack also takes back what lives outside the transaction (FiveM's ReShade notice, its logs)
+                return self.s.stack.uninstall(tx["game_id"], force=force)
             return self.s.restore(tx_id, force=force)
 
         def done(res):
@@ -426,7 +429,8 @@ class MainWindow(QMainWindow):
         self.ctl.run("restore", work, done, lambda e: info(self, t("Restore"), str(e), error=True))
 
     def _header_status(self) -> None:
-        n = len([t_ for t_ in self.s.db.transactions() if t_["state"] == "installed"])
+        # one game with an install plus later preset changes is one managed install, not a transaction count
+        n = len({t_["game_id"] for t_ in self.s.db.transactions() if t_["state"] == "installed"})
         text = t("Compatibility DB {v}", v=self.s.compat_db.version)
         if n:
             text += " · " + t("{n} managed install(s)", n=n)

@@ -218,6 +218,7 @@ def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
     app.processEvents()
     dialog.grab().save(os.path.join(out_dir, "bandukids-runtime.png"))
     dialog.close()
+    workers.drain(30000)               # no background result may arrive after the window is gone
     print(f"saved screenshots to {out_dir}")
     return 0
 

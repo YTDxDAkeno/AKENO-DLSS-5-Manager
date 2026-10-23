@@ -249,6 +249,16 @@ def feeder_cfg(overrides: dict | None = None) -> str:
     return "".join(f"{k}={v}\n" for k, v in values.items())
 
 
+def model_scale(family: str, preset: str, features: frozenset[str] = frozenset(), api: str = "d3d12",
+                feeder: bool = False) -> float | None:
+    """Neural model resolution a preset uses (None for Custom, which is the user's own value)."""
+    if preset == "custom":
+        return None
+    if family == "renodx":
+        return _RENODX_TABLE[preset][0]
+    return optiscaler_preset(preset, features, api, feeder)["DlssNr"]["WorkingScale"]
+
+
 def describe_preset(family: str, preset: str, features: frozenset[str] = frozenset(), api: str = "d3d12",
                     feeder: bool = False) -> str:
     """One line telling the user what a preset really changes (a translatable template)."""

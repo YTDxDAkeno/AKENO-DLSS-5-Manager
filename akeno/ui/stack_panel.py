@@ -50,9 +50,10 @@ def version_text(v, gpu_gen: str | None) -> str:
     elif v.signed == "modified":
         parts.append(t("not signed by NVIDIA"))
     if v.gpus:
-        ok = v.supports_gpu(gpu_gen)
-        gens = ", ".join(v.gpus)
-        parts.append(t("for {gpus}", gpus=gens) + ("" if ok is not False else " — " + t("not for your GPU")))
+        if "RTX" not in v.display:         # catalog labels such as "(SF-v2 community build, RTX 20-50)" say it already
+            parts.append(t("for {gpus}", gpus=", ".join(v.gpus)))
+        if v.supports_gpu(gpu_gen) is False:
+            parts.append(t("not for your GPU"))
     return " · ".join(parts)
 
 

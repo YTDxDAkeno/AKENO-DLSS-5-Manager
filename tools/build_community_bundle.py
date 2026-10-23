@@ -13,6 +13,7 @@ import sys
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
+from akeno import __version__
 from akeno.games import pe
 from akeno.security.downloads import DownloadManager,sha256_file
 from akeno.security.archive import extract
@@ -73,7 +74,7 @@ def build(reshade_source,reshade_dll,out):
     with zipfile.ZipFile(source_path) as z:
         for suffix,name in [('/LICENSE','Feeder-MIT.txt'),('/LICENSE-NIGos-dlss5-bridge.md','Feeder-NIGos-bridge-MIT.txt')]:
             member=next(n for n in z.namelist() if n.endswith(suffix));(out/'licenses'/name).write_bytes(z.read(member))
-    manifest={'schema':1,'distribution':'private-local-use','bundle_id':'akeno-community-2.0.0','public_redistribution':True,
+    manifest={'schema':1,'distribution':'private-local-use','bundle_id':f'akeno-community-{__version__}','public_redistribution':True,
         'components':[reshade,motion],'corresponding_source':{'path':source_zip.name,'sha256':sha256_file(source_zip)},
         'packages':[{'id':package['id'],'path':str(fetched.path.relative_to(out)).replace('\\','/'),'sha256':package['sha256']}],
         'additional_sources':[{'path':source_path.name,'sha256':sha256_file(source_path),'commit':package['source_commit']}]}

@@ -29,3 +29,15 @@ def test_real_distributable_contains_full_addon_and_source_without_nvidia(db):
     assert result['motion_provider']['provider_id']==0 and result['motion_provider']['assets']
     source=data['corresponding_source'];assert sha256_file(root/source['path'])==source['sha256']
     assert check(root)>8
+
+
+@pytest.mark.skipif(os.environ.get('AKENO_TEST_REAL_BUNDLE')!='1',reason='Requires the actual Windows CI full add-on build')
+def test_real_bundle_is_what_the_stack_installer_stages(db, tmp_path):
+    from akeno.stack.catalog import StackCatalog
+    from akeno.stack.sources import ComponentStore as StackStore, reshade_identity
+    cat=StackCatalog.load();store=StackStore(db,cat,root=tmp_path/'components')
+    reshade=store.ensure(cat.version('reshade:6.8.0:bundled'))
+    dll=next(p for rel,p in reshade.files.items() if rel.lower().endswith('.dll'))
+    ok,version,why=reshade_identity(dll);assert ok and version.startswith('6.8.0'),why
+    motion=store.ensure(cat.version('dh-uber-motion:0.2.0:bundled'))
+    assert any(rel.endswith('dh_uber_motion.fx') for rel in motion.files)
