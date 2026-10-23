@@ -44,9 +44,9 @@ def data_strings() -> set[str]:
     out |= set(library.LAUNCHERS.values()) | set(backups.STATE.values()) | {n[1] for n in NAV}
     out |= {a.label for a in GraphicsApi}
     from akeno.hardware import support
-    from akeno.ui.pages import hardware, install
+    from akeno.ui.pages import install
     out |= {x for _, n, d in support.FEATURES for x in (n, d)}
-    out |= set(hardware.R_LABEL.values()) | {title for _, title in install.INSTALL_STEPS}
+    out |= {title for _, title in install.INSTALL_STEPS}
     from akeno.fivem.messages import LABELS
     out |= set(LABELS.values())
     from akeno.community.runtime import LABELS as COMMUNITY_LABELS

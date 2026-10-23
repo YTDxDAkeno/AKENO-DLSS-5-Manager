@@ -111,7 +111,9 @@ def runtime_verdict(version: str | None, generation: str | None, data: list[dict
 
 # -- verification from game logs -----------------------------------------------------------------------
 LOG_FILES = ("OptiScaler.log", "dlss5-feed.log", "ReShade.log", os.path.join("host64", "dlss5-feed-host.log"),
-             os.path.join("host64", "ReShade.log"))
+             os.path.join("host64", "ReShade.log"),
+             # FiveM: the installation root is FiveM.app, the add-ons log beside themselves in plugins/
+             os.path.join("plugins", "dlss5-feed.log"), os.path.join("plugins", "ReShade.log"))
 SUCCESS_MARKERS = ( "inline feature 18 evaluation succeeded", "feature 18 created")
 FAILURE_MARKERS = ("feature 18 create failed", "0xbad00001", "neural model not created",
                    "the driver answered the ngx probe", "not a dlss-nr fork")

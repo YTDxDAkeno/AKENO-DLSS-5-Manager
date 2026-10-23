@@ -10,7 +10,7 @@ import urllib.request
 
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QCheckBox, QComboBox, QGridLayout, QHBoxLayout, QLineEdit, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLineEdit, QSpinBox, QVBoxLayout, QWidget
 
 from akeno import __version__
 from akeno.compat.engine import CompatDatabase, CompatDbError
@@ -18,7 +18,7 @@ from akeno.i18n import t
 from akeno.paths import app_home, backups_dir, cache_dir, compat_override_path, is_windows, logs_dir
 from akeno.ui import theme
 from akeno.ui.pages.hardware import export_diagnostics
-from akeno.ui.widgets import Card, KeyValueGrid, button, confirm, info, label
+from akeno.ui.widgets import Card, KeyValueGrid, ResponsiveRow, button, confirm, info, label
 
 log = logging.getLogger(__name__)
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -63,9 +63,9 @@ class SettingsPage(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(14)
         lay.addWidget(label(t("Settings"), "h1"))
-        grid = QGridLayout()
-        grid.setSpacing(16)
-        lay.addLayout(grid)
+        rows = [ResponsiveRow() for _ in range(3)]
+        for r in rows:
+            lay.addWidget(r)
 
         # General / appearance
         gen = Card(t("General"), "globe", theme.BLUE)
@@ -90,14 +90,15 @@ class SettingsPage(QWidget):
         self.autostart.toggled.connect(self._autostart)
         gen.body.addWidget(self.autostart)
         gen.body.addWidget(self._check("rescan_on_start", t("Rescan hardware when AKENO starts")))
-        grid.addWidget(gen, 0, 0)
+        rows[0].add(gen)
 
         # Updates
         upd = Card(t("Updates"), "refresh", theme.CYAN)
         upd.body.addWidget(self._check("check_app_updates", t("Check for AKENO updates on start")))
         upd.body.addWidget(self._check("auto_update_compat_db", t("Update the compatibility database automatically")))
-        upd.body.addWidget(self._check("check_mod_updates", t("Check GitHub for newer mod versions once a day "
-                                                             "(never installs anything by itself)")))
+        mods = self._check("check_mod_updates", t("Check for new mod versions once a day"))
+        mods.setToolTip(t("Asks GitHub for new releases of the mods. Nothing is installed by itself."))
+        upd.body.addWidget(mods)
         self.token = QLineEdit()
         self.token.setEchoMode(QLineEdit.EchoMode.Password)
         self.token.setPlaceholderText(t("Optional: GitHub token for more update checks per hour"))
@@ -116,7 +117,7 @@ class SettingsPage(QWidget):
         upd.body.addWidget(label(t("Database updates are fetched only from AKENO's official repository over HTTPS and "
                                    "are rejected unless every entry passes validation. They never change your "
                                    "settings, profiles or the list of installable packages."), "muted", wrap=True))
-        grid.addWidget(upd, 0, 1)
+        rows[0].add(upd)
 
         # Storage
         sto = Card(t("Storage"), "folder", theme.VIOLET)
@@ -134,7 +135,7 @@ class SettingsPage(QWidget):
         r2.addWidget(button(t("Clear download cache"), "trash", on_click=self._clear_cache))
         r2.addStretch(1)
         sto.body.addLayout(r2)
-        grid.addWidget(sto, 1, 0)
+        rows[1].add(sto)
 
         # Backups & benchmarks
         bb = Card(t("Backups and benchmarks"), "database", theme.GREEN)
@@ -164,16 +165,18 @@ class SettingsPage(QWidget):
         fps.valueChanged.connect(lambda v: ctl.set_setting("target_fps", v))
         fps.setToolTip(t("Recommendations prefer the highest-quality profile that stays above this frame rate."))
         bb.body.addLayout(self._row(t("FPS target"), fps))
-        grid.addWidget(bb, 1, 1)
+        rows[1].add(bb)
 
         # Safety
         saf = Card(t("Safety defaults"), "shield", theme.AMBER)
         saf.body.addWidget(self._check("block_unknown_conflicts", t("Stop installation when unknown graphics hooks are found")))
-        saf.body.addWidget(label(t("Always enforced, cannot be turned off: anti-cheat games are blocked, only reviewed "
-                                   "hash-pinned packages are installed, NVIDIA files must carry NVIDIA's signature, "
-                                   "every installation is shown for confirmation, and foreign files are never "
-                                   "overwritten or deleted."), "muted", wrap=True))
-        grid.addWidget(saf, 2, 0)
+        saf.body.addWidget(label(t("Always on: every download is checked against the SHA-256 of its original "
+                                   "release, every installation is previewed before anything changes, originals "
+                                   "are backed up and verified first, and removal puts them back byte for byte. "
+                                   "Games with anti-cheat need your confirmation that you play offline. Files of "
+                                   "other mods are only replaced or disabled after you approve them in the "
+                                   "preview."), "muted", wrap=True))
+        rows[2].add(saf)
 
         # Diagnostics
         dia = Card(t("Diagnostics"), "info", theme.BLUE)
@@ -185,16 +188,14 @@ class SettingsPage(QWidget):
         r3.addWidget(button(t("Rescan hardware"), "chip", on_click=lambda: ctl.scan_hardware()))
         r3.addStretch(1)
         dia.body.addLayout(r3)
-        grid.addWidget(dia, 2, 1)
+        rows[2].add(dia)
 
         reset = Card(t("Reset"), "restore", theme.RED)
         reset.body.addWidget(label(t("Factory reset restores AKENO's settings to their defaults. Your games, profiles, "
                                      "benchmarks, backups and installed mods are kept, so everything can still be "
                                      "restored."), "dim", wrap=True))
         reset.body.addWidget(button(t("Factory reset settings"), "restore", "danger", on_click=self._reset))
-        grid.addWidget(reset, 3, 0, 1, 2)
-        grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 1)
+        lay.addWidget(reset)
         lay.addStretch(1)
         self._refresh_storage()
 

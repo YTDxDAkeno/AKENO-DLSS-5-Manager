@@ -156,6 +156,12 @@ class StackManager:
             out.extend(self.releases.discovered_versions(c))
         return out
 
+    def model_for(self, gpu: GpuInfo | None) -> ComponentVersion | None:
+        """The DLSS 5 model build My Games preselects for this GPU."""
+        options = [v for c in self.catalog.components.values() if c.role == "nr_runtime"
+                   for v in self.all_versions(c.id, include_unreviewed=False)]
+        return self._default_version(options, "nr_runtime", gpu)
+
     def _default_version(self, options: list[ComponentVersion], role: str, gpu: GpuInfo | None) -> ComponentVersion | None:
         gen = _gen(gpu)
         usable = [v for v in options if v.supports_gpu(gen) is not False and v.reviewed]

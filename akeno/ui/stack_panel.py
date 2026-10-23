@@ -22,7 +22,7 @@ from akeno.security.downloads import CancelToken
 from akeno.stack import configs
 from akeno.stack.errors import explain
 from akeno.ui import art, theme
-from akeno.ui.widgets import Card, Clickable, KeyValueGrid, Spinner, StatusPill, button, clear_layout, confirm, info, \
+from akeno.ui.widgets import Card, Clickable, FlowLayout, KeyValueGrid, Spinner, StatusPill, button, clear_layout, confirm, info, \
     label, scaled
 
 LAUNCHERS = {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "ubisoft": "Ubisoft Connect", "ea": "EA app",
@@ -176,7 +176,7 @@ class MethodCard(Clickable):
         lay.setContentsMargins(14, 10, 14, 10)
         lay.setSpacing(3)
         head = QHBoxLayout()
-        title = label(t(m.recipe.name), "h3")
+        title = label(t(m.recipe.name), "h3", shrink=True)
         head.addWidget(title)
         if recommended and m.available:
             head.addWidget(StatusPill(t("Recommended"), "ok"))
@@ -228,21 +228,20 @@ class GamePanel(QWidget):
         self.versions.setColumnStretch(1, 1)
         self.main.body.addLayout(self.versions)
         self.main.body.addWidget(label(t("Quality preset"), "h3"))
-        chips = QHBoxLayout()
+        chips = FlowLayout()
         self.preset_buttons: dict[str, QPushButton] = {}
         for key in configs.PRESETS:
             b = button(t(configs.PRESET_LABELS[key]), kind="chip", on_click=lambda _=False, k=key: self._preset(k))
             b.setCheckable(True)
             self.preset_buttons[key] = b
             chips.addWidget(b)
-        chips.addStretch(1)
         self.main.body.addLayout(chips)
         self.preset_text = label("", "dim", wrap=True)
         self.main.body.addWidget(self.preset_text)
         self.issues_box = QVBoxLayout()
         self.issues_box.setSpacing(4)
         self.main.body.addLayout(self.issues_box)
-        actions = QHBoxLayout()
+        actions = FlowLayout()
         self.btn_install = button(t("Install DLSS 5"), "download", "primary", on_click=self.install)
         self.btn_install.setMinimumHeight(40)
         self.btn_launch = button(t("Launch game"), "play", on_click=self.launch)
@@ -250,7 +249,6 @@ class GamePanel(QWidget):
         self.btn_remove = button(t("Remove mod"), "trash", "danger", on_click=self.remove)
         for b in (self.btn_install, self.btn_launch, self.btn_previous, self.btn_remove):
             actions.addWidget(b)
-        actions.addStretch(1)
         self.main.body.addLayout(actions)
         prog = QHBoxLayout()
         self.progress = QProgressBar()
@@ -313,14 +311,14 @@ class GamePanel(QWidget):
         img.setFixedSize(230, 108)
         self.header_lay.addWidget(img)
         col = QVBoxLayout()
-        col.addWidget(label(g.name, "h1"))
+        col.addWidget(label(g.name, "h1", shrink=True))
         api = GraphicsApi(st.api).label if st.api in {a.value for a in GraphicsApi} else st.api
         col.addWidget(label(" · ".join([t(LAUNCHERS.get(g.launcher, g.launcher)), t(api), g.architecture or ""]).strip(" ·"),
                             "dim"))
         gpu = st.gpu
         col.addWidget(label((gpu.name + (f" · {gpu.generation}" if gpu.generation else "") +
                              (f" · {t('driver')} {gpu.driver_version}" if gpu.driver_version else ""))
-                            if gpu else t("Graphics card not detected yet"), "muted"))
+                            if gpu else t("Graphics card not detected yet"), "muted", shrink=True))
         if st.installed:
             p = st.installed["params"]
             recipe = self.stack.catalog.recipes.get(p.get("recipe"))
@@ -350,7 +348,7 @@ class GamePanel(QWidget):
         gen = gpu.generation if gpu else None
         if st.selected:
             for i, rc in enumerate(st.selected.roles):
-                self.versions.addWidget(label(t(rc.title), "key"), i, 0)
+                self.versions.addWidget(label(t(rc.title), "key", shrink=True), i, 0)
                 combo = QComboBox()
                 combo.setAccessibleName(t(rc.title))
                 combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
