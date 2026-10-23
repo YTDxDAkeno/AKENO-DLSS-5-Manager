@@ -20,9 +20,11 @@ from akeno.i18n import t
 from akeno.ui import art, assets, icons, theme
 from akeno.ui.widgets import StatusPill, confirm, info, label
 
-NAV = [("dashboard", "Dashboard", "home"), ("hardware", "Hardware Scan", "chip"), ("library", "My Games", "gamepad"),
-       ("profiles", "Smart Profiles", "sliders"), ("benchmark", "Benchmark", "chart"),
-       ("install", "Secure Install", "shield"), ("backups", "Backups", "database"), ("settings", "Settings", "gear")]
+NAV = [("library", "My Games", "gamepad"), ("fivem", "FiveM Legacy", "fivem"), ("installed", "Installed Mods", "layers"),
+       ("downloads", "Downloads", "download"), ("backups", "Restore / Backups", "restore"),
+       ("hardware", "Hardware", "chip"), ("advanced", "Advanced", "gauge"), ("settings", "Settings", "gear")]
+# Pages shown as tabs of "Advanced" (diagnostics and the v1 per-backend installer).
+ADVANCED = ("dashboard", "benchmark", "profiles", "install")
 
 MAX_CONTENT_WIDTH = 2300          # ultrawide: centre the page instead of stretching cards to 3000+ px
 # (window height threshold, header height, title pt, subtitle pt)
@@ -305,11 +307,15 @@ class MainWindow(QMainWindow):
         self.resize(w, h)
 
     def _build(self) -> None:
+        from akeno.ui.pages.advanced import AdvancedPage
         from akeno.ui.pages.backups import BackupsPage
         from akeno.ui.pages.benchmark import BenchmarkPage
         from akeno.ui.pages.dashboard import DashboardPage
+        from akeno.ui.pages.downloads import DownloadsPage
+        from akeno.ui.pages.fivem import FiveMPage
         from akeno.ui.pages.hardware import HardwarePage
         from akeno.ui.pages.install import InstallPage
+        from akeno.ui.pages.installed import InstalledPage
         from akeno.ui.pages.library import LibraryPage
         from akeno.ui.pages.profiles import ProfilesPage
         from akeno.ui.pages.settings import SettingsPage
@@ -335,15 +341,22 @@ class MainWindow(QMainWindow):
         self.statusBar().setSizeGripEnabled(True)
         self.pages = {}
         self.hosts = {}
-        for key, cls in (("dashboard", DashboardPage), ("hardware", HardwarePage), ("library", LibraryPage),
-                         ("profiles", ProfilesPage), ("benchmark", BenchmarkPage), ("install", InstallPage),
-                         ("backups", BackupsPage), ("settings", SettingsPage)):
+        advanced = {}
+        for key, cls in (("dashboard", DashboardPage), ("benchmark", BenchmarkPage), ("profiles", ProfilesPage),
+                         ("install", InstallPage)):
             page = cls(self.ctl, self)
+            page.setObjectName(f"page_{key}")
+            advanced[key] = page
+        main = {"library": LibraryPage, "fivem": FiveMPage, "installed": InstalledPage, "downloads": DownloadsPage,
+                "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage}
+        for key, _, _ in NAV:
+            page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")
             host = PageHost(page)
             self.pages[key] = page
             self.hosts[key] = host
             self.stack.addWidget(host)
+        self.pages.update(advanced)
         self._apply_density()
 
     def resizeEvent(self, e):
@@ -363,16 +376,24 @@ class MainWindow(QMainWindow):
 
     def go(self, key: str) -> None:
         keys = [k for k, _, _ in NAV]
+        tab = None
+        if key in ADVANCED:
+            key, tab = "advanced", key
         if key not in keys:
             return
         self.stack.setCurrentIndex(keys.index(key))
         self.sidebar.select(key)
         page = self.pages[key]
-        if hasattr(page, "on_show"):
+        if tab:
+            page.show_tab(tab)
+        elif hasattr(page, "on_show"):
             page.on_show()
 
     def current_page(self) -> str:
-        return [k for k, _, _ in NAV][self.stack.currentIndex()]
+        key = [k for k, _, _ in NAV][self.stack.currentIndex()]
+        if key == "advanced":
+            return self.pages["advanced"].keys[self.pages["advanced"].tabs.currentIndex()]
+        return key
 
     def open_profile(self, profile_id: str) -> None:
         self.go("profiles")

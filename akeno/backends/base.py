@@ -86,6 +86,10 @@ class InstallPlan:
     summary: list[str] = field(default_factory=list)
     kind: str = "install"                             # install | configure | swap
     expected_originals: dict[str, str] = field(default_factory=dict)  # explicit reviewed swap preconditions
+    # Existing files the user approved to overwrite; their originals are backed up and restored on uninstall.
+    replace_foreign: set[str] = field(default_factory=set)
+    # Proceed although managed files were changed after installation (their backups are still verified).
+    force: bool = False
 
 
 @dataclass

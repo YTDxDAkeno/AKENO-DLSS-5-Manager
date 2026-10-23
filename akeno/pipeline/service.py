@@ -112,7 +112,7 @@ class PipelineService:
             plan.backend_id='community:optiscaler_nr'
             plan.params.update(_community_runtime=runtime_sha,_review=candidate.review,_offline_attested=True,
                                _trust_category=candidate.category.value)
-            from akeno.mods.configuration import feeder_configuration
+            from akeno.pipeline.feeder_config import feeder_configuration
             plan.ops.extend(feeder_configuration(self.s,game,motion))
             plan.params['_transport']='d3d11_private_d3d12' if game.api.value=='d3d11' else 'native_d3d12'
             plan.summary.append('Feeder supplies color/depth/motion inputs on its D3D12 contract. Validate the selected depth buffer during gameplay; no NR execution is claimed.')

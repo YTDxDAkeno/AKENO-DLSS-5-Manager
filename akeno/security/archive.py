@@ -14,7 +14,8 @@ import stat
 import zipfile
 from pathlib import Path, PurePosixPath
 
-MAX_MEMBER = 128 * 1024 * 1024
+# nvngx_dlssnr.dll (the DLSS 5 model) alone is 165.8 MB uncompressed.
+MAX_MEMBER = 256 * 1024 * 1024
 MAX_TOTAL = 512 * 1024 * 1024
 MAX_RATIO = 200
 _RESERVED = re.compile(r"^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$", re.I)

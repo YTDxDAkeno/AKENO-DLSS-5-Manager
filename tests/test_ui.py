@@ -37,18 +37,20 @@ def app_window(qtbot, akeno_home, tmp_path):
 
 def test_all_pages_navigate(app_window, qtbot):
     win, ctl, svc = app_window
-    from akeno.ui.main_window import NAV
+    from akeno.ui.main_window import ADVANCED, NAV
     for key, _, _ in NAV:
         win.sidebar.buttons[key].click()
-        assert win.current_page() == key
-    assert set(win.pages) == {k for k, _, _ in NAV}
+        assert win.current_page() == key or (key == "advanced" and win.current_page() in ADVANCED)
+    assert set(win.pages) == {k for k, _, _ in NAV} | set(ADVANCED)
 
 
 def test_keyboard_shortcuts_and_accessible_names(app_window, qtbot):
     win, ctl, svc = app_window
     from PySide6.QtCore import Qt
-    qtbot.keyClick(win, Qt.Key.Key_3, Qt.KeyboardModifier.ControlModifier)
+    qtbot.keyClick(win, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
     assert win.current_page() == "library"
+    qtbot.keyClick(win, Qt.Key.Key_2, Qt.KeyboardModifier.ControlModifier)
+    assert win.current_page() == "fivem"
     for b in win.findChildren(QPushButton):
         if b.isVisible() and b.text().strip():
             assert b.accessibleName() or b.text()
@@ -73,10 +75,10 @@ def test_dashboard_shows_real_data_and_wired_actions(app_window, qtbot):
 def test_language_switch_rebuilds_ui(app_window, qtbot):
     win, ctl, svc = app_window
     ctl.set_setting("language", "de")
-    qtbot.waitUntil(lambda: win.sidebar.buttons["dashboard"].text().strip() == "Übersicht", timeout=3000)
+    qtbot.waitUntil(lambda: win.sidebar.buttons["advanced"].text().strip() == "Erweitert", timeout=3000)
     assert "Meine Spiele" in win.sidebar.buttons["library"].text()
     ctl.set_setting("language", "en")
-    qtbot.waitUntil(lambda: win.sidebar.buttons["dashboard"].text().strip() == "Dashboard", timeout=3000)
+    qtbot.waitUntil(lambda: win.sidebar.buttons["advanced"].text().strip() == "Advanced", timeout=3000)
 
 
 def test_backup_snapshot_from_backups_page(app_window, qtbot, monkeypatch):

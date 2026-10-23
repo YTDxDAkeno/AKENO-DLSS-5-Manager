@@ -65,7 +65,7 @@ def device_ratio() -> int:
 # AKENO icon name -> design package SVG (assets/icons/<file>.svg)
 ASSET_ICONS = {"home": "home", "chip": "cpu", "gamepad": "gamepad", "sliders": "sliders", "chart": "chart",
                "shield": "shield", "database": "database", "gear": "settings", "restore": "rotate",
-               "folder": "folder", "download": "download"}
+               "folder": "folder", "download": "download", "fivem": "fivem"}
 
 
 @lru_cache(maxsize=512)

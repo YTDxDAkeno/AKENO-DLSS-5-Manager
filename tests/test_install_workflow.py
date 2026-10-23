@@ -110,9 +110,13 @@ def test_user_modified_file_needs_confirmation_and_running_game_blocks(env, db, 
     pkg = svc.package_for(adapter)
     plan = svc.plan_install(game, adapter, pkg, adapter.default_params(game), svc.stage(game, adapter, pkg))
     tx = svc.install(game, plan).tx_id
-    (game_dir / "bin" / "x64" / "OptiScaler.ini").write_text("edited by user")
+    # OptiScaler saves its own ini from the overlay: an edited config file is expected, not a conflict.
+    (game_dir / "bin" / "x64" / "OptiScaler.ini").write_text("edited by OptiScaler's overlay")
+    assert svc.installer.check_restore(tx) == []
+    # A changed binary is different: AKENO must not silently replace bytes it did not install.
+    (game_dir / "bin" / "x64" / "winmm.dll").write_bytes(b"replaced by another tool")
     conflicts = svc.installer.check_restore(tx)
-    assert [c.rel_path for c in conflicts] == ["OptiScaler.ini"]
+    assert [c.rel_path for c in conflicts] == ["winmm.dll"]
     r = svc.installer.restore(tx)
     assert not r.ok and r.conflicts
     busy = Installer(db, tmp_path / "backups", running_check=lambda d: [type("P", (), {"name": "NightCity.exe"})()])

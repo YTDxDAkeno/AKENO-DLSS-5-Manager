@@ -1,0 +1,107 @@
+{
+ "schema": 3,
+ "recipes": [
+  {
+   "id": "optiscaler",
+   "name": "OptiScaler DLSS 5",
+   "target": "game",
+   "apis": ["d3d12", "d3d11", "vulkan"],
+   "architectures": ["x64"],
+   "needs_upscaler": "any",
+   "roles": {
+    "consumer_optiscaler": ["optiscaler-dlss5", "optiscaler-dlssnr"],
+    "nr_runtime": ["nvngx-dlssnr"]
+   },
+   "presets": "optiscaler",
+   "summary": "Hooks the upscaler the game already has (DLSS, FSR 2+ or XeSS) and runs the DLSS 5 model on its output.",
+   "details": [
+    "OptiScaler loads through a free system DLL name (winmm.dll, version.dll, ...) or OptiScaler.asi next to an ASI loader.",
+    "Turn DLSS (or FSR/XeSS) on in the game's graphics settings. OptiScaler's menu opens with the Insert key."
+   ]
+  },
+  {
+   "id": "renodx",
+   "name": "RenoDX DLSS 5 (ReShade add-on)",
+   "target": "game",
+   "apis": ["d3d12", "d3d11"],
+   "architectures": ["x64"],
+   "needs_upscaler": "dlss",
+   "roles": {
+    "reshade": ["reshade"],
+    "consumer_renodx": ["renodx-dlss5"],
+    "nr_runtime": ["nvngx-dlssnr"]
+   },
+   "presets": "renodx",
+   "summary": "ReShade add-on that runs DLSS 5 on the game's own DLSS calls.",
+   "details": [
+    "ReShade is installed as dxgi.dll with add-on support; the add-on is configured in ReShade.ini [RenoDX.DLSS5].",
+    "Turn DLSS on in the game's graphics settings. The ReShade overlay opens with the Home key."
+   ]
+  },
+  {
+   "id": "feeder",
+   "name": "DLSS5-Feeder + RenoDX DLSS 5",
+   "target": "game",
+   "apis": ["d3d11", "d3d12"],
+   "architectures": ["x64"],
+   "needs_upscaler": null,
+   "roles": {
+    "reshade": ["reshade"],
+    "feeder": ["dlss5-feeder"],
+    "motion": ["dh-uber-motion"],
+    "consumer_renodx": ["renodx-dlss5"],
+    "sr_runtime": ["nvngx-dlss"],
+    "nr_runtime": ["nvngx-dlssnr"]
+   },
+   "presets": "renodx",
+   "summary": "For games without DLSS: the Feeder builds the DLSS request from ReShade depth and estimated motion vectors.",
+   "details": [
+    "Motion vectors are estimated by a ReShade shader, so fast motion can ghost a little.",
+    "Turn MSAA/SSAA off in the game. The ReShade overlay opens with the Home key."
+   ]
+  },
+  {
+   "id": "feeder_optiscaler",
+   "name": "DLSS5-Feeder + OptiScaler DLSS 5",
+   "target": "game",
+   "apis": ["d3d11", "d3d12"],
+   "architectures": ["x64"],
+   "needs_upscaler": null,
+   "roles": {
+    "reshade": ["reshade"],
+    "feeder": ["dlss5-feeder"],
+    "motion": ["dh-uber-motion"],
+    "consumer_optiscaler": ["optiscaler-dlss5"],
+    "sr_runtime": ["nvngx-dlss"],
+    "nr_runtime": ["nvngx-dlssnr"]
+   },
+   "presets": "optiscaler_feeder",
+   "summary": "Alternative for games without DLSS: OptiScaler DLSS 5 is the neural consumer of the Feeder's DLSS request.",
+   "details": [
+    "OptiScaler runs after the Feeder's DLAA evaluate (pre-SR off) on the Feeder's private D3D12 device."
+   ]
+  },
+  {
+   "id": "fivem",
+   "name": "FiveM Legacy: DLSS5-Feeder + RenoDX DLSS 5",
+   "target": "fivem",
+   "apis": ["d3d11"],
+   "architectures": ["x64"],
+   "needs_upscaler": null,
+   "roles": {
+    "reshade": ["reshade"],
+    "feeder": ["dlss5-feeder"],
+    "motion": ["dh-uber-motion"],
+    "consumer_renodx": ["renodx-dlss5"],
+    "sr_runtime": ["nvngx-dlss"],
+    "nr_runtime": ["nvngx-dlssnr"]
+   },
+   "presets": "renodx",
+   "summary": "Installs into FiveM.app\\plugins: ReShade as d3d11.dll (the only name FiveM loads), the in-process Feeder and RenoDX DLSS 5.",
+   "details": [
+    "GTA V files are never touched. FiveM blocks ReShade 5+ until its crash-risk acknowledgement is in CitizenFX.ini.",
+    "In game: Home opens ReShade; the motion shader must stay above DLSS 5 Feed (AKENO sets this order)."
+   ]
+  }
+ ]
+}

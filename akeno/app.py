@@ -115,6 +115,7 @@ def main(argv: list[str] | None = None) -> int:
             win.pages["settings"].update_compat()
         if services.settings.get("check_app_updates"):
             win.pages["settings"].check_updates()
+        win.pages["downloads"].auto_check()
 
     if args.smoke_test:
         return smoke_test(app, ctl, win)

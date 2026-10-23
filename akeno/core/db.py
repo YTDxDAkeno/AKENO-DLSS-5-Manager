@@ -98,6 +98,10 @@ class Database:
             self._conn.execute(
                 "INSERT OR IGNORE INTO meta(key, value) VALUES('schema_version', ?)", (str(SCHEMA_VERSION),)
             )
+            # v2.1: remember whether a journalled file is a configuration file the mod itself rewrites.
+            cols = {r[1] for r in self._conn.execute("PRAGMA table_info(transaction_files)")}
+            if "file_kind" not in cols:
+                self._conn.execute("ALTER TABLE transaction_files ADD COLUMN file_kind TEXT")
 
     def close(self) -> None:
         with self._lock:
@@ -236,13 +240,14 @@ class Database:
     def record_tx_file(self, tx_id: int, rel_path: str, action: str, **kw: Any) -> None:
         self.execute(
             """INSERT INTO transaction_files(tx_id, rel_path, action, original_sha256, original_size, original_mtime,
-               backup_path, installed_sha256) VALUES(?,?,?,?,?,?,?,?)
+               backup_path, installed_sha256, file_kind) VALUES(?,?,?,?,?,?,?,?,?)
                ON CONFLICT(tx_id, rel_path) DO UPDATE SET action=excluded.action,
                original_sha256=excluded.original_sha256, original_size=excluded.original_size,
                original_mtime=excluded.original_mtime, backup_path=excluded.backup_path,
-               installed_sha256=COALESCE(excluded.installed_sha256, transaction_files.installed_sha256)""",
+               installed_sha256=COALESCE(excluded.installed_sha256, transaction_files.installed_sha256),
+               file_kind=COALESCE(excluded.file_kind, transaction_files.file_kind)""",
             (tx_id, rel_path, action, kw.get("original_sha256"), kw.get("original_size"), kw.get("original_mtime"),
-             kw.get("backup_path"), kw.get("installed_sha256")),
+             kw.get("backup_path"), kw.get("installed_sha256"), kw.get("file_kind")),
         )
 
     def set_tx_file_installed(self, tx_id: int, rel_path: str, sha: str) -> None:
