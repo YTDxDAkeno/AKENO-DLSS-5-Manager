@@ -18,6 +18,8 @@ import json
 import re
 import sys
 import tempfile
+import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 
@@ -39,22 +41,39 @@ def downloadable(cat: StackCatalog):
                 yield c, v
 
 
-def download(cat: StackCatalog, folder: Path) -> list[str]:
+def download(cat: StackCatalog, folder: Path) -> tuple[list[str], list[str]]:
+    """Fetch every pinned asset from its catalog URL (the URL users download from). Every failure is reported."""
     folder.mkdir(parents=True, exist_ok=True)
-    out = []
+    out, problems = [], []
     for c, v in downloadable(cat):
         dest = folder / v.asset
         if dest.is_file() and sha256_file(dest) == v.sha256:
             out.append(f"cached {v.asset}")
             continue
-        req = urllib.request.Request(v.url, headers={"User-Agent": "AKENO-catalog-validator"})
-        with urllib.request.urlopen(req, timeout=120) as resp, open(dest, "wb") as fh:
-            while chunk := resp.read(1 << 20):
-                fh.write(chunk)
-        if sha256_file(dest) != v.sha256:
-            raise SystemExit(f"{v.asset}: downloaded bytes do not match the catalog pin")
-        out.append(f"downloaded {v.asset}")
-    return out
+        error = None
+        for attempt in range(3):
+            try:
+                req = urllib.request.Request(v.url, headers={"User-Agent": "AKENO-catalog-validator"})
+                with urllib.request.urlopen(req, timeout=120) as resp, open(dest, "wb") as fh:
+                    while chunk := resp.read(1 << 20):
+                        fh.write(chunk)
+                error = None
+                break
+            except urllib.error.HTTPError as exc:
+                error = f"HTTP {exc.code}"
+                if exc.code in (403, 404, 410):    # not transient: the pinned URL itself is wrong or gone
+                    break
+            except (urllib.error.URLError, OSError) as exc:
+                error = str(exc)
+            time.sleep(2 ** attempt)
+        if error:
+            dest.unlink(missing_ok=True)
+            problems.append(f"{c.id} {v.version}: {v.url} -> {error}")
+        elif sha256_file(dest) != v.sha256:
+            problems.append(f"{c.id} {v.version}: downloaded bytes do not match the catalog pin")
+        else:
+            out.append(f"downloaded {v.asset}")
+    return out, problems
 
 
 def check_member(c, v, rel: str, path: Path, problems: list[str]) -> None:
@@ -127,10 +146,12 @@ def main() -> int:
     cat = StackCatalog.load()
     report = {"components": len(cat.components), "recipes": len(cat.recipes), "games": len(cat.games),
               "versions": sum(1 for _ in downloadable(cat))}
+    fetch_problems: list[str] = []
     if args.download:
-        report["download"] = download(cat, args.download)
+        report["download"], fetch_problems = download(cat, args.download)
     if args.archive_dir or args.download:
         report.update(verify(cat, args.archive_dir or args.download))
+        report["problems"] = fetch_problems + report["problems"]
     print(json.dumps(report, indent=1))
     return 1 if report.get("problems") else 0
 

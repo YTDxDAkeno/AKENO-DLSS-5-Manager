@@ -171,12 +171,15 @@ def _version_from(data: dict[str, Any], component: str) -> ComponentVersion:
     return ComponentVersion(component=component, **kw)
 
 
-def _check_asset_url(repo: str, url: str) -> None:
+def _check_asset_url(repo: str, url: str, tag: str | None = None, asset: str | None = None) -> None:
     parts = urllib.parse.urlsplit(url)
     prefix = f"/{repo}/releases/download/"
     if parts.scheme != "https" or parts.netloc != "github.com" or parts.query or parts.fragment \
             or not parts.path.startswith(prefix) or ".." in urllib.parse.unquote(parts.path).split("/"):
         raise ValueError(f"Release asset outside its original repository: {url}")
+    # the URL must be exactly the release's own asset link, so a renamed pin can never point at nothing
+    if tag and asset and urllib.parse.unquote(parts.path) != f"{prefix}{tag}/{asset}":
+        raise ValueError(f"Release asset URL does not match its tag and asset name: {url}")
 
 
 def _safe_member(name: str) -> str:
@@ -244,7 +247,7 @@ class StackCatalog:
                 if v.source == "download":
                     if not c.repository or not v.url or not v.sha256 or not _SHA.fullmatch(v.sha256):
                         raise ValueError(f"{c.id} {v.version}: download needs a repository, URL and SHA-256.")
-                    _check_asset_url(c.repository, v.url)
+                    _check_asset_url(c.repository, v.url, v.tag, v.asset)
                     if not v.files or any(not s or not _SHA.fullmatch(s) for s in v.files.values()):
                         raise ValueError(f"{c.id} {v.version}: every extracted file needs its SHA-256.")
                     for name in v.files:

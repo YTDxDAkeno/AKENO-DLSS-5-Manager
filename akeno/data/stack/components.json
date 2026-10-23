@@ -30,8 +30,8 @@
    "versions": [
     {
      "tag": "v1.3.0",
-     "asset": "optiscaler-dlss5-skynizz-1.3.0.zip",
-     "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.3.0/optiscaler-dlss5-skynizz-1.3.0.zip",
+     "asset": "OptiScaler-DLSS5-1.3.0-win-x64.zip",
+     "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.3.0/OptiScaler-DLSS5-1.3.0-win-x64.zip",
      "sha256": "2f0ee88ac00848602c1422db19c29b3c992d3e0039675aa900a3cde9cf05dd8a",
      "size": 6714186,
      "root": "DLSS5-Optimised",
@@ -130,8 +130,8 @@
     },
     {
      "tag": "v1.2.1",
-     "asset": "optiscaler-dlss5-skynizz-1.2.1.zip",
-     "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/optiscaler-dlss5-skynizz-1.2.1.zip",
+     "asset": "OptiScaler-DLSS5-1.2.1-win-x64.zip",
+     "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.1/OptiScaler-DLSS5-1.2.1-win-x64.zip",
      "sha256": "0d5b24887ea2c622754da68efc76ef55ae42b5d3be350a8d43cafbabb6747ec6",
      "size": 6456692,
      "root": "DLSS5-Optimised",
@@ -216,8 +216,8 @@
     },
     {
      "tag": "v1.2.0",
-     "asset": "optiscaler-dlss5-skynizz-1.2.0.zip",
-     "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.0/optiscaler-dlss5-skynizz-1.2.0.zip",
+     "asset": "OptiScaler-DLSS5-1.2.0-win-x64.zip",
+     "url": "https://github.com/Skynizz/optiscaler-dlss5/releases/download/v1.2.0/OptiScaler-DLSS5-1.2.0-win-x64.zip",
      "sha256": "48dd0d9f2701237b7c9b0af652631efad2d8c4e0f5886dd088d31d3a3e4de2a3",
      "size": 6460029,
      "root": "DLSS5-Optimised",
@@ -330,8 +330,8 @@
    "versions": [
     {
      "tag": "v0.2.0-patch1",
-     "asset": "optiscaler-dagherbou-0.2.0-patch1.zip",
-     "url": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-patch1/optiscaler-dagherbou-0.2.0-patch1.zip",
+     "asset": "OptiScaler-DLSSNR-v0.2.0-onimusha-fix.zip",
+     "url": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-patch1/OptiScaler-DLSSNR-v0.2.0-onimusha-fix.zip",
      "sha256": "5db547216fa8a7dbd8ab0a193da1e3bce0ea4bd71f91189afa4ed2ede8bb9561",
      "size": 130480693,
      "root": "",
@@ -375,8 +375,8 @@
     },
     {
      "tag": "v0.2.0-dlssnr",
-     "asset": "optiscaler-dagherbou-0.2.0-dlssnr.zip",
-     "url": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-dlssnr/optiscaler-dagherbou-0.2.0-dlssnr.zip",
+     "asset": "OptiScaler-DLSSNR-v0.2.0.zip",
+     "url": "https://github.com/Dagherbou/OptiScaler_DLSSNR/releases/download/v0.2.0-dlssnr/OptiScaler-DLSSNR-v0.2.0.zip",
      "sha256": "8eece7a4d7de6de5917f0c99ac60540b2d77022e7699bba717b0a6d9e1829bce",
      "size": 130486024,
      "root": "",

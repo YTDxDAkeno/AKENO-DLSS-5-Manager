@@ -302,3 +302,17 @@ def test_selection_is_per_game(env, tmp_path):
     svc.stack.choose_recipe(a.id, "renodx")
     assert svc.stack.state(b.id).preset != "ultra" and svc.stack.state(b.id).selected.recipe.id == "optiscaler"
     assert svc.stack.state(a.id).selected.recipe.id == "renodx"
+
+
+def test_catalog_pin_url_must_be_the_release_asset_itself():
+    import pytest
+    from akeno.stack.catalog import StackCatalog, _check_asset_url
+    _check_asset_url("a/b", "https://github.com/a/b/releases/download/v1/x.zip", "v1", "x.zip")
+    with pytest.raises(ValueError):           # a renamed asset would 404 for every user
+        _check_asset_url("a/b", "https://github.com/a/b/releases/download/v1/x.zip", "v1", "y.zip")
+    with pytest.raises(ValueError):
+        _check_asset_url("a/b", "https://github.com/c/d/releases/download/v1/x.zip")
+    for c in StackCatalog.load().components.values():
+        for v in c.versions:
+            if v.source == "download":
+                assert v.url.endswith(f"/releases/download/{v.tag}/{v.asset}")
