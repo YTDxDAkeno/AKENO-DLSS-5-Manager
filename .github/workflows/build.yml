@@ -87,6 +87,14 @@ jobs:
           ./backup.sh
           ls -la backups
           docker compose down -v
+      - name: License server bundle for the VPS (server/ and deploy/ only, with SHA-256)
+        run: deploy/bundle.sh
+      - name: Preserve the license server bundle (download it, then ./push-to-vps.sh user@vps dir bundle)
+        uses: actions/upload-artifact@v4
+        with:
+          name: akeno-licensing-server-bundle
+          path: dist/akeno-licensing-*
+          if-no-files-found: error
       - name: Publish bounded server test failure annotations
         if: failure()
         run: |

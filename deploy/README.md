@@ -3,8 +3,8 @@
 The VPS runs the **license server only**: accounts and passwords, activation codes, licenses, devices, signed
 offline licenses, the account website and the admin website, and their audit log. Everything else of the AKENO
 Gaming Suite runs on the Windows PC: DLSS 5 mods, the FPS Booster, benchmarks, Desktop Studio, community packages
-and sync. App updates come from GitHub Releases. No game files, DLLs, wallpapers or installers are ever uploaded
-here.
+and sync. App updates come from the public release repository on GitHub. No game files, DLLs, wallpapers or
+installers are ever uploaded here, and the VPS needs no access to GitHub (the source repository is private).
 
 The server knows one generic entitlement, `akeno-suite`. Which modules a license unlocks is decided by the app, so
 a new AKENO version never needs a server change. The `/api/v1` licensing API only grows (new fields, never
@@ -12,7 +12,12 @@ changed ones).
 
 ## Kurzanleitung (Deutsch)
 
-1. Repository auf den VPS klonen, dann `cd AKENO-DLSS-5-Manager/deploy`.
+1. Server-Paket auf den VPS bringen (der VPS braucht keinen GitHub-Zugang): auf deinem PC im Quellcode
+   `deploy/bundle.sh` ausführen (oder das Artefakt `akeno-licensing-server-bundle` aus GitHub Actions laden), dann
+   `scp dist/akeno-licensing-*.tar.gz* user@vps:` und auf dem VPS
+   `sha256sum -c akeno-licensing-*.tar.gz.sha256 && sudo mkdir -p /opt/akeno-licensing &&`
+   `sudo tar -xzf akeno-licensing-*.tar.gz -C /opt/akeno-licensing --strip-components=1`, dann
+   `cd /opt/akeno-licensing/deploy`.
 2. `./install.sh` ausführen. Das Skript erzeugt die Geheimnisse in `.env`, fragt nach deinen Adressen, baut und
    startet die Container und erzeugt den Lizenz-Signaturschlüssel. Am Ende gibt es den öffentlichen Schlüssel aus.
 3. Die beiden Seiten aus `Caddyfile.example` in deine bestehende Caddy-Konfiguration übernehmen, Platzhalter durch
@@ -88,7 +93,9 @@ The backups contain the private key: keep `deploy/backups/` (mode 700) and any c
 |------|---------|
 | First installation | `./install.sh` |
 | First super admin (once) | `./create-admin.sh you@example.org` |
-| Update after `git pull` | `./update.sh` (backs up, pulls, rebuilds, restarts; migrations run on start) |
+| Update from your PC | `deploy/push-to-vps.sh user@vps /opt/akeno-licensing` (builds the bundle, copies it over SSH, runs `update.sh --bundle` there) |
+| Update with a bundle on the VPS | `./update.sh --bundle ../incoming/akeno-licensing-<v>-<commit>.tar.gz --sha256 <hash>` (backs up, checks the hash and the contents, keeps `.env`, `backups/` and the keys, rebuilds; migrations run on start) |
+| Back to the previous server | `./update.sh --rollback` |
 | Backup now | `./backup.sh` (copies the newest dump and key archive to `./backups`) |
 | Restore | `./restore.sh backups/akeno-db-<stamp>.dump backups/akeno-keys-<stamp>.tar.gz` |
 | Status | `docker compose ps`, `docker compose exec akeno-api akeno-server check` |
@@ -99,6 +106,33 @@ The backups contain the private key: keep `deploy/backups/` (mode 700) and any c
 Behind a TLS-inspecting proxy, give the build your CA:
 `docker build --secret id=pip_ca,src=/path/ca.crt -t akeno-licensing:local ../server`, then
 `./install.sh --no-build`.
+
+## Updates without GitHub access on the VPS
+
+The source repository is private, and the VPS needs no credentials for it:
+- **Bundles:** `deploy/bundle.sh` (on your PC, or the CI artifact `akeno-licensing-server-bundle`) packs only the committed `server/` and `deploy/` folders, with a SHA-256 file. No `.env`, keys, backups, Windows app or history are in it.
+- **Copying:** `push-to-vps.sh` copies the bundle over your normal SSH access.
+- **Checks on the VPS:** `update.sh --bundle` refuses a bundle whose hash does not match, or that contains links, absolute paths, `..` or anything outside `server/` and `deploy/`. It keeps the previous server for `--rollback`.
+- **When an update is needed:** only for changes to the license server itself. New Windows versions never need a server update (the `/api/v1` API only grows; the entitlement `akeno-suite` is generic).
+
+If you prefer the VPS to fetch updates itself, give it a **read-only deploy key** for this repository only. Never use a personal token or an account password.
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/akeno_deploy -N "" -C "akeno-licensing VPS (read-only)"
+cat ~/.ssh/akeno_deploy.pub     # GitHub: repository -> Settings -> Deploy keys -> Add deploy key, write access OFF
+cat >> ~/.ssh/config <<'CFG'
+Host github-akeno
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/akeno_deploy
+    IdentitiesOnly yes
+CFG
+git clone --filter=blob:none --sparse git@github-akeno:YTDxDAkeno/AKENO-DLSS-5-Manager.git /opt/akeno-licensing
+git -C /opt/akeno-licensing sparse-checkout set server deploy
+cd /opt/akeno-licensing/deploy && ./update.sh --git
+```
+
+A deploy key can read this one repository only, cannot push, and can be revoked at any time on the same settings page.
 
 ## What was tested
 
