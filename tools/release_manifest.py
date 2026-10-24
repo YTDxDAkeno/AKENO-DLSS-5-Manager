@@ -142,8 +142,9 @@ def main(argv: list[str] | None = None) -> int:
     vf.add_argument("--release-base", default="", help="check file addresses against this akeno.online base")
     ds = sub.add_parser("distribution", help="write akeno/data/distribution.json (where updates come from)")
     ds.add_argument("--repo", default="", help="the public GitHub release repository OWNER/NAME")
-    ds.add_argument("--source", default="github", choices=("github", "akeno"))
+    ds.add_argument("--source", default="github", choices=("github", "akeno", "akeno-api"))
     ds.add_argument("--release-base", default="")
+    ds.add_argument("--release-api", default="", help="akeno-api: the Release Manager's API base (…/api/v1)")
     ds.add_argument("--release-page", default="")
     ds.add_argument("--download-hosts", default="", help="comma-separated hosts on akeno.online")
     ds.add_argument("--output", type=Path, default=ROOT / "akeno" / "data" / "distribution.json")
@@ -198,10 +199,13 @@ def main(argv: list[str] | None = None) -> int:
         doc = {}
         if args.repo:
             doc["release_repo"] = args.repo
+        hosts = [h.strip() for h in args.download_hosts.split(",") if h.strip()]
         if args.source == "akeno":
             doc.update(update_source="akeno", release_base=args.release_base.rstrip("/"),
-                       release_page=args.release_page.rstrip("/"),
-                       download_hosts=[h.strip() for h in args.download_hosts.split(",") if h.strip()])
+                       release_page=args.release_page.rstrip("/"), download_hosts=hosts)
+        elif args.source == "akeno-api":
+            doc.update(update_source="akeno-api", release_api=args.release_api.rstrip("/"),
+                       release_page=args.release_page.rstrip("/"), download_hosts=hosts)
         dist = distribution.from_dict(doc)
         if dist.source != args.source or (args.repo and dist.release_repo != args.repo):
             raise SystemExit("refused: the release source must be HTTPS on akeno.online (or a valid GitHub repo)")

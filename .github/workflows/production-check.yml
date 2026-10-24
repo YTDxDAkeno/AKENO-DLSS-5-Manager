@@ -15,6 +15,8 @@ on:
       - "tools/account_acceptance.py"
       - "tools/configure-licensing.py"
       - "tools/api_contract.py"
+      - "akeno/updater/manifest.py"
+      - "akeno/data/*.json"
   workflow_dispatch:
 
 permissions:
@@ -54,10 +56,11 @@ jobs:
       - name: Production API contract (public OpenAPI document and version, read-only)
         # The Release Manager's real endpoints, if the production API publishes them; nothing is guessed.
         run: |
+          set -o pipefail
           {
             echo '### Production API contract'
             echo '```'
-            python tools/api_contract.py --api https://api.akeno.online --release-details
+            python tools/api_contract.py --api https://api.akeno.online --release-details --release-keys akeno/data/release-keys.json
             echo '```'
           } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Release channels on AKENO's own server (when configured)

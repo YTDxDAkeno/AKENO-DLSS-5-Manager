@@ -137,7 +137,10 @@ class UpdateService:
         except (OSError, ValueError):
             return None
 
-    def can_install(self) -> tuple[bool, str]:
+    def can_install(self, release: manifest.Release | None = None) -> tuple[bool, str]:
+        if release is not None and release.file("portable") is None:
+            return False, ("This release is offered as an installer on the release page: download it there "
+                           "(AKENO installs only portable packages itself, so it can roll back).")
         if not frozen():
             return False, "Updates install into the built program only (this copy runs from the source code)."
         if not self.keys:
@@ -163,8 +166,13 @@ class UpdateService:
     def check(self) -> manifest.Release | None:
         """The newer release of the chosen channel, or None. Raises UpdateError / ManifestError."""
         self._store(last_attempt=time.time())
-        doc = self.fetch(self.dist.channel_manifest(self.channel))
-        release = manifest.parse(doc, self.keys, self.channel, self.dist)
+        if self.dist.source == "akeno-api":
+            if self.channel != "stable":
+                raise UpdateError("the AKENO release server offers only the stable channel")
+            release = manifest.parse_api(self.fetch(self.dist.channel_manifest("stable")), self.keys, self.dist)
+        else:
+            doc = self.fetch(self.dist.channel_manifest(self.channel))
+            release = manifest.parse(doc, self.keys, self.channel, self.dist)
         key = f"highest_seen_{self.channel}"
         seen = self.state().get(key)
         # a manifest older than one already seen is a replay or a freeze attempt: not offered

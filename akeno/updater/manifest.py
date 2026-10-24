@@ -18,6 +18,15 @@ belongs to another app or channel, would go back to an older version, or is past
 (optional: a frozen or replayed manifest stops being offered) is ignored. File and notes addresses must be HTTPS
 on a host of the build's distribution (GitHub's release hosts, or ``akeno.online``). Release keys are separate from
 license keys: neither can stand in for the other.
+
+The AKENO Release Manager (``GET /api/v1/releases/stable`` on the production API, schema_version 1) publishes one
+release as an object with ``signed_payload`` and ``signature`` (``{"algorithm": "Ed25519", "key_id", "value"}``).
+:func:`parse_api` trusts it only when the signature verifies over the exact ``signed_payload`` text with a built-in
+release key, and then uses only the values inside ``signed_payload``: every one of them must also equal the field
+of the same name outside it, and the security fields (product, platform, channel, version, download address,
+SHA-256, size, ``unattended_install_allowed: false``) must be inside it. It describes one file (the installer the
+release page offers), never a portable package, so such a release is shown and opened on the release page but not
+installed by the app.
 """
 
 from __future__ import annotations
@@ -77,6 +86,7 @@ class Release:
     notes_url: str
     files: list = field(default_factory=list)
     kid: str = ""
+    publisher_sha256: str = ""          # Release Manager: SHA-256 of the installer's Authenticode certificate
 
     def file(self, kind: str) -> File | None:
         return next((f for f in self.files if f.kind == kind), None)
@@ -147,3 +157,92 @@ def parse(channel_doc, keys: dict, channel: str, dist=None, now: float | None = 
         text["notes_url"] = ""
     return Release(channel, m["release"], text["tag"], text["published"], text["notes"], text["notes_url"], files,
                    kid)
+
+
+API_SCHEMA = 1
+API_PLATFORM = "windows-x64"
+API_SIGNED = ("product", "platform", "channel", "version", "download_url", "sha256", "size_bytes",
+              "unattended_install_allowed")
+API_VERSION_RE = re.compile(r"^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$")
+
+
+def _signature_bytes(value: str) -> bytes:
+    import base64
+    import binascii
+    text = str(value or "").strip()
+    if re.fullmatch(r"[0-9a-fA-F]{128}", text):
+        return bytes.fromhex(text)
+    try:
+        raw = base64.b64decode(text.replace("-", "+").replace("_", "/") + "=" * (-len(text) % 4), validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ManifestError("the release signature is not readable") from exc
+    if len(raw) != 64:
+        raise ManifestError("the release signature is not readable")
+    return raw
+
+
+def _signed_document(payload: str) -> dict:
+    """The JSON object inside ``signed_payload`` (plain JSON text, or base64url of it)."""
+    import base64
+    import binascii
+    for attempt in ("json", "base64"):
+        try:
+            text = payload if attempt == "json" else base64.urlsafe_b64decode(
+                payload + "=" * (-len(payload) % 4)).decode("utf-8")
+            doc = json.loads(text)
+        except (ValueError, binascii.Error, UnicodeDecodeError):
+            continue
+        if isinstance(doc, dict):
+            return doc
+    raise ManifestError("the signed release information is not readable")
+
+
+def parse_api(doc, keys: dict, dist=None) -> Release:
+    """A release of the AKENO Release Manager (see the module docstring); raises ManifestError."""
+    from cryptography.exceptions import InvalidSignature
+    trusted = dist.trusted if dist is not None else _https_github
+    if not keys:
+        raise ManifestError("this build has no release verification key")
+    if not isinstance(doc, dict) or doc.get("schema_version") != API_SCHEMA:
+        raise ManifestError("not an AKENO release (unknown format)")
+    sig = doc.get("signature")
+    payload = doc.get("signed_payload")
+    if not isinstance(sig, dict) or sig.get("algorithm") != "Ed25519" or not isinstance(payload, str):
+        raise ManifestError("the release is not signed by AKENO")
+    key = keys.get(str(sig.get("key_id") or ""))
+    if key is None:
+        raise ManifestError("the release is signed with a key this build does not trust")
+    try:
+        key.verify(_signature_bytes(sig.get("value")), payload.encode("utf-8"))
+    except InvalidSignature as exc:
+        raise ManifestError("the release manifest is not signed by AKENO (signature does not match)") from exc
+    m = _signed_document(payload)
+    for name in API_SIGNED:
+        if name not in m:
+            raise ManifestError(f"the signed release information has no {name}")
+    for name, value in doc.items():
+        if name not in ("signed_payload", "signature") and name in m and m[name] != value:
+            raise ManifestError(f"the release field {name} differs from the signed value")
+    if m.get("product") != APP or m.get("platform") != API_PLATFORM:
+        raise ManifestError("the manifest is not for this app")
+    if m.get("channel") != "stable":
+        raise ManifestError("the manifest is for another channel")
+    if m.get("unattended_install_allowed") is not False:
+        raise ManifestError("the release asks to be installed without confirmation: refused")
+    version = str(m.get("version") or "")
+    if not API_VERSION_RE.match(version):
+        raise ManifestError(f"not a version: {version}")
+    url, sha, size = m.get("download_url"), m.get("sha256"), m.get("size_bytes")
+    name = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1]) if isinstance(url, str) else ""
+    if not (isinstance(url, str) and trusted(url) and isinstance(sha, str) and SHA.match(sha)
+            and isinstance(size, int) and not isinstance(size, bool) and size > 0
+            and re.fullmatch(r"[A-Za-z0-9._-]{1,120}", name)):
+        raise ManifestError(f"the download of the release is not valid: {url}")
+    publisher = ""
+    auth = m.get("authenticode")
+    if isinstance(auth, dict) and auth.get("verified") is True and SHA.match(str(auth.get("publisher_certificate_sha256"))):
+        publisher = auth["publisher_certificate_sha256"]
+    published = str(m.get("published_at") or m.get("release_date") or "")[:30]
+    notes = str(m.get("release_notes") or "")[:4000]
+    return Release("stable", version, f"v{version}", published, notes, "",
+                   [File("installer", name, url, sha, size)], str(sig["key_id"]), publisher)

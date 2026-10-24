@@ -171,7 +171,7 @@ class UpdatesPage(QWidget):
     def _show_release(self, release: manifest.Release | None, checked: bool = True) -> None:
         self.release = release
         has = release is not None
-        ok = self.svc.can_install()[0]
+        ok = self.svc.can_install(release)[0]
         self.headline.setVisible(has)
         self.facts.setVisible(has)
         self.btn_install.setVisible(has and ok)
@@ -184,7 +184,7 @@ class UpdatesPage(QWidget):
             return
         self.pill.set(t("Update available"), "warn")
         self.headline.setText(t("AKENO Gaming Suite {v} is available.", v=release.release))
-        package = release.file("portable")
+        package = release.file("portable") or release.file("installer")
         self.facts.set_rows([(t("Latest version"), release.release),
                              (t("Channel"), t(CHANNEL_TEXT.get(release.channel, release.channel))),
                              (t("Release date"), date_text(release.published)),
@@ -243,7 +243,7 @@ class UpdatesPage(QWidget):
     # -- installing --------------------------------------------------------------------------------------------------
     def _install(self) -> None:
         release = self.release
-        if release is None or self.busy:
+        if release is None or self.busy or not self.svc.can_install(release)[0]:
             return
         package = release.file("portable")
         if not confirm(self, t("Update now"), t("Install AKENO Gaming Suite {v} now?", v=release.release),

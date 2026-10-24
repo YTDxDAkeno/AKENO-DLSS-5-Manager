@@ -1,5 +1,10 @@
 # Hand-over to Codex: AKENO Release Manager ↔ Windows app
 
+> **Superseded (2026-10-24).** The production API already has a Release Manager (`GET /api/v1/releases/stable`,
+> `/releases/signing-key`, schema_version 1). The app now uses that contract. See `CODEX_VPS_INTEGRATION.md` §B.
+> The static channel files described below remain a supported alternative (`AKENO_UPDATE_SOURCE=akeno`). They are
+> not needed for the Release Manager.
+
 **Kurzfassung (Deutsch).**
 - Der Windows-Client kann Updates von eurem VPS beziehen. Dafür braucht er **kein neues API**, sondern dieselben
   signierten Kanal-Dokumente wie bisher, nur ausgeliefert über HTTPS unter `akeno.online`.

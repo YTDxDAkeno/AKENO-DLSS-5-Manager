@@ -1,0 +1,8 @@
+{
+  "update_source": "akeno-api",
+  "release_api": "https://api.akeno.online/api/v1",
+  "release_page": "https://akeno.online/downloads/latest",
+  "download_hosts": [
+    "akeno.online"
+  ]
+}

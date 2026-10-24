@@ -65,57 +65,90 @@ Danach auf GitHub: Actions → „Production read-only check“ → „Run workf
 
 ## B. Release Manager ↔ Windows-Updater
 
-### Was die App heute erwartet
+### Der tatsächliche Vertrag (aus der Produktion gelesen, 2026-10-24)
 
-Die App braucht keine neue API, sondern statische, signierte Dateien über HTTPS auf `akeno.online`:
+Quelle: das öffentliche OpenAPI-Dokument `https://api.akeno.online/api/v1/openapi.json`. Die Produktionsprüfung
+(`tools/api_contract.py --release-details`) liest es nur.
 
-```
-{release_base}/channels/stable.json     # {"format": "akeno-release-channel", "token": "<JWS>", ...}
-{release_base}/channels/beta.json
-<URLs aus dem signierten Manifest>       # portable ZIP (Pflicht), Setup-EXE, Quell-ZIP, SHA256SUMS.txt
-```
+| Endpunkt | Antwort heute |
+|---|---|
+| `GET /api/v1/releases/signing-key` | `{"algorithm": "Ed25519", "key_id": "d6139235b220a4aa", "public_key": "bpe9acmephsoZSYzy12R2XFy_lJZ_69MiV31ekehcdo"}` |
+| `GET /api/v1/releases/stable`, `/releases/latest` | 404, noch kein Release veröffentlicht |
+| `GET /api/v1/releases` | `{"releases": []}` |
+| `GET /api/v1/releases/{version}` | ein Release |
 
-* Erzeugt werden die Kanal-Dateien mit `tools/release_manifest.py sign --base-url …`, siehe
-  `CODEX_RELEASE_MANAGER.md` §4. Der Release-Prüfschlüssel in der App ist `d6139235b220a4aa`.
-* Ein Manifest mit einem anderen Schlüssel, einer falschen SHA-256 oder einer älteren Version installiert die App
-  nicht.
-* Ohne Bestätigung durch den Nutzer installiert sie ebenfalls nichts.
+Release-Objekt, `schema_version: 1`:
+* `product: "akeno-gaming-suite"`, `platform: "windows-x64"`, `channel: "stable"`, `version` (`X.Y.Z`, keine
+  Vorabversionen);
+* `release_notes`, `release_date`, `published_at`;
+* `download_url`, `size_bytes`, `sha256`;
+* `authenticode: {verified: true, publisher_certificate_sha256}`;
+* `minimum_supported_version`;
+* `unattended_install_allowed: false`;
+* `signed_payload`, `signature: {algorithm: "Ed25519", key_id, value}`.
 
-### Was wir von euch brauchen, bevor die App umgestellt wird
+### Was die App jetzt damit macht (dieser Branch)
 
-Im Repository gibt es keinen API-Vertrag des Release Managers. Wir haben deshalb keinen Endpunkt erfunden. Die
-Lese-Prüfung liest seit diesem Branch das öffentliche OpenAPI-Dokument der Produktion (`tools/api_contract.py`) und
-listet jeden Pfad, der mit Releases oder Updates zu tun hat. Ergebnis: siehe `PRODUCTION_STATUS.md`.
+* Standard-Updatequelle jedes Builds ist der Release Manager: `GET https://api.akeno.online/api/v1/releases/stable`
+  (`akeno/data/distribution.json`, `update_source: "akeno-api"`). Der GitHub-Weg ist nur noch per Variable
+  `AKENO_UPDATE_SOURCE=github` aktiv. Das Repository `AKENO-Releases` ist ohnehin nicht öffentlich erreichbar.
+* Ein Release zählt nur unter diesen Bedingungen (`akeno/updater/manifest.py: parse_api`):
+  1. `signature.key_id` ist ein eingebauter Release-Schlüssel. Heute ist das nur `d6139235b220a4aa`. Die
+     Lizenzschlüssel zählen hier nicht.
+  2. Die Ed25519-Signatur ist gültig über **genau den Text von `signed_payload`** (UTF-8).
+  3. `signed_payload` ist ein JSON-Objekt, entweder als JSON-Text oder als base64url davon. Es enthält mindestens
+     `product`, `platform`, `channel`, `version`, `download_url`, `sha256`, `size_bytes` und
+     `unattended_install_allowed`.
+  4. Jedes Feld außerhalb von `signed_payload` muss gleich dem signierten Wert sein. Verwendet werden nur die
+     signierten Werte.
+  5. `unattended_install_allowed` ist `false`, `channel` ist `stable`, `download_url` ist HTTPS auf `akeno.online`.
+  6. Die Version ist nicht älter als eine schon gesehene (Anti-Rollback).
 
-Bitte bestätigt oder liefert:
+  `signature.value` darf base64url, base64 oder hex sein.
+* Ein solches Release wird angezeigt mit Version, Datum, Größe und Notizen. Die App **installiert es nicht
+  selbst.** Sie bietet die Downloadseite an: `https://akeno.online/downloads/latest`, der `download_url` aus
+  `/system/version`. Der Grund: Der Release Manager beschreibt eine einzelne Datei (den Installer). Der Updater
+  installiert nur portable ZIPs, weil nur so der Ordnertausch mit Rollback möglich ist.
+* Die Produktionsprüfung schlägt fehl, wenn `/releases/signing-key` einen Schlüssel nennt, der nicht im Build
+  steckt. Sobald `/releases/stable` ein Release liefert, verifiziert sie es mit genau diesem Parser.
 
-1. **`release_base`**, z. B. `https://downloads.akeno.online/releases`.
-2. **Liefert der Release Manager genau die Dateien oben aus**, also das signierte Kanal-Dokument unverändert, byte
-   für byte?
-   * Ja: Für die App ist nichts weiter zu tun.
-   * Nein, weil er ein eigenes Format oder eigene Endpunkte hat (z. B. `GET /api/v1/releases/latest`): Schickt das
-     OpenAPI-Schema oder ein Beispiel-JSON. Wir bauen dann einen Adapter. Die Release-Signatur muss erhalten bleiben,
-     denn ohne sie installiert die App nichts automatisch.
-3. **Wo signiert wird:** Außerhalb des VPS, in GitHub Actions oder offline. Der Release Manager lädt nur bereits
-   signierte Kanal-Dokumente und Dateien hoch und veröffentlicht sie, indem er die Kanal-Datei atomar umbenennt.
-   Er darf den Signierschlüssel nicht besitzen.
-4. **`Cache-Control: no-cache`** auf `channels/*.json`, und kein Redirect auf fremde Domains.
-5. **Admin-Felder `latest_client_version` und `min_client_version`** in `/system/version`: Die App liest sie heute nur
-   zur Anzeige. Wenn der Release Manager sie setzt, sollen sie zur veröffentlichten Kanal-Version passen.
+### Was Codex bestätigen oder liefern muss
 
-### Danach auf GitHub (Repository-Variablen, nichts Geheimes)
+1. **Signaturformat bestätigen:** Signiert ist der UTF-8-Text von `signed_payload`, unverändert, und
+   `signed_payload` ist JSON mit den Feldern oben. Andernfalls lehnt die App jedes Release ab. Das ist sicher, aber
+   dann zeigt sie keine Updates an.
+   * Am schnellsten: ein Test-Release, z. B. `3.0.0` mit dem echten Installer, als Beispiel-JSON schicken.
+   * Oder veröffentlichen, dann prüft die Produktionsprüfung es automatisch.
+2. **Authenticode:** Das Schema verlangt `authenticode.verified: true`. Die heutigen CI-Builds sind **nicht
+   code-signiert.** Ohne OV/EV-Zertifikat kann der Release Manager also kein gültiges Release anlegen. Bitte klärt:
+   * Gibt es ein Zertifikat?
+   * Prüft der Release Manager die Signatur beim Upload?
+3. **Portables ZIP (optional, für Updates in der App):** Soll die App ohne Browser aktualisieren und zurückrollen
+   können, braucht das signierte Payload zusätzlich ein portables Paket, z. B.
+   `portable: {download_url, sha256, size_bytes}`. Das wäre eine Erweiterung eures Schemas. Ohne sie bleibt es beim
+   Hinweis auf die Downloadseite.
+4. **Wo der Release-Signierschlüssel liegt:** Der Server veröffentlicht den öffentlichen Schlüssel und liefert
+   signierte Payloads aus. Liegt der private Schlüssel auf dem VPS, kann ein kompromittierter VPS Releases fälschen.
+   Die App fängt das ab: Sie installiert nichts automatisch, und der Nutzer lädt den Installer selbst herunter, mit
+   SHA-256 und Authenticode. Trotzdem empfehlen wir, offline oder in CI zu signieren. Bitte bestätigt euer Vorgehen.
+   **Bitte den Schlüssel nicht wechseln**, ohne vorher den neuen öffentlichen Schlüssel in einen Build zu geben.
+5. **Download-Hosts:** Liegt `download_url` nicht auf `akeno.online` selbst, sondern auf einer Subdomain, nennt die
+   Hosts. Sie kommen in die Variable `AKENO_DOWNLOAD_HOSTS`.
+6. Optional: `latest_client_version` in `/system/version` auf die veröffentlichte Version setzen. Die App zeigt den
+   Wert nur an.
 
-```
-AKENO_UPDATE_SOURCE=akeno
-AKENO_RELEASE_BASE=<euer release_base>
-AKENO_RELEASE_PAGE=https://akeno.online/download
-AKENO_DOWNLOAD_HOSTS=<weitere Hosts unter akeno.online, falls die Dateien woanders liegen>
-```
+### GitHub-Variablen für die Updateverwaltung
 
-Die Lese-Prüfung holt dann beide Kanäle und prüft sie mit dem eingebauten Schlüssel.
+Für den Release Manager ist **keine Variable nötig**, die Standardwerte sind eingebaut:
 
-Abnahme: `CODEX_RELEASE_MANAGER.md` §7. Erst eine Beta, dann die Negativtests: Ein verändertes Byte, ein fremder
-Schlüssel und ein älteres Manifest müssen jeweils abgelehnt werden. Zuletzt den Rollback testen.
+| Variable | Standard | Wann setzen |
+|---|---|---|
+| `AKENO_RELEASE_API` | `https://api.akeno.online/api/v1` | nur bei einer anderen API-Adresse |
+| `AKENO_RELEASE_PAGE` | `https://akeno.online/downloads/latest` | nur bei einer anderen Downloadseite |
+| `AKENO_DOWNLOAD_HOSTS` | `akeno.online` | wenn Downloads auf einer Subdomain liegen (Punkt 5) |
+| `AKENO_RELEASE_PUBLIC_KEYS` | eingebaut: `d6139235b220a4aa:bpe9acmephsoZSYzy12R2XFy_lJZ_69MiV31ekehcdo` | nur beim Schlüsselwechsel |
+| `AKENO_UPDATE_SOURCE` | leer, also Release Manager | `github` oder `akeno` nur für die alten Wege |
+| `AKENO_RELEASE_BASE` | — | **nicht setzen.** Er gehört zum alten Vorschlag mit statischen Kanal-Dateien, den die Produktion nicht anbietet |
 
 ## C. Nicht Teil dieser Übergabe
 

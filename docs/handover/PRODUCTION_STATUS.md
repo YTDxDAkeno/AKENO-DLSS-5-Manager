@@ -32,16 +32,25 @@ session, no license. Endpoints were called without credentials and with an empty
 The patch for all three is in `accounts-server.patch`. Apply it as a targeted integration on top of the secured
 production code, not by deploying this branch's server.
 
-## Build configuration that is still missing
+## Build configuration (2026-10-24, run 4 on `claude/clever-fermi-xykqbw`: 24 passed, 0 failed)
 
-| Repository variable | Status | Effect |
-|---|---|---|
-| `AKENO_LICENSE_PUBLIC_KEYS` | **not set** | A release build would accept **no** license. This is the only failed check. Set it to the server's active key(s) from `GET /system/keys` (`<kid>:<public key>`, comma-separated). The check lists them. |
-| `AKENO_LICENSE_SERVER_URL`, `AKENO_WEBSITE_URL` | not set | Defaults apply: `https://api.akeno.online`, `https://akeno.online` (correct) |
-| `AKENO_RELEASE_PUBLIC_KEYS`, secret `AKENO_RELEASE_SIGNING_KEY` | check in Settings → Variables | Without them the updater only shows the download page and never installs |
-| `AKENO_UPDATE_SOURCE`, `AKENO_RELEASE_BASE` (+ `AKENO_RELEASE_PAGE`, `AKENO_DOWNLOAD_HOSTS`) | not set | Updates stay on GitHub Releases until the Release Manager path is confirmed (`CODEX_RELEASE_MANAGER.md`) |
+| Item | Status |
+|---|---|
+| `AKENO_LICENSE_PUBLIC_KEYS` | set by the maintainer: `f382ecda000888b2:XlXm…VmVE`, equal to the server's only active key. Also committed in `akeno/data/licensing.json`. The check reports "server key f382ecda000888b2: embedded in the build". |
+| License API / website | `https://api.akeno.online`, `https://akeno.online` (defaults, variables not needed) |
+| Release verification key | `d6139235b220a4aa` committed in `akeno/data/release-keys.json`, equal to `GET /api/v1/releases/signing-key` |
+| Update source | AKENO Release Manager, `GET /api/v1/releases/stable` (`akeno/data/distribution.json`). Release-related variables are not needed (`CODEX_VPS_INTEGRATION.md` §B). |
+| Fixed in this branch | the production check failed because `configure-licensing.py` read the variable as JSON, and CI builds shipped no license key because the license step ran only when `AKENO_LICENSE_SERVER_URL` was set |
 
-Rerun the check under Actions → "Production read-only check" → "Run workflow" after setting them.
+## Release Manager on production (read-only, 2026-10-24)
+
+* The OpenAPI document publishes `GET /releases`, `/releases/latest`, `/releases/stable`, `/releases/{version}`
+  and `/releases/signing-key`.
+* The signing key is `d6139235b220a4aa`.
+* No release is published yet: `/releases/stable` returns 404 and `/releases` returns `[]`.
+* `GET /system/version`:
+  * `download_url: https://akeno.online/downloads/latest`;
+  * `latest_client_version` and `min_client_version`: not set.
 
 ## Not verifiable without approval
 

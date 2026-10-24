@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 
 import release_manifest as tool  # noqa: E402
 
+from akeno import distribution  # noqa: E402
 from akeno.licensing import crypto  # noqa: E402
 from akeno.updater import apply, manifest  # noqa: E402
 from akeno.updater.service import UpdateService, UpdateError  # noqa: E402
@@ -103,10 +104,12 @@ def test_license_keys_cannot_sign_releases(tmp_path, signing):
 def test_check_offers_newer_only_and_refuses_going_back(tmp_path, signing):
     key, keys = signing
     docs = {"doc": channel_doc(key, "3.0.1", [package(tmp_path, "3.0.1")])}
-    svc = UpdateService(keys=keys, fetch=lambda url: docs["doc"], version="3.0.0", folder=tmp_path / "updates")
+    github = distribution.from_dict({})
+    svc = UpdateService(dist=github, keys=keys, fetch=lambda url: docs["doc"], version="3.0.0",
+                        folder=tmp_path / "updates")
     release = svc.check()
     assert release is not None and release.release == "3.0.1"
-    assert UpdateService(keys=keys, fetch=lambda url: docs["doc"], version="3.0.1",
+    assert UpdateService(dist=github, keys=keys, fetch=lambda url: docs["doc"], version="3.0.1",
                          folder=tmp_path / "updates").check() is None
     docs["doc"] = channel_doc(key, "3.0.0", [package(tmp_path, "3.0.0")])     # an old manifest replayed
     with pytest.raises(manifest.ManifestError, match="older than"):

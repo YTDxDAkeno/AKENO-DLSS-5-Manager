@@ -8,7 +8,9 @@ Read-only: ``GET /api/v1/openapi.json`` and ``GET /api/v1/system/version`` over 
 - paths about releases, updates and downloads (the Release Manager), so the app's update path is built against
   the server's real contract and not against guessed addresses;
 - ``--release-details``: the published schema of every ``/releases`` operation, and the public answer of each
-  ``GET /releases…`` path without parameters (read-only, no credentials).
+  ``GET /releases…`` path without parameters (read-only, no credentials);
+- ``--release-keys FILE``: the key ``GET /releases/signing-key`` names must be one of the build's release keys
+  (exit code 1 otherwise), and a published ``/releases/stable`` must verify with the app's own parser.
 
 A server that does not publish its OpenAPI document (docs switched off) is reported as such; it is not an error.
 """
@@ -88,10 +90,46 @@ def release_details(doc: dict, base: str) -> None:
                     print(f"    {line}")
 
 
+def check_release_keys(base: str, keys_file: Path) -> bool:
+    """The server's release signing key is built in, and a published stable release verifies like in the app."""
+    from akeno import distribution
+    from akeno.licensing import crypto
+    from akeno.updater import manifest
+    built = {k["kid"]: k["public_key"] for k in json.loads(keys_file.read_text(encoding="utf-8")).get("keys", [])}
+    print(f"Release keys in the build: {', '.join(sorted(built)) or 'none'}")
+    status, key = get_json(f"{base}/releases/signing-key")
+    if not isinstance(key, dict):
+        print(f"[FAIL] GET /releases/signing-key: HTTP {status}")
+        return False
+    kid, public = str(key.get("key_id") or ""), str(key.get("public_key") or "")
+    if built.get(kid) != public or crypto.kid_for(public) != kid:
+        print(f"[FAIL] the server signs releases with {kid}:{public}, which this build does not trust")
+        return False
+    print(f"[OK  ] the server's release signing key {kid} is built in")
+    dist_file = keys_file.parent / "distribution.json"
+    dist = distribution.from_dict(json.loads(dist_file.read_text(encoding="utf-8"))) if dist_file.exists() else None
+    if dist is None or dist.source != "akeno-api":
+        dist = distribution.from_dict({"update_source": "akeno-api", "release_api": base,
+                                       "download_hosts": ["akeno.online"]})
+    status, doc = get_json(f"{base}/releases/stable")
+    if status == 404:
+        print("[INFO] no stable release published yet (GET /releases/stable: 404)")
+        return True
+    try:
+        release = manifest.parse_api(doc, {k: crypto.public_key(v) for k, v in built.items()}, dist)
+    except manifest.ManifestError as exc:
+        print(f"[FAIL] the published stable release does not verify in the app: {exc}")
+        return False
+    f = release.files[0]
+    print(f"[OK  ] stable {release.release} verified (key {release.kid}): {f.name}, {f.size} bytes, sha256 {f.sha256}")
+    return True
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--api", default="https://api.akeno.online")
     ap.add_argument("--release-details", action="store_true")
+    ap.add_argument("--release-keys", type=Path, help="the build's release-keys.json")
     args = ap.parse_args(argv)
     base = args.api.rstrip("/") + "/api/v1"
     status, version = get_json(f"{base}/system/version")
@@ -128,6 +166,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Release/update related paths: {', '.join(release) or 'none published'}")
     if args.release_details:
         release_details(doc, base)
+    if args.release_keys and not check_release_keys(base, args.release_keys):
+        return 1
     return 0
 
 

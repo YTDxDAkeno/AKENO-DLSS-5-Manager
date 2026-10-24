@@ -253,6 +253,7 @@ jobs:
           RELEASE_REPO: ${{ vars.AKENO_RELEASE_REPO }}
           UPDATE_SOURCE: ${{ vars.AKENO_UPDATE_SOURCE }}
           RELEASE_BASE: ${{ vars.AKENO_RELEASE_BASE }}
+          RELEASE_API: ${{ vars.AKENO_RELEASE_API }}
           RELEASE_PAGE: ${{ vars.AKENO_RELEASE_PAGE }}
           DOWNLOAD_HOSTS: ${{ vars.AKENO_DOWNLOAD_HOSTS }}
           RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
@@ -263,13 +264,19 @@ jobs:
             python tools/release_manifest.py embed --keys "$env:RELEASE_PUBLIC_KEYS" --require
             if ($LASTEXITCODE -ne 0) { throw "release key configuration failed" }
           }
+          # Default: the AKENO Release Manager on the production API (GET /api/v1/releases/stable).
+          # AKENO_UPDATE_SOURCE=akeno: static signed channel files; =github: the GitHub release repository.
           if ($env:UPDATE_SOURCE -eq 'akeno') {
             python tools/release_manifest.py distribution --source akeno --repo="$env:RELEASE_REPO" --release-base="$env:RELEASE_BASE" --release-page="$env:RELEASE_PAGE" --download-hosts="$env:DOWNLOAD_HOSTS"
-            if ($LASTEXITCODE -ne 0) { throw "release source configuration failed" }
-          } elseif ($env:RELEASE_REPO) {
+          } elseif ($env:UPDATE_SOURCE -eq 'github') {
             python tools/release_manifest.py distribution --repo="$env:RELEASE_REPO"
-            if ($LASTEXITCODE -ne 0) { throw "release source configuration failed" }
+          } else {
+            $api = if ($env:RELEASE_API) { $env:RELEASE_API } else { 'https://api.akeno.online/api/v1' }
+            $page = if ($env:RELEASE_PAGE) { $env:RELEASE_PAGE } else { 'https://akeno.online/downloads/latest' }
+            $hosts = if ($env:DOWNLOAD_HOSTS) { $env:DOWNLOAD_HOSTS } else { 'akeno.online' }
+            python tools/release_manifest.py distribution --source akeno-api --repo="$env:RELEASE_REPO" --release-api="$api" --release-page="$page" --download-hosts="$hosts"
           }
+          if ($LASTEXITCODE -ne 0) { throw "release source configuration failed" }
       - name: PyInstaller build
         run: pyinstaller --noconfirm --distpath dist --workpath build packaging\akeno.spec
       - name: Packaged build trusts the official API and the public license and release keys

@@ -1,5 +1,14 @@
 # Distribution, updates and the private source repository
 
+> **Update source since 2026-10-24: the AKENO Release Manager.** Every build asks
+> `GET https://api.akeno.online/api/v1/releases/stable` (`akeno/data/distribution.json`, `update_source: "akeno-api"`).
+> It trusts a release only with an Ed25519 signature by the built-in release key `d6139235b220a4aa` over
+> `signed_payload`, and uses only the signed values. Such a release is shown and opened on
+> `https://akeno.online/downloads/latest`, never installed silently or by the app itself. The Release Manager
+> offers one installer file and no portable package for the rollback-capable updater. The GitHub release
+> repository below stays available through `AKENO_UPDATE_SOURCE=github`. Details:
+> `docs/handover/CODEX_VPS_INTEGRATION.md` §B.
+
 ## Architecture
 
 | Place | Holds | Who can read it |
