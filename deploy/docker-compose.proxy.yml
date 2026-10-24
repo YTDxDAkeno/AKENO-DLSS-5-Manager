@@ -1,0 +1,15 @@
+# For a Caddy (or other reverse proxy) that already runs in Docker on this VPS: the three AKENO services join
+# that proxy's network, so it reaches them as akeno-api:8000, akeno-web:8000 and akeno-admin:8000.
+#   AKENO_PROXY_NETWORK=<the proxy's network> docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+services:
+  akeno-api:
+    networks: [akeno, proxy]
+  akeno-web:
+    networks: [akeno, proxy]
+  akeno-admin:
+    networks: [akeno, proxy]
+
+networks:
+  proxy:
+    external: true
+    name: ${AKENO_PROXY_NETWORK:?set AKENO_PROXY_NETWORK to the proxy's Docker network}

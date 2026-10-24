@@ -10,9 +10,9 @@
     {{ m.csrf_field() }}
     {{ m.field("email", t("E-mail address"), "email", email or "", True, "username", maxlength=320) }}
     {{ m.field("password", t("Password"), "password", "", True, "current-password", maxlength=256) }}
-    <div class="row" style="margin-top:16px"><button class="primary" type="submit">{{ t("Sign in") }}</button>
+    <div class="row mt"><button class="primary" type="submit">{{ t("Sign in") }}</button>
       <span class="spacer"></span><a href="/forgot-password">{{ t("Forgot password?") }}</a></div>
   </form>
-  {% if registration %}<p class="muted" style="margin-top:16px">{{ t("No account yet?") }} <a href="/register">{{ t("Create account") }}</a></p>{% endif %}
+  {% if registration %}<p class="muted mt">{{ t("No account yet?") }} <a href="/register">{{ t("Create account") }}</a></p>{% endif %}
 </div>
 {% endblock %}

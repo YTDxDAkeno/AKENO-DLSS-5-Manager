@@ -1,0 +1,16 @@
+{% extends "admin/_layout.html" %}
+{% block title %}{{ t("Settings") }}{% endblock %}
+{% block admin %}
+<h1>{{ t("Settings") }}</h1>
+<form method="post" action="/admin/settings" class="card">{{ m.csrf_field() }}
+  {% for key, label in labels.items() %}
+    {% if kinds[key] == 'bool' %}
+      <label class="check mt"><input type="checkbox" name="{{ key }}" {% if values[key] %}checked{% endif %}>{{ t(label) }}</label>
+    {% else %}
+      {{ m.field(key, t(label), "number" if kinds[key] == 'int' else "text", values[key]) }}
+    {% endif %}
+  {% endfor %}
+  <p class="muted mt">{{ t("Maintenance mode never invalidates lifetime certificates or saved leases. SMTP, host names and secrets are set in the server's .env file.") }}</p>
+  <div class="row mt-s"><button class="primary" type="submit">{{ t("Save") }}</button></div>
+</form>
+{% endblock %}

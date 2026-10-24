@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ t("Set up two-factor sign-in") }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ t("Set up two-factor sign-in") }}</h1>
+  {% if staff %}<p class="flash warn">{{ t("Staff accounts use the admin area only with two-factor sign-in.") }}</p>{% endif %}
+  <p class="dim">{{ t("Scan this QR code with your authenticator app, then enter the 6-digit code it shows.") }}</p>
+  {% if error %}<div class="flash error" role="alert">{{ t(error) }}</div>{% endif %}
+  <div class="qr" role="img" aria-label="{{ t('QR code for the authenticator app') }}">{{ qr|safe }}</div>
+  <details class="mt-s"><summary>{{ t("Cannot scan? Enter this key by hand") }}</summary><p class="mono mt-s wrap-any">{{ secret }}</p></details>
+  <form method="post" action="{{ request.url.path }}">
+    {{ m.csrf_field() }}
+    {{ m.field("code", t("Code from the app"), "text", "", True, "one-time-code", maxlength=8, extra='inputmode="numeric" autofocus') }}
+    <div class="row mt"><button class="primary" type="submit">{{ t("Turn on") }}</button></div>
+  </form>
+</div>
+{% endblock %}

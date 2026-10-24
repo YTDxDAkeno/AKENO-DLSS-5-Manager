@@ -12,7 +12,7 @@
   <form method="post" action="/forgot-password">
     {{ m.csrf_field() }}
     {{ m.field("email", t("E-mail address"), "email", "", True, "email", maxlength=320) }}
-    <div class="row" style="margin-top:16px"><button class="primary" type="submit">{{ t("Send reset link") }}</button>
+    <div class="row mt"><button class="primary" type="submit">{{ t("Send reset link") }}</button>
       <a href="/login">{{ t("Back to sign-in") }}</a></div>
   </form>
   {% endif %}

@@ -15,8 +15,8 @@
   <nav class="nav" aria-label="{{ t('Main navigation') }}">
     {% block nav %}
     {% if user %}
-      <a href="/account" {% if area == 'account' %}aria-current="page"{% endif %}>{{ t("My account") }}</a>
-      {% if user.role != 'user' %}<a href="/admin" {% if area == 'admin' %}aria-current="page"{% endif %}>{{ t("Admin") }}</a>{% endif %}
+      <a href="{{ account_href }}" {% if area == 'account' %}aria-current="page"{% endif %}>{{ t("My account") }}</a>
+      {% if user.role != 'user' and admin_href %}<a href="{{ admin_href }}" {% if area == 'admin' %}aria-current="page"{% endif %}>{{ t("Admin") }}</a>{% endif %}
       <form method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link" type="submit">{{ t("Sign out") }}</button></form>
     {% else %}
       <a href="/login">{{ t("Sign in") }}</a>

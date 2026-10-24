@@ -1,0 +1,38 @@
+{% extends "admin/_layout.html" %}
+{% block title %}{{ t("Admin") }}{% endblock %}
+{% block admin %}
+<h1>{{ t("Overview") }}</h1>
+{% if maintenance %}<div class="flash warn">{{ t("Maintenance mode is on. The app keeps working with saved licenses; lifetime licenses are not affected.") }}</div>{% endif %}
+<div class="grid">
+  <div class="card"><div class="muted">{{ t("Accounts") }}</div><div class="stat">{{ stats.users }}</div><div class="muted">{{ t("{n} confirmed", n=stats.users_verified) }} · {{ t("{n} disabled", n=stats.users_disabled) }}</div></div>
+  <div class="card"><div class="muted">{{ t("Active licenses") }}</div><div class="stat">{{ stats.licenses_active }}</div><div class="muted">{{ t("{n} end within 7 days", n=stats.expiring_7_days) }}</div></div>
+  <div class="card"><div class="muted">{{ t("Lifetime") }}</div><div class="stat">{{ stats.licenses_by_type.lifetime }}</div><div class="muted">{{ t("{n} offline certificates", n=stats.offline_certificates) }}</div></div>
+  <div class="card"><div class="muted">{{ t("Active PCs") }}</div><div class="stat">{{ stats.devices_active }}</div><div class="muted">{{ t("{n} checks in 24 h", n=stats.validations_24h) }}</div></div>
+</div>
+<div class="grid two">
+  <section class="card"><h2>{{ t("Licenses by type") }}</h2>
+    <dl class="kv">
+      <dt>{{ t("Trial (24 hours)") }}</dt><dd>{{ stats.licenses_by_type.trial_24h }}</dd>
+      <dt>{{ t("Extended trial (72 hours)") }}</dt><dd>{{ stats.licenses_by_type.trial_72h }}</dd>
+      <dt>{{ t("Monthly (30 days)") }}</dt><dd>{{ stats.licenses_by_type.monthly }}</dd>
+      <dt>{{ t("Lifetime") }}</dt><dd>{{ stats.licenses_by_type.lifetime }}</dd>
+      <dt>{{ t("Expired") }}</dt><dd>{{ stats.licenses_expired }}</dd>
+      <dt>{{ t("Disabled") }}</dt><dd>{{ stats.licenses_disabled }}</dd>
+    </dl></section>
+  <section class="card"><h2>{{ t("Activation codes") }}</h2>
+    <dl class="kv">
+      <dt>{{ t("Available") }}</dt><dd>{{ stats.codes.available }}</dd><dt>{{ t("Reserved") }}</dt><dd>{{ stats.codes.reserved }}</dd>
+      <dt>{{ t("Redeemed") }}</dt><dd>{{ stats.codes.redeemed }}</dd><dt>{{ t("Withdrawn") }}</dt><dd>{{ stats.codes.revoked }}</dd>
+    </dl>
+    {% if can('generate_codes') %}<p class="mt"><a class="btn primary" href="/admin/codes#generate">{{ t("Generate activation codes") }}</a></p>{% endif %}</section>
+</div>
+<section class="card"><h2>{{ t("Redemptions, last 14 days") }}</h2>
+  <svg class="chart" viewBox="0 0 {{ stats.daily|length * 40 }} 140" role="img" aria-label="{{ t('Redemptions per day') }}">
+  {% for d in stats.daily %}{% set h = (d.redemptions / peak * 110)|round(1) %}
+    <rect x="{{ loop.index0 * 40 + 6 }}" y="{{ 112 - h }}" width="28" height="{{ h + 2 }}" rx="4" class="bar"><title>{{ d.day }}: {{ d.redemptions }}</title></rect>
+    <text x="{{ loop.index0 * 40 + 20 }}" y="134" text-anchor="middle" class="axis">{{ d.day[8:] }}</text>
+  {% endfor %}
+  </svg>
+  <p class="muted">{{ t("Sign-ins in 24 h: {ok} successful, {bad} failed.", ok=stats.sign_ins_24h, bad=stats.failed_sign_ins_24h) }}</p>
+</section>
+{% endblock %}

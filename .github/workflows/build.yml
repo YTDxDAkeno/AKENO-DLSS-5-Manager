@@ -40,6 +40,60 @@ jobs:
           name: linux-test-results
           path: linux-test-results.xml
 
+  server:
+    name: Licensing server (SQLite, PostgreSQL 16, Docker deployment)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: akeno
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: akeno_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U akeno" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r server/requirements-test.txt
+      - name: Server tests on SQLite (includes the app's licensing code against a live server)
+        working-directory: server
+        run: python -m pytest -q --junitxml=../server-sqlite-results.xml
+      - name: Server tests on PostgreSQL 16 (redemption races with row locks)
+        working-directory: server
+        run: python -m pytest -q --junitxml=../server-postgres-results.xml
+        env:
+          AKENO_TEST_DATABASE_URL: postgresql://akeno:ci-only-password@127.0.0.1:5432/akeno_test
+      - name: Deployment with docker compose (install.sh, health, super admin, backup)
+        working-directory: deploy
+        run: |
+          cp .env.example .env
+          sed -i 's|^AKENO_PUBLIC_URL=$|AKENO_PUBLIC_URL=http://localhost:8411|' .env
+          ./install.sh < /dev/null
+          docker compose ps
+          curl -fsS http://127.0.0.1:8410/api/v1/system/ready
+          curl -fsS -o /dev/null http://127.0.0.1:8411/
+          curl -fsS -o /dev/null http://127.0.0.1:8412/login
+          echo "ci admin password 1" | docker compose exec -T akeno-api akeno-server create-super-admin --email ci@example.invalid --password-stdin
+          ./backup.sh
+          ls -la backups
+          docker compose down -v
+      - name: Publish bounded server test failure annotations
+        if: failure()
+        run: |
+          for f in server-sqlite-results.xml server-postgres-results.xml; do
+            [ -f "$f" ] && python tools/ci_test_annotations.py "$f" || true
+          done
+      - name: Preserve server test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-test-results
+          path: server-*-results.xml
+
   real-assets:
     name: Real upstream package contracts (original release archives)
     runs-on: ubuntu-24.04
@@ -164,6 +218,12 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           AKENO_TEST_REAL_BUNDLE: '1'
+      - name: License server address and public keys (repository variables)
+        if: ${{ vars.AKENO_LICENSE_SERVER_URL != '' }}
+        env:
+          LICENSE_SERVER_URL: ${{ vars.AKENO_LICENSE_SERVER_URL }}
+          LICENSE_PUBLIC_KEYS: ${{ vars.AKENO_LICENSE_PUBLIC_KEYS }}
+        run: python tools/configure-licensing.py --server-url "$env:LICENSE_SERVER_URL" --keys "$env:LICENSE_PUBLIC_KEYS"
       - name: PyInstaller build
         run: pyinstaller --noconfirm --distpath dist --workpath build packaging\akeno.spec
       - name: Smoke test the packaged executable
@@ -258,7 +318,7 @@ jobs:
   development-release:
     name: Draft development release from tested Windows artifacts
     if: github.event_name == 'workflow_dispatch' && inputs.draft_release
-    needs: [test-linux, real-assets, windows]
+    needs: [test-linux, server, real-assets, windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -1,0 +1,24 @@
+{% extends "admin/_layout.html" %}
+{% block title %}{{ t("Devices") }}{% endblock %}
+{% block admin %}
+<h1>{{ t("Devices") }}</h1>
+<section class="card">
+  <p class="dim">{{ t("PCs are known only by a pseudonymous fingerprint (a hash computed by the app), a name, the system and the AKENO version.") }}</p>
+  <form method="get" action="/admin/devices" class="inline">
+    <div>{{ m.field("q", t("Search (name, e-mail, fingerprint)"), "search", filters.q) }}</div>
+    <div><label class="check check-offset"><input type="checkbox" name="active" value="1" {% if filters.active == '1' %}checked{% endif %}>{{ t("Active only") }}</label></div>
+    <button type="submit">{{ t("Filter") }}</button></form>
+  <div class="table-wrap mt"><table>
+    <thead><tr><th>{{ t("PC") }}</th><th>{{ t("Account") }}</th><th>{{ t("System") }}</th><th>{{ t("Last seen") }}</th><th>{{ t("Status") }}</th><th></th></tr></thead>
+    <tbody>{% for dev in items %}<tr>
+      <td>{% if can('rename_device') %}<form class="inline" method="post" action="/admin/devices/{{ dev.id }}/rename">{{ m.csrf_field() }}<input name="label" value="{{ dev.label }}" maxlength="80" aria-label="{{ t('Name') }}"><button class="small" type="submit">{{ t("Rename") }}</button></form>{% else %}{{ dev.label }}{% endif %}<div class="muted mono">{{ dev.fingerprint }}…</div></td>
+      <td><a href="/admin/users/{{ dev.user_id }}">{{ dev.email }}</a></td>
+      <td>{{ dev.os }}<div class="muted">AKENO {{ dev.app_version }}</div></td>
+      <td>{{ m.when(dev.last_seen_at) }}</td>
+      <td>{% if dev.active %}<span class="badge ok">{{ t("Active") }}</span>{% else %}<span class="badge">{{ t("Removed") }}</span> <span class="muted">{{ dev.revoked_by }}</span>{% endif %}</td>
+      <td>{% if dev.active and can('revoke_device') %}<form method="post" action="/admin/devices/{{ dev.id }}/revoke" data-confirm="{{ t('Remove this PC? It cannot register again until you allow it.') }}">{{ m.csrf_field() }}<button class="small danger" type="submit">{{ t("Remove") }}</button></form>{% elif dev.revoked_by == 'admin' and can('revoke_device') %}<form method="post" action="/admin/devices/{{ dev.id }}/unblock">{{ m.csrf_field() }}<button class="small" type="submit">{{ t("Allow again") }}</button></form>{% endif %}
+        {% if dev.active and can('transfer_device') %}<details><summary>{{ t("Transfer") }}</summary><form method="post" action="/admin/devices/{{ dev.id }}/transfer" class="inline">{{ m.csrf_field() }}<input name="email" type="email" placeholder="{{ t('e-mail of the new account') }}" required aria-label="{{ t('e-mail of the new account') }}"><button class="small" type="submit">{{ t("Transfer") }}</button></form></details>{% endif %}</td>
+    </tr>{% else %}<tr><td colspan="6" class="dim">{{ t("No PCs.") }}</td></tr>{% endfor %}</tbody></table></div>
+  {{ m.pager(page, 50, total, base) }}
+</section>
+{% endblock %}

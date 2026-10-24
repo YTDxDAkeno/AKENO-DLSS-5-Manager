@@ -38,6 +38,7 @@ ERRORS = {
     "device_blocked": "This PC was removed from the account by an administrator. Contact support.",
     "device_removals_exhausted": "You removed the maximum number of PCs for 30 days. Support can help.",
     "invalid_token": "This link is invalid or has expired.",
+    "email_not_verified": "Confirm your e-mail address first: open the link we sent you, then try again.",
     "validation_error": "Some fields are invalid.",
 }
 

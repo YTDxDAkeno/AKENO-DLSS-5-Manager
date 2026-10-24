@@ -101,11 +101,19 @@ def render(request: Request, template: str, status: int = 200, **ctx: Any) -> HT
     html = env.get_template(template).render(
         request=request, t=t, lang=lang, csrf=csrf_value(request), version=__version__, now=utcnow(),
         fmt_time=lambda v: fmt_time(v, lang), fmt_remaining=lambda s: fmt_remaining(s, lang),
-        flash=_take_flash(request), user=user, admin_url=get_config().admin_url,
-        download_url=get_config().download_url, **{k: v for k, v in ctx.items() if k != "user"})
+        flash=_take_flash(request), user=user, download_url=get_config().download_url, **site_links(),
+        **{k: v for k, v in ctx.items() if k != "user"})
     response = HTMLResponse(html, status_code=status)
     finish(request, response)
     return response
+
+
+def site_links() -> dict:
+    """Links between the account site and the admin site, which may run on different host names."""
+    cfg = get_config()
+    account = "/account" if cfg.serves_web else f"{cfg.public_url}/account"
+    admin = "/admin" if cfg.serves_admin else (f"{cfg.admin_url}/admin" if cfg.admin_url else "")
+    return {"account_href": account, "admin_href": admin}
 
 
 def finish(request: Request, response: Response) -> None:

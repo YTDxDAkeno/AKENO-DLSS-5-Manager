@@ -132,11 +132,12 @@ dl.kv dd { margin: 0; overflow-wrap: anywhere; }
   border-radius: var(--radius-sm); padding: 12px 14px; line-height: 1.9; white-space: pre-wrap; user-select: all; }
 .qr { background: #fff; padding: 12px; border-radius: 12px; display: inline-block; }
 .qr svg { display: block; width: 200px; height: 200px; }
-.chart { display: flex; gap: 6px; align-items: flex-end; height: 120px; padding-top: 10px; }
-.chart .bar { flex: 1; background: linear-gradient(180deg, var(--violet), var(--blue)); border-radius: 6px 6px 2px 2px;
-  min-height: 2px; position: relative; }
-.chart .bar span { position: absolute; bottom: -20px; left: 50%; transform: translateX(-50%); font-size: .72em;
-  color: var(--muted); white-space: nowrap; }
-.chart-wrap { padding-bottom: 22px; }
+.chart { width: 100%; height: 160px; display: block; }
+.chart .bar { fill: #7a4dff; }
+.chart .axis { fill: var(--muted); font-size: 11px; }
+.mt { margin-top: 14px; } .mt-s { margin-top: 10px; } .mt-l { margin-top: 20px; }
+.wrap-any { overflow-wrap: anywhere; } .narrow-cell { max-width: 340px; }
+.side-foot { margin: 12px 0 0 12px; } .check-offset { margin-top: 34px; }
 details summary { cursor: pointer; color: var(--dim); font-weight: 600; }
 @media (prefers-reduced-motion: no-preference) { .btn, button, .nav a, .side a { transition: background .15s, border-color .15s; } }
+.nowrap { white-space: nowrap; }

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block content %}
+<div class="split">
+  <nav class="side" aria-label="{{ t('Admin navigation') }}">
+    <a href="/admin" {% if section == 'dashboard' %}aria-current="page"{% endif %}>{{ t("Overview") }}</a>
+    <a href="/admin/codes" {% if section == 'codes' %}aria-current="page"{% endif %}>{{ t("Activation codes") }}</a>
+    <a href="/admin/users" {% if section == 'users' %}aria-current="page"{% endif %}>{{ t("Users") }}</a>
+    <a href="/admin/devices" {% if section == 'devices' %}aria-current="page"{% endif %}>{{ t("Devices") }}</a>
+    {% if can('audit') %}<a href="/admin/audit" {% if section == 'audit' %}aria-current="page"{% endif %}>{{ t("Audit log") }}</a>{% endif %}
+    {% if can('settings') %}<a href="/admin/settings" {% if section == 'settings' %}aria-current="page"{% endif %}>{{ t("Settings") }}</a>
+    <a href="/admin/system" {% if section == 'system' %}aria-current="page"{% endif %}>{{ t("System") }}</a>{% endif %}
+    <p class="muted side-foot">{{ user.email }}<br>{{ t({"support": "Support", "admin": "Admin", "super_admin": "Super Admin"}[user.role]) }}</p>
+  </nav>
+  <div class="stack">{% block admin %}{% endblock %}</div>
+</div>
+{% endblock %}

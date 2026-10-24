@@ -18,7 +18,7 @@
     {{ m.field("password2", t("Repeat the password"), "password", "", True, "new-password", maxlength=256) }}
     <label for="f-language">{{ t("Language") }}</label>
     <select id="f-language" name="language"><option value="en" {% if lang == 'en' %}selected{% endif %}>English</option><option value="de" {% if lang == 'de' %}selected{% endif %}>Deutsch</option></select>
-    <div class="row" style="margin-top:16px"><button class="primary" type="submit">{{ t("Create account") }}</button>
+    <div class="row mt"><button class="primary" type="submit">{{ t("Create account") }}</button>
       <a href="/login">{{ t("I already have an account") }}</a></div>
   </form>
   {% endif %}

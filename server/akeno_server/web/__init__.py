@@ -29,4 +29,5 @@ def mount(app: FastAPI, cfg: ServerConfig) -> None:
         from akeno_server.web import admin, public
         if not cfg.serves_web:
             app.include_router(public.auth_router)       # sign-in pages for the admin host
+            app.include_router(admin.root_router)
         app.include_router(admin.router)

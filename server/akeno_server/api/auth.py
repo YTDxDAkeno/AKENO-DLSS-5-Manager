@@ -25,6 +25,7 @@ def register(body: schemas.RegisterIn, request: Request, db: Session = Depends(g
     auth.registration_allowed(db)
     user = auth.create_user(db, body.email, body.password, body.display_name, body.language)
     auth.send_verification(db, user, base=base_url(request))
+    user.last_login_at = user.created_at
     issued = auth.start_session(db, user, "app", client_ip(request), user_agent(request))
     db.commit()
     return _tokens(issued, user)

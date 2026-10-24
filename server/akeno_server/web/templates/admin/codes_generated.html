@@ -1,0 +1,17 @@
+{% extends "admin/_layout.html" %}
+{% block title %}{{ t("New activation codes") }}{% endblock %}
+{% block admin %}
+<h1>{{ t("New activation codes") }}</h1>
+<div class="flash warn" role="status">{{ t("Copy or download the codes now. They are not shown again: the server keeps only a verifier.") }}</div>
+<section class="card">
+  <h2>{{ t("Batch") }} <span class="mono">{{ batch }}</span> · {{ codes|length }}</h2>
+  <div id="codes" class="codes">{% for c in codes %}{{ c }}
+{% endfor %}</div>
+  <textarea id="codes-csv" hidden>{{ csv }}</textarea>
+  <div class="row mt">
+    <button type="button" data-copy="codes" data-done="{{ t('Copied') }}">{{ t("Copy all") }}</button>
+    <button type="button" class="primary" data-download="codes-csv" data-filename="akeno-codes-{{ batch }}.csv">{{ t("Download CSV") }}</button>
+    <a class="btn" href="/admin/codes?batch={{ batch|urlencode }}">{{ t("Show batch") }}</a>
+  </div>
+</section>
+{% endblock %}

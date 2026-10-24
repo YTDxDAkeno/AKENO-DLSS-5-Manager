@@ -10,7 +10,7 @@
   <form method="post" action="/login/verify">
     {{ m.csrf_field() }}
     {{ m.field("code", t("Code"), "text", "", True, "one-time-code", maxlength=20, extra='inputmode="numeric" autofocus') }}
-    <div class="row" style="margin-top:16px"><button class="primary" type="submit">{{ t("Continue") }}</button>
+    <div class="row mt"><button class="primary" type="submit">{{ t("Continue") }}</button>
       <a href="/login">{{ t("Cancel") }}</a></div>
   </form>
 </div>

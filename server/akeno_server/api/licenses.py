@@ -10,7 +10,8 @@ from akeno_server.api import schemas
 from akeno_server.api.deps import Caller, client_ip, current, limit, not_in_maintenance
 from akeno_server.clock import utcnow
 from akeno_server.db import get_db
-from akeno_server.errors import not_found, unavailable
+from akeno_server.auth import service as auth
+from akeno_server.errors import forbidden, not_found, unavailable
 from akeno_server.licensing import service as lic
 from akeno_server.licensing.signing import SigningUnavailable
 
@@ -22,6 +23,8 @@ def redeem(body: schemas.RedeemIn, request: Request, caller: Caller = Depends(cu
            db: Session = Depends(get_db)):
     limit(request, "redeem_ip")
     limit(request, "redeem_user", str(caller.user.id))
+    if auth.needs_verification(db, caller.user):
+        raise forbidden("email_not_verified", "Confirm your e-mail address before redeeming a code.")
     done = lic.redeem(db, caller.user, body.code, client_ip(request), "app")
     return {"license": lic.describe(done.license, utcnow()), "code_type": done.code_type,
             "already_redeemed": done.already}

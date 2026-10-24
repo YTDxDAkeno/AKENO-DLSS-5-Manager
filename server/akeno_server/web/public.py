@@ -26,10 +26,10 @@ def _home_for(user: User) -> str:
     return "/admin" if user.role_enum.privileged else "/account"
 
 
-def _signed_in(request: Request, db: Session, user: User, mfa: bool, target: str | None):
+def _signed_in(request: Request, db: Session, user: User, mfa: bool, target: str | None, flash: str | None = None):
     issued = auth.start_session(db, user, "web", client_ip(request), user_agent(request), mfa=mfa)
     db.commit()
-    response = redirect(request, safe_next(target, _home_for(user)))
+    response = redirect(request, safe_next(target, _home_for(user)), flash)
     set_cookie(response, SESSION_COOKIE, issued.token, max_age=get_config().web_session_hours * 3600)
     response.delete_cookie(PENDING_COOKIE, path="/")
     return response
@@ -131,14 +131,12 @@ async def register(request: Request, db: Session = Depends(get_db)):
         user = auth.create_user(db, values["email"], values["password"], values["display_name"],
                                 values["language"])
         auth.send_verification(db, user, base=base_url(request))
+        user.last_login_at = user.created_at
     except ApiError as exc:
         return render(request, "auth/register.html", status=exc.status, error=exc.message, registration=allowed,
                       form={"display_name": values["display_name"], "email": values["email"]})
-    response = _signed_in(request, db, user, mfa=False, target="/account")
-    from akeno_server.auth.tokens import b64e
-    set_cookie(response, "akeno_flash", b64e("ok|Account created. We sent you an e-mail to confirm your address."
-                                             .encode()), max_age=60)
-    return response
+    return _signed_in(request, db, user, mfa=False, target="/account",
+                      flash="Account created. We sent you an e-mail to confirm your address.")
 
 
 @router.get("/forgot-password")

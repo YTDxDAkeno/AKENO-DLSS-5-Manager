@@ -1,0 +1,26 @@
+# Add these two sites to the Caddyfile of the Caddy that already serves this VPS (it keeps ports 80/443 and
+# gets the certificates). Replace the placeholders with your own host names, then: caddy reload
+#
+# A) Caddy runs on the host (systemd): AKENO's ports are bound to 127.0.0.1 (docker-compose.yml).
+# B) Caddy runs in Docker: use docker-compose.proxy.yml and write akeno-api:8000, akeno-web:8000 and
+#    akeno-admin:8000 instead of 127.0.0.1:8410/8411/8412.
+
+licenses.your-domain.example {
+	encode zstd gzip
+	# the app's API (sign-in, codes, license checks)
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8410
+	}
+	# landing page and account website
+	handle {
+		reverse_proxy 127.0.0.1:8411
+	}
+}
+
+admin.your-domain.example {
+	encode zstd gzip
+	# optional: only your own addresses may open the admin site
+	# @outside not remote_ip 203.0.113.10
+	# respond @outside 403
+	reverse_proxy 127.0.0.1:8412
+}
