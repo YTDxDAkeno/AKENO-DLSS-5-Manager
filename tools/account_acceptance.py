@@ -167,11 +167,15 @@ def check_license_keys(api: LicenseApi, licensing_file: Path, report: Report) ->
     built = json.loads(licensing_file.read_text(encoding="utf-8"))
     embedded = {k["kid"]: k["public_key"] for k in built.get("keys", []) if k.get("kid")}
     report.info("license keys in the build", ", ".join(sorted(embedded)) or "none")
-    if not embedded:
-        report.fail("license keys in the build", "none: a build without keys accepts no license")
-        return
     doc = api.call("GET", "/system/keys")
     server = [k for k in doc.get("keys", []) if isinstance(k, dict) and k.get("kid")]
+    for k in server:
+        state = "retired" if k.get("retired_at") or k.get("retired") else "active"
+        report.info(f"server publishes key {k['kid']} ({state})", f"public key {k.get('public_key', '?')}")
+    if not embedded:
+        report.fail("license keys in the build", "none: a build without keys accepts no license "
+                    "(set the repository variable AKENO_LICENSE_PUBLIC_KEYS to the server's active keys above)")
+        return
     m = LicenseManager(cfgmod.LicensingConfig(api.base, embedded), store=_NullStore())
     trusted = m.trusted_keys()
     for k in server:
