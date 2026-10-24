@@ -40,6 +40,10 @@ class ServiceUnavailable(UpdateError):
     """The update service could not be reached (offline, timeout, server error): nothing is wrong with AKENO."""
 
 
+class NoRelease(UpdateError):
+    """The channel has no published release yet (HTTP 404): there is nothing newer to offer."""
+
+
 def frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
 
@@ -70,7 +74,7 @@ def fetch_json(url: str, trusted=None) -> dict:
             data = r.read(MAX_MANIFEST + 1)
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
-            raise UpdateError("no release has been published on this channel yet") from exc
+            raise NoRelease("no release has been published on this channel yet") from exc
         raise ServiceUnavailable(f"the update service answered {exc.code}") from exc
     except (urllib.error.URLError, OSError) as exc:
         raise ServiceUnavailable(f"the update service cannot be reached ({getattr(exc, 'reason', exc)})") from exc
@@ -166,13 +170,17 @@ class UpdateService:
     def check(self) -> manifest.Release | None:
         """The newer release of the chosen channel, or None. Raises UpdateError / ManifestError."""
         self._store(last_attempt=time.time())
-        if self.dist.source == "akeno-api":
-            if self.channel != "stable":
-                raise UpdateError("the AKENO release server offers only the stable channel")
-            release = manifest.parse_api(self.fetch(self.dist.channel_manifest("stable")), self.keys, self.dist)
-        else:
-            doc = self.fetch(self.dist.channel_manifest(self.channel))
-            release = manifest.parse(doc, self.keys, self.channel, self.dist)
+        try:
+            if self.dist.source == "akeno-api":
+                if self.channel != "stable":
+                    raise UpdateError("the AKENO release server offers only the stable channel")
+                release = manifest.parse_api(self.fetch(self.dist.channel_manifest("stable")), self.keys, self.dist)
+            else:
+                doc = self.fetch(self.dist.channel_manifest(self.channel))
+                release = manifest.parse(doc, self.keys, self.channel, self.dist)
+        except NoRelease:
+            self._store(last_check=time.time())
+            return None                                   # nothing published yet: up to date
         key = f"highest_seen_{self.channel}"
         seen = self.state().get(key)
         # a manifest older than one already seen is a replay or a freeze attempt: not offered

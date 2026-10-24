@@ -9,7 +9,7 @@ Diese Datei ist die Reihenfolge. Die Details stehen in:
 |---|---|
 | `CODEX_ACCOUNTS_HANDOVER.md` | Konto-Änderungen: Zweck jedes Hunks, Konfliktrisiko, Vertrag, Konfiguration, Abnahme |
 | `accounts-server.patch` | Patch für `server/akeno_server/` (9 Dateien). SHA-256 `d077080a16d66d672f367c1698ba3901c2fa17705a9e784e3e16035666095f7f` |
-| `CODEX_RELEASE_MANAGER.md` | Was der Windows-Updater vom VPS braucht: Dateien, Format, Signatur, Abnahmetests |
+| `CODEX_RELEASE_MANAGER.md` | Älterer Vorschlag mit statischen, signierten Kanal-Dateien. Durch den echten Release Manager überholt (Abschnitt B) |
 | `PRODUCTION_STATUS.md` | Was die Lese-Prüfung gegen die Produktion zuletzt gesehen hat |
 
 ## Grundregeln
@@ -23,12 +23,16 @@ Diese Datei ist die Reihenfolge. Die Details stehen in:
    Verhalten nach, das `CODEX_ACCOUNTS_HANDOVER.md` §3 für diesen Hunk verlangt.
 2. **Keine Produktionsdaten ändern.** Der Patch bringt keine Migration, keine neue Tabelle und keine neue Spalte mit.
    Vorher trotzdem `deploy/backup.sh` ausführen und den laufenden Image-Tag notieren.
-3. **Kein privater Schlüssel auf den VPS und keiner in die App:**
-   * Der Release-Signierschlüssel (Ed25519-Seed) liegt nur als GitHub-Secret `AKENO_RELEASE_SIGNING_KEY` oder
-     offline vor.
-   * Die Lizenz-Signierschlüssel bleiben dort, wo sie heute sind: auf dem Lizenzserver.
-   * Die App enthält nur öffentliche Schlüssel. Der Windows-Build prüft das bei jedem Lauf
-     (`tools/check_build_config.py`).
+3. **Kein privater Schlüssel in die App, keine Schlüssel tauschen:**
+   * Die App enthält nur öffentliche Schlüssel:
+     * Lizenz: `f382ecda000888b2`;
+     * Release: `d6139235b220a4aa`.
+
+     Der Windows-Build prüft das bei jedem Lauf (`tools/check_build_config.py`). Er prüft auch, dass beide
+     Schlüssel verschieden sind.
+   * Den Release-Signierschlüssel `d6139235b220a4aa` und den Lizenzschlüssel **nicht** neu erzeugen oder ersetzen.
+     Ausgelieferte Apps vertrauen nur diesen öffentlichen Schlüsseln.
+   * Wo der private Release-Schlüssel liegt, siehe B, Punkt 4. Empfehlung: nicht auf dem VPS.
 
 ## A. Fehlende Konto-Endpunkte (aus PR #14)
 

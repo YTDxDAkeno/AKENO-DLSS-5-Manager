@@ -240,3 +240,18 @@ def test_committed_release_key_is_the_servers_published_key():
     # GET https://api.akeno.online/api/v1/releases/signing-key, read by the production check on 2026-10-24
     rel = json.loads((ROOT / "akeno" / "data" / "release-keys.json").read_text())
     assert rel["keys"] == [{"kid": "d6139235b220a4aa", "public_key": "bpe9acmephsoZSYzy12R2XFy_lJZ_69MiV31ekehcdo"}]
+
+
+def test_nothing_published_yet_means_up_to_date(tmp_path, signing, monkeypatch):
+    import urllib.error
+    import urllib.request
+    from akeno.updater import service
+    _, keys = signing
+
+    def not_found(*a, **kw):
+        raise urllib.error.HTTPError(f"{API}/releases/stable", 404, "Not Found", {}, None)
+    monkeypatch.setattr(urllib.request.OpenerDirector, "open", not_found)
+    with pytest.raises(service.NoRelease):
+        service.fetch_json(f"{API}/releases/stable", RM.trusted)
+    svc = UpdateService(None, dist=RM, keys=keys, version="3.0.0", folder=tmp_path)
+    assert svc.check() is None and svc.state().get("last_check")
