@@ -107,6 +107,11 @@ def desktop_strings() -> set[str]:
     from akeno.ui.pages import online
     out |= set(CATEGORIES.values()) | set(online.KIND_TEXT.values()) | {text for _, text in online.EXPORTS}
     out |= {"Settings", "Desktop"}
+    from akeno.ui import notifications
+    from akeno.ui.pages import updates
+    out |= set(notifications.CATEGORIES.values()) | set(updates.CHANNEL_TEXT.values())
+    out |= {"Updates install into the built program only (this copy runs from the source code).",
+            "This build has no release verification key: download updates from the release page."}
     return out
 
 

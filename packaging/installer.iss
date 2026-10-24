@@ -60,3 +60,8 @@ Filename: "{app}\AKENO.exe"; Description: "{cm:LaunchProgram,AKENO DLSS 5 Manage
 [UninstallRun]
 ; Remove the optional "Launch with Windows" entry if the user enabled it.
 Filename: "{sys}\reg.exe"; Parameters: "delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v ""AKENO DLSS 5 Manager"" /f"; Flags: runhidden; RunOnceId: "RemoveAutostart"
+
+[UninstallDelete]
+; The in-app updater replaces the program folder (it keeps the previous version in %LOCALAPPDATA%\AKENO\updates),
+; so files of later versions are removed too. User data in %LOCALAPPDATA%\AKENO is not in this folder.
+Type: filesandordirs; Name: "{app}"

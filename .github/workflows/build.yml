@@ -3,13 +3,19 @@ name: Build and test
 on:
   push:
     branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
     inputs:
       draft_release:
-        description: Create a draft development prerelease after Linux and Windows pass
+        description: Create a draft development prerelease (in this private repository) after Linux and Windows pass
         type: boolean
         default: false
+      publish_channel:
+        description: Publish the tested build to the public release repository (none, stable or beta)
+        type: choice
+        options: [none, stable, beta]
+        default: none
 
 permissions:
   contents: read
@@ -219,11 +225,29 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           AKENO_TEST_REAL_BUNDLE: '1'
       - name: License server address and public keys (repository variables)
-        if: ${{ vars.AKENO_LICENSE_SERVER_URL != '' }}
+        if: ${{ vars.AKENO_LICENSE_SERVER_URL != '' || startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
+        shell: pwsh
         env:
           LICENSE_SERVER_URL: ${{ vars.AKENO_LICENSE_SERVER_URL }}
           LICENSE_PUBLIC_KEYS: ${{ vars.AKENO_LICENSE_PUBLIC_KEYS }}
-        run: python tools/configure-licensing.py --server-url "$env:LICENSE_SERVER_URL" --keys "$env:LICENSE_PUBLIC_KEYS"
+          RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
+        run: |
+          $require = @(); if ($env:RELEASE_BUILD -eq 'true') { $require = @('--require') }
+          python tools/configure-licensing.py --server-url "$env:LICENSE_SERVER_URL" --keys "$env:LICENSE_PUBLIC_KEYS" @require
+          if ($LASTEXITCODE -ne 0) { throw "license configuration failed" }
+      - name: Release verification key and public release repository (repository variables)
+        shell: pwsh
+        env:
+          RELEASE_PUBLIC_KEYS: ${{ vars.AKENO_RELEASE_PUBLIC_KEYS }}
+          RELEASE_REPO: ${{ vars.AKENO_RELEASE_REPO }}
+          RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
+        run: |
+          $require = @(); if ($env:RELEASE_BUILD -eq 'true') { $require = @('--require') }
+          python tools/release_manifest.py embed --keys "$env:RELEASE_PUBLIC_KEYS" @require
+          if ($LASTEXITCODE -ne 0) { throw "release key configuration failed" }
+          if ($env:RELEASE_REPO) {
+            @{ release_repo = $env:RELEASE_REPO } | ConvertTo-Json | Set-Content akeno/data/distribution.json -Encoding utf8
+          }
       - name: PyInstaller build
         run: pyinstaller --noconfirm --distpath dist --workpath build packaging\akeno.spec
       - name: Smoke test the packaged executable
@@ -320,6 +344,82 @@ jobs:
             ${{ runner.temp }}/akeno-gui/logs/*
             ${{ runner.temp }}/akeno-smoke/logs/*
             ${{ runner.temp }}/akeno-exe/logs/*
+
+  publish-release:
+    # Users download from the PUBLIC release repository (no GitHub login); this repository stays private.
+    # Needs: variable AKENO_RELEASE_REPO (owner/name), secrets AKENO_RELEASE_SIGNING_KEY (Ed25519 seed from
+    # tools/release_manifest.py keygen) and AKENO_RELEASE_REPO_TOKEN (fine-grained token: contents read/write on
+    # the release repository only). None of them ever reaches the Windows build.
+    name: Publish to the public release repository
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_channel != 'none')
+    needs: [test-linux, server, real-assets, windows]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+    env:
+      RELEASE_REPO: ${{ vars.AKENO_RELEASE_REPO }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install cryptography==44.0.0
+      - name: Version, tag and channel
+        shell: bash
+        env:
+          INPUT_CHANNEL: ${{ inputs.publish_channel }}
+        run: |
+          v=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' akeno/__init__.py)
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF#refs/tags/v}" != "$v" ]]; then
+            echo "::error::tag ${GITHUB_REF#refs/tags/} does not match __version__ $v"; exit 1
+          fi
+          channel="${INPUT_CHANNEL:-}"
+          if [[ -z "$channel" || "$channel" == "none" ]]; then
+            if [[ "$v" == *-* ]]; then channel=beta; else channel=stable; fi
+          fi
+          test -n "$RELEASE_REPO" || { echo "::error::repository variable AKENO_RELEASE_REPO is not set"; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          echo "CHANNEL=$channel" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: AKENO-DLSS5-Manager-windows-x64
+          path: dist-public
+      - name: Corresponding source code (GPL-3.0-or-later) and checksums
+        shell: bash
+        run: |
+          git archive --format=zip --prefix="AKENO-Gaming-Suite-$VERSION-source/" \
+            -o "dist-public/AKENO-Gaming-Suite-$VERSION-source.zip" HEAD
+          rm -f dist-public/SHA256SUMS.txt
+          (cd dist-public && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - name: Signed release manifest
+        shell: bash
+        env:
+          AKENO_RELEASE_SIGNING_KEY: ${{ secrets.AKENO_RELEASE_SIGNING_KEY }}
+        run: |
+          test -n "$AKENO_RELEASE_SIGNING_KEY" || { echo "::error::secret AKENO_RELEASE_SIGNING_KEY is not set"; exit 1; }
+          python tools/release_manifest.py sign --channel "$CHANNEL" --release "$VERSION" --tag "v$VERSION" \
+            --repo "$RELEASE_REPO" --out "public/channels/$CHANNEL.json" dist-public/*
+      - name: Publish the release and update the channel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AKENO_RELEASE_REPO_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo "::error::secret AKENO_RELEASE_REPO_TOKEN is not set"; exit 1; }
+          pre=""; [[ "$CHANNEL" == beta ]] && pre="--prerelease"
+          gh release create "v$VERSION" --repo "$RELEASE_REPO" $pre --title "AKENO Gaming Suite $VERSION" \
+            --notes-file docs/RELEASE_NOTES.md dist-public/*
+          gh auth setup-git
+          git clone --depth 1 "https://github.com/$RELEASE_REPO.git" release-repo
+          mkdir -p release-repo/channels release-repo/compatibility
+          cp "public/channels/$CHANNEL.json" release-repo/channels/
+          cp akeno/data/compatibility.json release-repo/compatibility/compatibility.json
+          cd release-repo
+          git config user.name "AKENO release"
+          git config user.email "akeno-release@users.noreply.github.com"
+          git add channels compatibility
+          git commit -m "AKENO Gaming Suite $VERSION ($CHANNEL)"
+          git push
 
   development-release:
     name: Draft development release from tested Windows artifacts

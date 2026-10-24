@@ -428,6 +428,9 @@ class CloudSyncPage(QWidget):
             self.btn_sync.setEnabled(True)
             self._status()
             self.ctl.status.emit(t("Cloud Sync: {r}", r=t(report.text())))
+            if report.conflicts and getattr(self.win, "notifier", None) is not None:
+                self.win.notifier.notify("sync", t("{n} conflict(s) to decide", n=report.conflicts),
+                                         once=f"sync-{self.engine.state.get('last_sync')}")
             if report.pulled or report.merged:
                 self.ctl.games_changed.emit()
                 self.ctl.settings_changed.emit("*")

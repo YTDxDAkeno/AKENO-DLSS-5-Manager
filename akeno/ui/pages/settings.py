@@ -22,7 +22,13 @@ from akeno.ui.widgets import Card, KeyValueGrid, ResponsiveRow, button, confirm,
 
 log = logging.getLogger(__name__)
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-RELEASES_API = "https://api.github.com/repos/YTDxDAkeno/AKENO-DLSS-5-Manager/releases/latest"
+# the source repository is private: everything the app downloads comes from the public release repository
+OLD_COMPAT_URL = "https://raw.githubusercontent.com/YTDxDAkeno/AKENO-DLSS-5-Manager/main/akeno/data/compatibility.json"
+
+
+def compat_url(setting: str | None) -> str:
+    from akeno import distribution
+    return setting if setting and setting != OLD_COMPAT_URL else distribution.load().compat_db
 
 
 def set_autostart(enabled: bool) -> None:
@@ -58,6 +64,7 @@ class SettingsPage(QWidget):
         super().__init__()
         self.ctl = ctl
         self.s = ctl.s
+        self.window = window
         st = self.s.settings
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -84,7 +91,16 @@ class SettingsPage(QWidget):
         gen.body.addLayout(self._row(t("Language"), self.lang))
         gen.body.addLayout(self._row(t("Accent colour"), self.accent))
         gen.body.addWidget(self._check("animations", t("Animations (spinners and transitions)")))
-        gen.body.addWidget(self._check("notifications", t("Show a notification when long tasks finish")))
+        gen.body.addWidget(self._check("notifications", t("Show Windows notifications")))
+        from akeno.ui.notifications import CATEGORIES, DEFAULT
+        chosen = st.get("notification_categories") or DEFAULT
+        self.note_checks = {}
+        for key, text in CATEGORIES.items():
+            box = QCheckBox("    " + t(text))
+            box.setChecked(bool(chosen.get(key, DEFAULT[key])))
+            box.toggled.connect(lambda on, k=key: self._note_category(k, on))
+            self.note_checks[key] = box
+            gen.body.addWidget(box)
         self.autostart = QCheckBox(t("Launch with Windows"))
         self.autostart.setChecked(bool(st.get("launch_with_windows")))
         self.autostart.toggled.connect(self._autostart)
@@ -205,6 +221,12 @@ class SettingsPage(QWidget):
         r.addWidget(w, 1)
         return r
 
+    def _note_category(self, key: str, on: bool) -> None:
+        from akeno.ui.notifications import DEFAULT
+        chosen = dict(self.s.settings.get("notification_categories") or DEFAULT)
+        chosen[key] = bool(on)
+        self.s.settings.set("notification_categories", chosen)
+
     def _check(self, key: str, text: str) -> QCheckBox:
         cb = QCheckBox(text)
         cb.setChecked(bool(self.s.settings.get(key)))
@@ -235,24 +257,14 @@ class SettingsPage(QWidget):
             self.ctl.status.emit(t("Removed {n} cached file(s).", n=n))
 
     def check_updates(self) -> None:
-        def work():
-            return fetch_json(RELEASES_API, {"api.github.com"})
-
-        def done(data):
-            tag = str((data or {}).get("tag_name") or "").lstrip("v")
-            if not tag:
-                info(self, t("Updates"), t("No published release was found."))
-            elif _ver(tag) > _ver(__version__):
-                info(self, t("Updates"), t("AKENO {v} is available.", v=tag),
-                     t("Download it from the official GitHub releases page: {u}",
-                       u=data.get("html_url", "https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/releases")))
-            else:
-                info(self, t("Updates"), t("AKENO is up to date ({v}).", v=__version__))
-        self.ctl.run("updates", work, done, lambda e: info(self, t("Updates"), t("Update check failed: ") + str(e),
-                                                           error=True))
+        """AKENO's own updates live on the Updates page (signed manifest, verified download, rollback)."""
+        page = self.window.pages.get("updates") if self.window is not None else None
+        if page is not None:
+            self.window.go("updates")
+            page.check()
 
     def update_compat(self) -> None:
-        url = self.s.settings.get("compat_db_url")
+        url = compat_url(self.s.settings.get("compat_db_url"))
 
         def work():
             data = fetch_json(url, {"raw.githubusercontent.com"})

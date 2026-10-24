@@ -33,7 +33,8 @@ SECTIONS = [
     ("DESKTOP", [("wallpapers", "Wallpapers", "image"), ("dock", "Dock", "dock"), ("widgets", "Widgets", "grid"),
                  ("themes", "Theme Workshop", "palette")]),
     ("ONLINE", [("community", "Community", "globe"), ("sync", "Cloud Sync", "refresh")]),
-    ("ACCOUNT", [("account", "My Account", "user"), ("license", "License", "key"), ("settings", "Settings", "gear")]),
+    ("ACCOUNT", [("account", "My Account", "user"), ("license", "License", "key"), ("updates", "Updates", "download"),
+                 ("settings", "Settings", "gear")]),
 ]
 
 
@@ -402,6 +403,8 @@ class MainWindow(QMainWindow):
         from akeno.ui.game_sessions import GameSessions
         self.sessions = GameSessions(self.s, self)
         self.desktop = DesktopClient()
+        from akeno.ui.notifications import Notifier
+        self.notifier = Notifier(self.s.settings, None, self)       # the tray icon is attached by the app
         from akeno.sync.data import LocalData
         from akeno.sync.engine import SyncEngine
         self.sync = SyncEngine(LocalData(self.s))
@@ -447,6 +450,7 @@ class MainWindow(QMainWindow):
         from akeno.ui.pages.booster import BoosterPage
         from akeno.ui.pages.desktop import DockPage, ThemesPage, WallpapersPage, WidgetsPage
         from akeno.ui.pages.online import CloudSyncPage, CommunityPage
+        from akeno.ui.pages.updates import UpdatesPage
         from akeno.ui.pages.recent import RecentPage
         from akeno.ui.pages.benchmark import BenchmarkPage
         from akeno.ui.pages.dashboard import DashboardPage
@@ -489,7 +493,7 @@ class MainWindow(QMainWindow):
                 "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage, "account": AccountPage,
                 "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
                 "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage,
-                "community": CommunityPage, "sync": CloudSyncPage}
+                "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage}
         for key, _, _ in NAV:
             page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")

@@ -7,6 +7,7 @@ import logging
 import logging.handlers
 import os
 import sys
+import time
 
 from akeno import APP_NAME, __version__
 
@@ -29,8 +30,12 @@ def setup_logging(debug: bool, name: str = "akeno.log") -> None:
 
 def desktop_process(argv: list[str]) -> int | None:
     """Desktop Studio runs in processes of its own: the host (``--desktop``) and one wallpaper renderer per
-    monitor (``--wallpaper-renderer``). They start before anything of the suite's window is loaded."""
+    monitor (``--wallpaper-renderer``); so does the updater (``--apply-update``). They start before anything of
+    the suite's window is loaded."""
     import re
+    if "--apply-update" in argv[:-1]:
+        from akeno.updater import apply
+        return apply.main(argv)
     if "--wallpaper-renderer" in argv:
         monitor = argv[argv.index("--monitor") + 1] if "--monitor" in argv[:-1] else "monitor"
         setup_logging(False, f"wallpaper-{re.sub(r'[^A-Za-z0-9]+', '', monitor)[-12:] or 'monitor'}.log")
@@ -126,6 +131,9 @@ def main(argv: list[str] | None = None) -> int:
     shell = SuiteShell(lic, build, language, busy=lambda: bool(holder.get("ctl") and holder["ctl"].busy))
     shell.minimized = args.minimized
     shell.start()
+    from PySide6.QtCore import QTimer
+    from akeno.updater.service import write_start_marker
+    QTimer.singleShot(3000, write_start_marker)        # an update that just ran: this version starts fine
     return app.exec()
 
 
@@ -153,17 +161,33 @@ def build_suite(app, args, lic):
         tray.activated.connect(lambda reason: (win.showNormal(), win.activateWindow()) if win.isEnabled() else None)
         tray.show()
     win.tray = tray
+    win.notifier.tray = tray
 
     labels = {"install": "Installation finished.", "benchmark": "Benchmark finished.", "games": "Game scan finished.",
               "restore": "Restore finished."}
 
     def busy(key: str, on: bool) -> None:
-        if on or key not in labels or tray is None:
-            return
-        if services.settings.get("notifications") and not win.isActiveWindow():
-            tray.showMessage(APP_NAME, i18n.t(labels[key]), QSystemTrayIcon.MessageIcon.Information, 4000)
+        if not on and key in labels:
+            win.notifier.notify("tasks", i18n.t(labels[key]), when_hidden=True)
 
     ctl.busy_changed.connect(busy)
+
+    def license_reminder() -> None:
+        from akeno.licensing import Status
+        view = lic.view()
+        if view.status is Status.EXPIRING:
+            win.notifier.notify("license", i18n.t("Your AKENO license ends soon. Redeem a code to extend it."),
+                                once=time.strftime("license-%Y-%m-%d"))
+    reminder = QTimer(win)
+    reminder.setInterval(3600_000)
+    reminder.timeout.connect(license_reminder)
+    reminder.start()
+
+    def game_started(game_id: str, _pid: int) -> None:
+        game = services.library.get(game_id)
+        if game is not None and services.boost.configured(game_id):
+            win.notifier.notify("games", i18n.t("FPS Booster session settings are active for {g}.", g=game.name))
+    win.sessions.started.connect(game_started)
 
     def setting(key: str) -> None:
         if key in ("debug_logging", "*"):
@@ -188,7 +212,13 @@ def build_suite(app, args, lic):
         if services.settings.get("auto_update_compat_db"):
             win.pages["settings"].update_compat()
         if services.settings.get("check_app_updates"):
-            win.pages["settings"].check_updates()
+            win.pages["updates"].check(quiet=True)
+        outcome = win.pages["updates"].svc.after_start()
+        if outcome:
+            win.statusBar().showMessage(i18n.t("AKENO {v} was installed.", v=outcome["version"]) if outcome.get("ok")
+                                        else i18n.t("The update to {v} did not start; the previous version is back.",
+                                                    v=outcome.get("version")), 15000)
+        license_reminder()
         win.pages["downloads"].auto_check()
         try:
             win.desktop.ensure()                # wallpapers, dock and widgets come back with the suite
