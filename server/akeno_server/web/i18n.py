@@ -67,4 +67,5 @@ def needed() -> set[str]:
 
 # shown through helpers the scan above does not follow
 EXTRA = {"Account created. We sent you an e-mail to confirm your address.", "Choose a license type.", "expired",
-         "day", "days", "unlimited"}
+         "day", "days", "unlimited",
+         "Account created, but the confirmation e-mail could not be sent. Request a new one on this page later."}

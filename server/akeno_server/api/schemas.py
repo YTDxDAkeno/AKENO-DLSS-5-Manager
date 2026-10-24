@@ -54,6 +54,11 @@ class ChangePasswordIn(Strict):
     new_password: str = Field(max_length=256)
 
 
+class ChangeEmailIn(Strict):
+    password: str = Field(max_length=256)
+    new_email: str = Field(max_length=320)
+
+
 class PatchMeIn(Strict):
     display_name: str | None = Field(None, max_length=80)
     language: Literal["en", "de"] | None = None
@@ -70,12 +75,22 @@ class UserOut(BaseModel):
     created_at: datetime
 
 
+EmailDelivery = Literal["sent", "failed", "unavailable"]
+
+
 class TokensOut(BaseModel):
     access_token: str
     token_type: Literal["bearer"] = "bearer"
     expires_in: int
     refresh_token: str
     user: UserOut
+    # registration only: what happened to the confirmation e-mail (sent = accepted by the mail server)
+    verification_email: EmailDelivery | None = None
+
+
+class EmailSentOut(BaseModel):
+    status: Literal["sent", "already_verified"]
+    email: str | None = None
 
 
 # -- licenses --------------------------------------------------------------------------------------------------------
