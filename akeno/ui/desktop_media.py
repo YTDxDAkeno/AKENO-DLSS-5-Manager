@@ -600,6 +600,9 @@ class PreviewPlayer(QWidget):
             if autoplay:
                 self.movie.start()
                 self._set_play_icon(True)
+        elif kind == "video" and not thumbsmod.video_available():
+            self.still.set(pm, kind, t("Video preview is not available: Qt Multimedia could not be loaded."))
+            self.stack.setCurrentWidget(self.still)
         elif kind == "video":
             self._video()
             self.player.setSource(QUrl.fromLocalFile(item.path))

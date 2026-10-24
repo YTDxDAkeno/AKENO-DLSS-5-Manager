@@ -2723,6 +2723,7 @@
  "Video": "Video",
  "Video and web sound": "Ton von Video und Web",
  "Video files (MP4, WebM, MKV, MOV) and GIFs from your Downloads folder of the last two weeks. Adding one copies it into AKENO's wallpaper library, so it stays when you tidy the folder.": "Videodateien (MP4, WebM, MKV, MOV) und GIFs der letzten zwei Wochen aus deinem Download-Ordner. Beim Hinzufügen wird die Datei in AKENOs Hintergrund-Bibliothek kopiert und bleibt so erhalten, wenn du den Ordner aufräumst.",
+ "Video preview is not available: Qt Multimedia could not be loaded.": "Videovorschau nicht verfügbar: Qt Multimedia konnte nicht geladen werden.",
  "Videos": "Videos",
  "Videos and GIFs": "Videos und GIFs",
  "Videos from Pixabay, free to use under the Pixabay Content License. Each result names its creator; added videos keep a note of where they came from.": "Videos von Pixabay, kostenlos nutzbar unter der Pixabay Content License. Jedes Ergebnis nennt seine Urheberin oder seinen Urheber; hinzugefügte Videos behalten einen Vermerk über ihre Herkunft.",

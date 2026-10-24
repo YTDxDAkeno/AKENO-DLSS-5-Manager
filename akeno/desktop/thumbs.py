@@ -15,6 +15,7 @@ placeholder, never a crash: every decode has a time limit and errors become ``fa
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import logging
 import os
@@ -31,6 +32,20 @@ log = logging.getLogger(__name__)
 VERSION = 2
 SIZE = QSize(480, 270)
 VIDEO_TIMEOUT_MS = 12_000
+
+
+NO_VIDEO = "video previews need Qt Multimedia, which could not be loaded on this PC"
+
+
+@functools.cache
+def video_available() -> bool:
+    """Qt Multimedia loads (the Windows build always ships it; on Linux it needs libpulse)."""
+    try:
+        import PySide6.QtMultimedia  # noqa: F401
+        return True
+    except ImportError as exc:
+        log.warning("Qt Multimedia is not available: %s", exc)
+        return False
 
 
 def cache_dir() -> Path:
@@ -223,6 +238,9 @@ class ThumbnailService(QObject):
             self.pool.start(_StillJob(self, path, preview, out))
         elif kind == "video" and Path(path).is_file():
             self.pending.add(path)
+            if not video_available():                  # a placeholder, never a crash
+                QTimer.singleShot(0, self, lambda: self._done(path, QImage(), {}, NO_VIDEO))
+                return None
             self.videos.append(path)
             self._next_video()
         return None

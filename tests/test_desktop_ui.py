@@ -156,3 +156,17 @@ def test_dock_preview_follows_the_settings(window, qapp, tmp_path):
     img = page.preview.grab().toImage()
     assert not img.isNull() and img.width() > 100
     assert page.list.count() == 1 and page.list.height() < 220, "the pinned list is as tall as its icons"
+
+
+def test_without_qt_multimedia_the_preview_shows_a_picture(window, qapp, tmp_path, monkeypatch):
+    from akeno.desktop import thumbs
+    monkeypatch.setattr(thumbs, "video_available", lambda: False)
+    page = window.pages["wallpapers"]
+    window.go("wallpapers")
+    shutil.copy(MEDIA / "sample.mp4", tmp_path / "clip.mp4")
+    assert page.add_paths([str(tmp_path / "clip.mp4")]) == []
+    page.gallery.select(page.lib.by_path(tmp_path / "clip.mp4").id)
+    qapp.processEvents()
+    preview = page.preview
+    assert preview.stack.currentWidget() is preview.still and not preview.playing()
+    assert preview.player is None, "Qt Multimedia is never touched"

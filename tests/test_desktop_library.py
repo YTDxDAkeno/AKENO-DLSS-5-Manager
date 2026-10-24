@@ -151,3 +151,15 @@ def test_thumbnails_for_pictures_gifs_videos_and_broken_files(qapp, tmp_path):
     big.write_bytes(picture(tmp_path / "x.png", "#00FF00", (64, 64)).read_bytes())
     assert thumbs.thumb_path(big, tmp_path / "thumbs") != thumbs.thumb_path(tmp_path / "x.png", tmp_path / "thumbs")
     assert again.cached(str(big)) is None, "a changed file gets a new thumbnail"
+
+
+def test_without_qt_multimedia_videos_get_a_placeholder(qapp, tmp_path, monkeypatch):
+    monkeypatch.setattr(thumbs, "video_available", lambda: False)
+    svc = thumbs.ThumbnailService(tmp_path / "thumbs")
+    failed, ready = {}, {}
+    svc.failed.connect(lambda p, e: failed.__setitem__(p, e))
+    svc.ready.connect(lambda p, img: ready.__setitem__(p, img))
+    path = str(MEDIA / "sample.mp4")
+    assert svc.request(path, "video") is None
+    assert svc.wait(5000)
+    assert "Qt Multimedia" in failed[path] and not ready, "no decoder: a placeholder, never a crash"
