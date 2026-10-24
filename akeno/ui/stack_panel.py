@@ -22,7 +22,7 @@ from akeno.security.downloads import CancelToken
 from akeno.stack import configs
 from akeno.stack.errors import explain
 from akeno.ui import art, theme
-from akeno.ui.widgets import Card, Clickable, Divider, FlowLayout, KeyValueGrid, Spinner, StatusPill, button, \
+from akeno.ui.widgets import fit_to_screen, Card, Clickable, Divider, FlowLayout, KeyValueGrid, Spinner, StatusPill, button, \
     clear_layout, confirm, game_cover, info, label, scaled
 
 LAUNCHERS = {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "ubisoft": "Ubisoft Connect", "ea": "EA app",
@@ -67,7 +67,7 @@ class PreviewDialog(QDialog):
     def __init__(self, prepared, parent=None):
         super().__init__(parent)
         self.setWindowTitle(t("Review the installation"))
-        self.resize(940, 620)
+        fit_to_screen(self, 940, 620)
         lay = QVBoxLayout(self)
         lay.addWidget(label(t(prepared.plan.summary[0]) if prepared.plan.summary else "", "h3", wrap=True))
         lay.addWidget(label(t("Nothing has been changed yet. AKENO backs up every file it replaces and can restore "

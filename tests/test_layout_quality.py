@@ -117,3 +117,16 @@ def test_no_page_is_wider_than_the_window_and_nothing_is_clipped(window, qtbot, 
             win.pages[key].tabs.setCurrentIndex(0)
     problems = list(dict.fromkeys(problems))
     assert not problems, "\n".join(problems[:40])
+
+
+def test_dialogs_never_open_larger_than_the_screen(window, qtbot):
+    """The offscreen test screen is 800x800, smaller than any of these dialogs asks for."""
+    from akeno.ui.community_runtime import CommunityRuntimeDialog
+    from akeno.ui.license_gate import LicenseGate
+    from akeno.ui.pipelines import PipelineDialog
+    avail = QApplication.primaryScreen().availableGeometry()
+    for dialog in (CommunityRuntimeDialog(window.ctl, window), LicenseGate(window.license),
+                   PipelineDialog(window.ctl, window)):
+        qtbot.addWidget(dialog)
+        assert dialog.width() <= avail.width() and dialog.height() <= avail.height(), type(dialog).__name__
+        assert dialog.minimumWidth() <= avail.width() and dialog.minimumHeight() <= avail.height()

@@ -11,7 +11,7 @@ from akeno.community.runtime import Category, LABELS, load_review
 from akeno.community import candidates
 from akeno.i18n import t
 from akeno.ui import theme
-from akeno.ui.widgets import Card, StatusPill, KeyValueGrid, button, label, confirm
+from akeno.ui.widgets import fit_to_screen, Card, StatusPill, KeyValueGrid, button, label, confirm
 
 
 class CommunityRuntimeDialog(QDialog):
@@ -28,7 +28,7 @@ class CommunityRuntimeDialog(QDialog):
         self.review = self.evaluation = self.prepared = self.last_report = None
         self.revision = 0
         self.setWindowTitle(t("Community Runtime Manager"))
-        self.resize(1100, 760)
+        fit_to_screen(self, 1100, 760)
         outer = QVBoxLayout(self)
         outer.addWidget(label(t("Community Runtime Manager"), "h1"))
         gpu = ctl.s.selected_gpu()

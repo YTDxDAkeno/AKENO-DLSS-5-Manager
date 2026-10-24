@@ -1167,3 +1167,20 @@ def form_grid(rows, label_width: int = 150, field_width: int = 560) -> QGridLayo
         field.setMaximumWidth(field_width)
         grid.addWidget(field, i, 1)
     return grid
+
+
+def fit_to_screen(window: QWidget, width: int, height: int, min_width: int = 0, min_height: int = 0) -> None:
+    """Open ``window`` at ``width`` x ``height`` but never larger than the screen's free area (200 % scaling on a
+    small screen leaves about 960 x 520 logical pixels), and keep its minimum size within that area too."""
+    from PySide6.QtGui import QGuiApplication
+    scr = window.screen() if window.screen() is not None else QGuiApplication.primaryScreen()
+    if scr is None:
+        window.resize(width, height)
+        if min_width or min_height:
+            window.setMinimumSize(min_width, min_height)
+        return
+    avail = scr.availableGeometry()
+    room_w, room_h = max(320, avail.width() - 24), max(240, avail.height() - 48)
+    if min_width or min_height:
+        window.setMinimumSize(min(min_width, room_w), min(min_height, room_h))
+    window.resize(min(width, room_w), min(height, room_h))

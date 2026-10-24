@@ -20,7 +20,7 @@ from akeno.licensing.api import ApiError
 from akeno.licensing.manager import DeviceLimitReached
 from akeno.ui import art, assets, theme, workers
 from akeno.ui.account_ui import CodeEdit, LicenseSummary, error_text
-from akeno.ui.widgets import button, clear_layout, label
+from akeno.ui.widgets import fit_to_screen, button, clear_layout, label
 
 SUITE_NAME = "AKENO Gaming Suite"
 FEATURES = ("Community DLSS 5 manager for your games and FiveM", "FPS Booster and benchmarks with real measurements",
@@ -83,8 +83,7 @@ class LicenseGate(QWidget):
         self.setWindowTitle(t(SUITE_NAME))
         self.setWindowIcon(QIcon(art.app_icon_pixmap(256)))
         self.setObjectName("Root")
-        self.setMinimumSize(900, 620)
-        self.resize(1180, 760)
+        fit_to_screen(self, 1180, 760, 900, 620)
         self.busy = False
         root = QHBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
