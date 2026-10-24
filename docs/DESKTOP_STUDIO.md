@@ -74,6 +74,10 @@ A new wallpaper for a monitor gives it a fresh start. The runtime also ends by i
 3. **Monitors are matched by position.** Qt 6 names screens by model ("DELL U3223QE", "HyperVMonitor"), Win32 by
    device (`\\.\DISPLAY1`). `winapi.monitor_of()` maps the configuration's Qt screen name to the Win32 monitor at
    the same physical position. In 3.0 a name mismatch skipped attaching and showed a plain window over the icons.
+   Two monitors of the same model share Qt's name; there the key gets the monitor's position
+   (`winapi.screen_key()`: "DELL U2720Q @2560,0"). Unique names stay as they were, and a setting saved under the
+   bare model name still applies to both until one is changed. Before, the second identical monitor never got a
+   wallpaper. A monitor that matches no Windows monitor gets no wallpaper (the renderer refuses, see 5).
 4. **Verified before it is shown.** `winapi.verify()` checks:
    - the parent;
    - the z-order (below the icon view, or behind the icon host);
@@ -85,9 +89,15 @@ A new wallpaper for a monitor gives it a fresh start. The runtime also ends by i
    window over the desktop.
 6. **Explorer restart.** The renderer checks every 2 s that it is still attached. If not, it hides itself and exits
    with `DESKTOP_LOST`.
-7. **No `SPI_SETDESKWALLPAPER` on the raised desktop.** That call would destroy Explorer's `WorkerW`. On the classic
+7. **Qt replacing the window.** Qt destroys and recreates the native window of a window that is already shown when
+   the first GPU-drawn widget joins it. The page of a web wallpaper does that a moment after it starts drawing, both
+   after switching to a web wallpaper and in a renderer that starts with one. The new window is an ordinary
+   top-level window. Qt reports it (`WinIdChange`) before it shows it; the renderer then attaches it behind the
+   icons at once and verifies it after Qt has shown it. If that fails, the window is hidden and the renderer exits
+   with `EMBED_FAILED`. See "The desktop window went away" below.
+8. **No `SPI_SETDESKWALLPAPER` on the raised desktop.** That call would destroy Explorer's `WorkerW`. On the classic
    layout it redraws Windows' own wallpaper after the last renderer stops.
-8. **Clicks go through.** The window is `WS_EX_TRANSPARENT` and never takes the focus. Desktop clicks reach the icon
+9. **Clicks go through.** The window is `WS_EX_TRANSPARENT` and never takes the focus. Desktop clicks reach the icon
    view; web wallpapers receive the mouse position over the socket instead.
 
 Widgets are never attached into Explorer. They stay ordinary windows at the bottom of the z-order. On **Win+D** the
