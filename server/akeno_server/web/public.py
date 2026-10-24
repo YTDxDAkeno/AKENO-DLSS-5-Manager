@@ -19,6 +19,9 @@ from akeno_server.web.render import (PENDING_COOKIE, SESSION_COOKIE, check_csrf,
                                      redirect, render, safe_next, set_cookie)
 
 auth_router = APIRouter(include_in_schema=False)
+REGISTERED = "Account created. We sent you an e-mail to confirm your address."
+REGISTERED_NO_MAIL = ("Account created, but the confirmation e-mail could not be sent. Request a new one on this "
+                      "page later.")
 router = APIRouter(include_in_schema=False)
 
 
@@ -130,13 +133,13 @@ async def register(request: Request, db: Session = Depends(get_db)):
             raise ApiError(400, "password_mismatch", "The passwords do not match.")
         user = auth.create_user(db, values["email"], values["password"], values["display_name"],
                                 values["language"])
-        auth.send_verification(db, user, base=base_url(request))
+        sent = auth.delivery(auth.send_verification(db, user, base=base_url(request))) == "sent"
         user.last_login_at = user.created_at
     except ApiError as exc:
         return render(request, "auth/register.html", status=exc.status, error=exc.message, registration=allowed,
                       form={"display_name": values["display_name"], "email": values["email"]})
     return _signed_in(request, db, user, mfa=False, target="/account",
-                      flash="Account created. We sent you an e-mail to confirm your address.")
+                      flash=REGISTERED if sent else REGISTERED_NO_MAIL)
 
 
 @router.get("/forgot-password")

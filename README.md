@@ -14,7 +14,7 @@ Where each part runs:
 - **Your PC:** everything, including the downloads from AKENO's **public release repository**, which need no GitHub account.
 - **The license server (VPS):** accounts, licenses and the admin website, nothing else ([deploy/README.md](deploy/README.md)).
 
-Licenses are Ed25519-signed by that server, bound to the PC and checked against the public key built into the app. A Lifetime license keeps working offline for good ([license trust model](docs/SECURITY_LICENSING.md)).
+Licenses are Ed25519-signed by that server, bound to the PC and checked against the public key built into the app. A Lifetime license keeps working offline for good ([license trust model](docs/SECURITY_LICENSING.md)). Sign-up, e-mail confirmation, password reset and sessions: [accounts](docs/ACCOUNT_SYSTEM.md).
 
 More: [Desktop Studio](docs/DESKTOP_STUDIO.md), [Cloud Sync and Community](docs/CLOUD_SYNC_AND_COMMUNITY.md), [distribution and updates](docs/DISTRIBUTION_AND_UPDATES.md), [3.0 release notes](docs/AKENO_V3_RELEASE_NOTES.md).
 

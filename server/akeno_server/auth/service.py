@@ -15,7 +15,7 @@ from akeno_server import mail, settings
 from akeno_server.auth import passwords, tokens, totp
 from akeno_server.clock import utcnow
 from akeno_server.config import get_config
-from akeno_server.errors import ApiError, bad_request, conflict, forbidden, too_many, unauthorized
+from akeno_server.errors import ApiError, bad_request, conflict, forbidden, too_many, unauthorized, unavailable
 from akeno_server.models import (EmailVerificationToken, PasswordResetToken, Role, SignInEvent, User,
                                  UserCredential, UserSession)
 
@@ -255,12 +255,36 @@ def link(path: str, token: str, base: str = "") -> str:
     return f"{page(path, base)}?token={token}"
 
 
-def send_verification(db: Session, user: User, email: str | None = None, base: str = "") -> None:
+def _retire(db: Session, model, user_id: uuid.UUID) -> None:
+    """End every unused link of this kind for the account (a newer link or a password change replaces them)."""
+    now = utcnow()
+    db.execute(update(model).where(model.user_id == user_id, model.used_at.is_(None), model.expires_at > now)
+               .values(expires_at=now))
+
+
+def email_unavailable() -> ApiError:
+    return unavailable("email_unavailable", "E-mails cannot be sent at the moment. Please try again later.")
+
+
+def delivery(accepted: bool) -> str:
+    """What happened to an e-mail, for the user: ``sent`` (accepted for delivery), ``failed`` (the mail server did
+    not take it) or ``unavailable`` (this server cannot reach anybody by e-mail yet)."""
+    if not mail.deliverable():
+        return "unavailable"
+    return "sent" if accepted else "failed"
+
+
+def send_verification(db: Session, user: User, email: str | None = None, base: str = "") -> bool:
+    """A new confirmation link. True when the e-mail was accepted for delivery; only then do the previous links
+    stop working (an e-mail that could not be sent leaves the last one that was)."""
     secret = tokens.new_secret()
-    db.add(EmailVerificationToken(user_id=user.id, email=email or user.email, token_hash=tokens.digest(secret),
-                                  expires_at=utcnow() + timedelta(hours=48)))
-    mail.send(mail.compose("verify", email or user.email, user.language, link("/verify-email", secret, base),
-                           user.display_name))
+    accepted = mail.send(mail.compose("verify", email or user.email, user.language,
+                                      link("/verify-email", secret, base), user.display_name))
+    if accepted:
+        _retire(db, EmailVerificationToken, user.id)
+        db.add(EmailVerificationToken(user_id=user.id, email=email or user.email, token_hash=tokens.digest(secret),
+                                      expires_at=utcnow() + timedelta(hours=48)))
+    return accepted
 
 
 def verify_email(db: Session, token: str) -> User:
@@ -272,6 +296,7 @@ def verify_email(db: Session, token: str) -> User:
     user = db.get(User, row.user_id)
     if user is None:
         raise bad_request("invalid_token", "This link is invalid or has expired.")
+    old_email = user.email
     if normalize_email(row.email) != user.email_normalized:
         if user_by_email(db, row.email) is not None:
             raise conflict("email_taken", "An account with this e-mail address already exists.")
@@ -279,19 +304,28 @@ def verify_email(db: Session, token: str) -> User:
         user.email_normalized = normalize_email(row.email)
     row.used_at = now
     user.email_verified_at = now
+    if user.email != old_email:
+        # the previous address learns about the change (it is the account owner's alarm if it was not them)
+        mail.send(mail.compose("email_changed", old_email, user.language, user.email, user.display_name))
     return user
 
 
 def request_reset(db: Session, email: str, ip: str = "", base: str = "") -> None:
-    """Always looks the same from outside, whether or not the address has an account."""
+    """Always looks the same from outside, whether or not the address has an account.
+
+    Only a system-wide problem is reported: when no e-mail can reach anybody, every request fails alike (before the
+    address is looked up), so the answer still says nothing about accounts. A new link replaces older ones."""
+    if not mail.deliverable():
+        raise email_unavailable()
     user = user_by_email(db, email)
     if user is None or not user.active:
         return
     secret = tokens.new_secret()
-    db.add(PasswordResetToken(user_id=user.id, token_hash=tokens.digest(secret), ip=ip,
-                              expires_at=utcnow() + timedelta(hours=1)))
-    mail.send(mail.compose("reset", user.email, user.language, link("/reset-password", secret, base),
-                           user.display_name))
+    if mail.send(mail.compose("reset", user.email, user.language, link("/reset-password", secret, base),
+                              user.display_name)):
+        _retire(db, PasswordResetToken, user.id)
+        db.add(PasswordResetToken(user_id=user.id, token_hash=tokens.digest(secret), ip=ip,
+                                  expires_at=utcnow() + timedelta(hours=1)))
 
 
 def confirm_reset(db: Session, token: str, new_password: str, base: str = "") -> User:
@@ -318,6 +352,7 @@ def set_password(db: Session, user: User, new_password: str, keep_session: uuid.
     user.credential.password_hash = passwords.hash_password(new_password)
     user.credential.password_changed_at = utcnow()
     revoke_all(db, user.id, "password_changed", keep=keep_session)
+    _retire(db, PasswordResetToken, user.id)          # no older reset link can change the new password again
     mail.send(mail.compose("password_changed", user.email, user.language, page("/forgot-password", base),
                            user.display_name))
 
@@ -329,13 +364,14 @@ def change_password(db: Session, user: User, current: str, new_password: str, ke
     set_password(db, user, new_password, keep_session=keep_session, base=base)
 
 
-def change_email(db: Session, user: User, password: str, new_email: str, base: str = "") -> None:
+def change_email(db: Session, user: User, password: str, new_email: str, base: str = "") -> bool:
+    """Send a confirmation link to ``new_email``; the address changes when it is opened. True when it was sent."""
     new_email = check_email(new_email)
     if not passwords.verify_password(user.credential.password_hash, password):
         raise bad_request("wrong_password", "The current password is wrong.")
     if user_by_email(db, new_email) is not None:
         raise conflict("email_taken", "An account with this e-mail address already exists.")
-    send_verification(db, user, new_email, base=base)
+    return send_verification(db, user, new_email, base=base)
 
 
 def registration_allowed(db: Session) -> None:

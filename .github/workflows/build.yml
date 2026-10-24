@@ -237,11 +237,12 @@ jobs:
         shell: pwsh
         env:
           LICENSE_SERVER_URL: ${{ vars.AKENO_LICENSE_SERVER_URL }}
+          WEBSITE_URL: ${{ vars.AKENO_WEBSITE_URL }}
           LICENSE_PUBLIC_KEYS: ${{ vars.AKENO_LICENSE_PUBLIC_KEYS }}
           RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
         run: |
           $require = @(); if ($env:RELEASE_BUILD -eq 'true') { $require = @('--require') }
-          python tools/configure-licensing.py --server-url "$env:LICENSE_SERVER_URL" --keys "$env:LICENSE_PUBLIC_KEYS" @require
+          python tools/configure-licensing.py --server-url "$env:LICENSE_SERVER_URL" --website-url="$env:WEBSITE_URL" --keys "$env:LICENSE_PUBLIC_KEYS" @require
           if ($LASTEXITCODE -ne 0) { throw "license configuration failed" }
       - name: Release verification key and public release repository (repository variables)
         shell: pwsh

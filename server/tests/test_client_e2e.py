@@ -307,3 +307,149 @@ def test_wrong_password_and_codes_surface_server_codes(server, home):
     with pytest.raises(ApiError) as err:
         m.redeem("AKENO-AAAA-BBBB-CCCC-DDDD")
     assert err.value.code == "invalid_code"
+
+
+# -- the account flows of the app's welcome screen and My Account page ------------------------------------------------
+def _verify_link_opened(server_url: str) -> None:
+    """What the website does when the link in the e-mail is opened."""
+    from tests.helpers import mail_token
+    LicenseApi(server_url).call("POST", "/auth/verify-email", {"token": mail_token("verify-email")})
+
+
+def test_registration_reports_the_email_and_the_server_confirms_it(server, home):
+    m = client(server)
+    m.create_account("player@example.test", PASSWORD, "Player", "de")
+    assert m.verification["delivery"] == "sent" and m.view().email_verified is False
+    assert m.refresh_account()["email_verified"] is False
+    _verify_link_opened(server)
+    assert m.refresh_account()["email_verified"] is True
+    assert m.view().email_verified is True and not m.verification
+
+
+def test_registration_on_a_server_that_cannot_send_email(server, home, monkeypatch):
+    from akeno_server.config import reset_config
+    monkeypatch.setenv("AKENO_ENVIRONMENT", "production")
+    monkeypatch.setenv("AKENO_MAIL_BACKEND", "file")
+    monkeypatch.setenv("AKENO_MAIL_DIR", str(home / "mail-sink"))
+    reset_config()
+    m = client(server)
+    m.create_account("player@example.test", PASSWORD)
+    assert m.verification["delivery"] == "unavailable", "the app is told that no e-mail reached anybody"
+    with pytest.raises(ServerUnavailable) as err:
+        m.resend_verification()
+    assert err.value.code == "email_unavailable"
+    with pytest.raises(ServerUnavailable) as err:
+        client(server).request_password_reset("player@example.test")
+    assert err.value.code == "email_unavailable"
+
+
+def test_resend_and_correct_a_mistyped_address(server, home):
+    from akeno_server import mail
+    m = client(server)
+    m.create_account("typo@exmaple.test", PASSWORD)
+    assert m.resend_verification()["status"] == "sent" and m.verification["delivery"] == "sent"
+    with pytest.raises(ApiError) as err:
+        m.change_email("not the password", "player@example.test")
+    assert err.value.code == "wrong_password"
+    m.change_email(PASSWORD, "player@example.test")
+    assert mail.outbox[-1]["To"] == "player@example.test" and m.verification["email"] == "player@example.test"
+    _verify_link_opened(server)
+    account = m.refresh_account()
+    assert account["email"] == "player@example.test" and account["email_verified"]
+    assert client(server).sign_in("player@example.test", PASSWORD).email == "player@example.test"
+
+
+def test_forgot_password_from_the_app_then_sign_in_with_the_new_one(server, home, tmp_path):
+    from akeno_server import mail
+    from tests.helpers import mail_token
+    m = client(server)
+    m.create_account("player@example.test", PASSWORD)
+    m.redeem(make_codes("monthly")[0])
+    fresh = client(server, store_dir=tmp_path / "other")
+    fresh.request_password_reset("player@example.test")
+    fresh.request_password_reset("nobody@example.test")              # the same answer, no e-mail
+    assert [msg["To"] for msg in mail.outbox].count("player@example.test") >= 2
+    assert "nobody@example.test" not in [msg["To"] for msg in mail.outbox]
+    LicenseApi(server).call("POST", "/auth/password-reset/confirm", {"token": mail_token("reset-password"),
+                                                                      "new_password": "a brand new pass"})
+    m._access = None
+    with pytest.raises(ApiError):
+        m.validate()                                                   # every old sign-in ended
+    assert m.view().needs_sign_in and m.view().unlocked
+    with pytest.raises(ApiError) as err:
+        m.sign_in("player@example.test", PASSWORD)
+    assert err.value.code == "invalid_credentials"
+    assert m.sign_in("player@example.test", "a brand new pass").unlocked
+
+
+def test_change_password_keeps_this_pc_and_ends_the_others(server, home, tmp_path, monkeypatch):
+    here = client(server, store_dir=tmp_path / "pc1")
+    here.create_account("player@example.test", PASSWORD)
+    here.redeem(make_codes("monthly")[0])
+    monkeypatch.setenv("AKENO_DEVICE_ID", "second-pc")
+    there = client(server, store_dir=tmp_path / "pc2")
+    there.sign_in("player@example.test", PASSWORD)
+    monkeypatch.setenv("AKENO_DEVICE_ID", "e2e-machine-guid-1")
+    with pytest.raises(ApiError) as err:
+        here.change_password("wrong current pw", "a brand new pass")
+    assert err.value.code == "wrong_password"
+    with pytest.raises(ApiError) as err:
+        here.change_password(PASSWORD, "aaaaaaaaaaaa")
+    assert err.value.code == "weak_password"
+    here.change_password(PASSWORD, "a brand new pass")
+    here._access = None
+    assert here.validate().status is Status.ACTIVE_ONLINE, "this PC stays signed in"
+    monkeypatch.setenv("AKENO_DEVICE_ID", "second-pc")
+    there._access = None
+    with pytest.raises(ApiError):
+        there.validate()
+    assert there.view().needs_sign_in and there.view().session_ended == "invalid_refresh_token"
+
+
+def test_sign_out_of_other_devices(server, home, tmp_path, monkeypatch):
+    here = client(server, store_dir=tmp_path / "pc1")
+    here.create_account("player@example.test", PASSWORD)
+    monkeypatch.setenv("AKENO_DEVICE_ID", "second-pc")
+    there = client(server, store_dir=tmp_path / "pc2")
+    there.sign_in("player@example.test", PASSWORD)
+    monkeypatch.setenv("AKENO_DEVICE_ID", "e2e-machine-guid-1")
+    assert here.revoke_other_sessions() == 1
+    assert here.refresh_account()["email"] == "player@example.test"
+    there._access = None
+    with pytest.raises(ApiError):
+        there.refresh_account()
+    assert there.view().needs_sign_in
+
+
+def test_the_apps_password_rules_are_the_servers(server, home):
+    """Whatever the app's form accepts, the server accepts, and the other way round."""
+    from akeno.licensing import forms
+    from akeno_server.auth.ratelimit import LIMITER
+    api = LicenseApi(server)
+    for email, password in [("a@example.test", "short"), ("b@example.test", "aaaaaaaaaaaa"),
+                                           ("c@example.test", "c@example.test"), ("d@example.test", "aaaabbbbcccc"),
+                                           ("e@example.test", "correct horse battery"),
+                                           ("f@example.test", "0123456789")]:
+        app_ok = not forms.password_problems(password, email)
+        LIMITER.reset()                                 # (registrations per address and hour are limited)
+        try:
+            api.call("POST", "/auth/register", {"email": email, "password": password})
+            server_ok = True
+        except ApiError as exc:
+            assert exc.code == "weak_password", exc.code
+            server_ok = False
+        assert app_ok == server_ok, password
+
+
+def test_server_settings_reach_the_app(server, home):
+    with dbmod.transaction() as db:
+        settings.put(db, "require_email_verification", True)
+    m = client(server)
+    assert m.server_info(fresh=True)["require_email_verification"] and m.verification_required()
+    m.create_account("player@example.test", PASSWORD)
+    with pytest.raises(ApiError) as err:
+        m.redeem(make_codes("monthly")[0])
+    assert err.value.code == "email_not_verified"
+    _verify_link_opened(server)
+    m.refresh_account()
+    assert m.redeem(make_codes("monthly")[0]).unlocked

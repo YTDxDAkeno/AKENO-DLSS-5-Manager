@@ -46,6 +46,7 @@ def version(db: Session = Depends(get_db)):
             "min_client_version": settings.get(db, "min_client_version") or None,
             "latest_client_version": settings.get(db, "latest_client_version") or None,
             "registration_enabled": settings.get(db, "registration_enabled"),
+            "require_email_verification": settings.get(db, "require_email_verification"),
             "download_url": get_config().download_url, "server_time": utcnow()}
 
 

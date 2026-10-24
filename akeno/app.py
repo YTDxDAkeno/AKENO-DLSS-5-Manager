@@ -112,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
         # CI checks of a build: every window is created, nothing stays open (no use without a license)
         ctl, win = build_suite(app, args, lic)
         from akeno.ui.license_gate import LicenseGate
-        gate = LicenseGate(lic)
+        gate = LicenseGate(lic, probe=False)          # build checks never contact the license server
         if args.smoke_test:
             return smoke_test(app, ctl, win, gate)
         return screenshots(app, ctl, win, args.screenshot, args.screenshot_size, gate)

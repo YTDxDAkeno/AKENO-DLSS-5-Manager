@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from akeno_server import mail
 from akeno_server.admin.service import device_out, license_history, session_out
 from akeno_server.api.deps import base_url, client_ip, limit
 from akeno_server.auth import passwords, totp
@@ -157,13 +158,18 @@ async def change_email(request: Request, db: Session = Depends(get_db)):
     check_csrf(request, form)
     try:
         limit(request, "reset_email", f"email-change:{user.id}")
-        auth.change_email(db, user, str(form.get("password", "")), str(form.get("email", "")),
-                          base=base_url(request))
+        if not mail.deliverable():
+            raise auth.email_unavailable()
+        sent = auth.change_email(db, user, str(form.get("password", "")), str(form.get("email", "")),
+                                 base=base_url(request))
         db.commit()
     except ApiError as exc:
         db.rollback()
         return security_page(request, db, user, sess, "account/security.html", "account", exc.status,
                              email_error=exc.message)
+    if not sent:
+        return redirect(request, "/account/security", "The confirmation e-mail could not be sent. Please try again "
+                        "later.", "error")
     return redirect(request, "/account/security", "We sent a confirmation link to the new address. The change "
                     "takes effect when you open it.")
 
@@ -176,10 +182,15 @@ async def resend_verification(request: Request, db: Session = Depends(get_db)):
     if user.email_verified_at is None:
         try:
             limit(request, "reset_email", f"verify:{user.id}")
+            if not mail.deliverable():
+                raise auth.email_unavailable()
         except ApiError as exc:
             return redirect(request, "/account", exc.message, "error")
-        auth.send_verification(db, user, base=base_url(request))
+        sent = auth.send_verification(db, user, base=base_url(request))
         db.commit()
+        if not sent:
+            return redirect(request, "/account", "The confirmation e-mail could not be sent. Please try again "
+                            "later.", "error")
     return redirect(request, "/account", "We sent you a new confirmation e-mail.")
 
 

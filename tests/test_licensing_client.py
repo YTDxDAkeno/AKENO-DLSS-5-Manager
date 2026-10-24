@@ -118,7 +118,9 @@ def env(tmp_path, monkeypatch):
               "user": {"id": "u1", "email": "player@example.test", "display_name": "P"}}
     FakeApi.answers = {"/auth/login": tokens, "/auth/register": tokens, "/auth/refresh": tokens,
                        "/devices/register": {"id": "dev-1", "label": "Gaming PC"},
-                       "/licenses/validate": validate("monthly"), "/auth/logout": {}, "/system/keys": {"keys": []}}
+                       "/licenses/validate": validate("monthly"), "/auth/logout": {}, "/system/keys": {"keys": []},
+                       "/system/version": {"maintenance": False, "registration_enabled": True,
+                                           "require_email_verification": False}}
 
     def make(keys=None):
         cfg = cfgmod.LicensingConfig("https://licenses.invalid", {signer.kid: signer.public} if keys is None else keys)

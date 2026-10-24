@@ -38,6 +38,11 @@ P = {
     "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.5"/>',
     "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     "eye": '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    "eye-off": '<path d="M10.6 5.1A10 10 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-2.6 3.5M6.6 6.6C3.7 8.4 2 12 2 12s3.6 '
+               '7 10 7a9.6 9.6 0 0 0 5.4-1.6"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2M3 3l18 18"/>',
+    "mail": '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m4 7 8 6 8-6"/>',
+    "mail-check": '<path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8"/><path d="m4 7 8 6 8-6"/>'
+                  '<path d="m16 18 2 2 4-4"/>',
     "gauge": '<path d="M4 18a9 9 0 1 1 16 0"/><path d="m12 13 4-5"/><circle cx="12" cy="14" r="1.3"/>',
     "plus": '<path d="M12 5v14M5 12h14"/>',
     "search": '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 5 5"/>',

@@ -5,18 +5,24 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
+from akeno_server import mail
 from akeno_server.api import schemas
 from akeno_server.api.common import user_out
 from akeno_server.api.deps import Caller, base_url, client_ip, current, limit, not_in_maintenance, user_agent
 from akeno_server.auth import service as auth
 from akeno_server.db import get_db
+from akeno_server.errors import ApiError, unavailable
 
 router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(not_in_maintenance)])
 
 
-def _tokens(issued: auth.IssuedSession, user) -> dict:
+def _tokens(issued: auth.IssuedSession, user, **extra) -> dict:
     return {"access_token": issued.access_token, "token_type": "bearer", "expires_in": issued.expires_in,
-            "refresh_token": issued.token, "user": user_out(user)}
+            "refresh_token": issued.token, "user": user_out(user), **extra}
+
+
+def _mail_failed() -> ApiError:
+    return unavailable("email_delivery_failed", "The e-mail could not be sent. Please try again later.")
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED, response_model=schemas.TokensOut)
@@ -24,11 +30,11 @@ def register(body: schemas.RegisterIn, request: Request, db: Session = Depends(g
     limit(request, "register")
     auth.registration_allowed(db)
     user = auth.create_user(db, body.email, body.password, body.display_name, body.language)
-    auth.send_verification(db, user, base=base_url(request))
+    delivery = auth.delivery(auth.send_verification(db, user, base=base_url(request)))
     user.last_login_at = user.created_at
     issued = auth.start_session(db, user, "app", client_ip(request), user_agent(request))
     db.commit()
-    return _tokens(issued, user)
+    return _tokens(issued, user, verification_email=delivery)
 
 
 @router.post("/login", response_model=schemas.TokensOut)
@@ -82,14 +88,46 @@ def verify_email(body: schemas.TokenIn, request: Request, db: Session = Depends(
     return {"status": "verified", "email": user.email}
 
 
-@router.post("/verify-email/resend", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/verify-email/resend", status_code=status.HTTP_202_ACCEPTED, response_model=schemas.EmailSentOut)
 def resend(request: Request, caller: Caller = Depends(current), db: Session = Depends(get_db)):
-    limit(request, "reset_email", "verify:" + str(caller.user.id))
+    """202 ``sent`` only when the mail server accepted the e-mail; 503 ``email_unavailable`` or
+    ``email_delivery_failed`` otherwise."""
     user = db.merge(caller.user)
-    if user.email_verified_at is None:
-        auth.send_verification(db, user, base=base_url(request))
-        db.commit()
-    return {"status": "sent" if user.email_verified_at is None else "already_verified"}
+    if user.email_verified_at is not None:
+        return {"status": "already_verified", "email": user.email}
+    limit(request, "reset_email", "verify:" + str(caller.user.id))
+    if not mail.deliverable():
+        raise auth.email_unavailable()
+    sent = auth.send_verification(db, user, base=base_url(request))
+    db.commit()
+    if not sent:
+        raise _mail_failed()
+    return {"status": "sent", "email": user.email}
+
+
+@router.post("/change-email", status_code=status.HTTP_202_ACCEPTED, response_model=schemas.EmailSentOut)
+def change_email(body: schemas.ChangeEmailIn, request: Request, caller: Caller = Depends(current),
+                 db: Session = Depends(get_db)):
+    """Like the website: the current password confirms it, a link goes to the new address, and the address changes
+    only when that link is opened (the old address is told). Also corrects a mistyped address before it was
+    confirmed."""
+    limit(request, "reset_email", "email-change:" + str(caller.user.id))
+    if not mail.deliverable():
+        raise auth.email_unavailable()
+    user = db.merge(caller.user)
+    sent = auth.change_email(db, user, body.password, body.new_email, base=base_url(request))
+    db.commit()
+    if not sent:
+        raise _mail_failed()
+    return {"status": "sent", "email": auth.check_email(body.new_email)}
+
+
+@router.post("/sessions/revoke-others")
+def revoke_others(caller: Caller = Depends(current), db: Session = Depends(get_db)):
+    """End every other sign-in of the account (other PCs and the website); this one stays."""
+    n = auth.revoke_all(db, caller.user.id, "revoked_by_user", keep=caller.session.id)
+    db.commit()
+    return {"revoked": n}
 
 
 @router.get("/me", response_model=schemas.UserOut)

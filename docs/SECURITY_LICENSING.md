@@ -16,6 +16,8 @@ The release build writes `licensing.json` from the repository variables `AKENO_L
 - `tools/configure-licensing.py --require` refuses to build without both.
 - It prints the key ids, to compare with `akeno-server keys list` on the VPS.
 
+Accounts (sign-up, e-mail confirmation, password reset, sessions and what the server must be configured with) are described in `docs/ACCOUNT_SYSTEM.md`.
+
 ## What the app checks
 
 Every signed document is a JWS with EdDSA (Ed25519). It must have:
