@@ -6,7 +6,9 @@ Read-only: ``GET /api/v1/openapi.json`` and ``GET /api/v1/system/version`` over 
 - every published path with its methods, endpoints the app uses marked ``app``;
 - endpoints the app uses that the server does not publish;
 - paths about releases, updates and downloads (the Release Manager), so the app's update path is built against
-  the server's real contract and not against guessed addresses.
+  the server's real contract and not against guessed addresses;
+- ``--release-details``: the published schema of every ``/releases`` operation, and the public answer of each
+  ``GET /releases…`` path without parameters (read-only, no credentials).
 
 A server that does not publish its OpenAPI document (docs switched off) is reported as such; it is not an error.
 """
@@ -42,9 +44,54 @@ def get_json(url: str, timeout: float = 20) -> tuple[int, object]:
         return 200, None
 
 
+def resolve(doc: dict, node, depth: int = 0):
+    """A schema with its ``$ref``s replaced (bounded), for printing."""
+    if depth > 6:
+        return node
+    if isinstance(node, dict):
+        if "$ref" in node and isinstance(node["$ref"], str) and node["$ref"].startswith("#/"):
+            target = doc
+            for part in node["$ref"][2:].split("/"):
+                target = target.get(part, {}) if isinstance(target, dict) else {}
+            return resolve(doc, target, depth + 1)
+        return {k: resolve(doc, v, depth + 1) for k, v in node.items() if k not in ("title",)}
+    if isinstance(node, list):
+        return [resolve(doc, v, depth + 1) for v in node]
+    return node
+
+
+def release_details(doc: dict, base: str) -> None:
+    for path in sorted(doc["paths"]):
+        short = path[len("/api/v1"):] if path.startswith("/api/v1") else path
+        if not short.startswith("/releases"):
+            continue
+        for method, op in sorted(doc["paths"][path].items()):
+            if not isinstance(op, dict):
+                continue
+            print(f"--- {method.upper()} {short}: {op.get('summary') or ''}")
+            if op.get("description"):
+                print(f"  description: {op['description'].strip()}")
+            for prm in op.get("parameters") or []:
+                prm = resolve(doc, prm)
+                print(f"  parameter {prm.get('in')} {prm.get('name')}: {json.dumps(prm.get('schema'))}")
+            if op.get("security") is not None or doc.get("security"):
+                print(f"  security: {json.dumps(op.get('security', doc.get('security')))}")
+            for code, resp in (op.get("responses") or {}).items():
+                content = (resolve(doc, resp).get("content") or {})
+                for ctype, body in content.items():
+                    print(f"  {code} {ctype}: {json.dumps(body.get('schema'), sort_keys=True)}")
+            if method.lower() == "get" and "{" not in short:
+                status, body = get_json(f"{base}{short}")
+                text = json.dumps(body, indent=1, sort_keys=True) if body is not None else "(no JSON)"
+                print(f"  live answer: HTTP {status}")
+                for line in text.splitlines()[:120]:
+                    print(f"    {line}")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--api", default="https://api.akeno.online")
+    ap.add_argument("--release-details", action="store_true")
     args = ap.parse_args(argv)
     base = args.api.rstrip("/") + "/api/v1"
     status, version = get_json(f"{base}/system/version")
@@ -79,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {m} {p}")
     release = sorted({p for _, p in published if RELEASE_WORDS.search(p)})
     print(f"Release/update related paths: {', '.join(release) or 'none published'}")
+    if args.release_details:
+        release_details(doc, base)
     return 0
 
 
