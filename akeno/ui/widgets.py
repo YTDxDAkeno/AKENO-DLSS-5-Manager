@@ -22,6 +22,30 @@ class _ShrinkLabel(QLabel):
         return QSize(self.fontMetrics().horizontalAdvance(self.text()) + m.left() + m.right() + 2, s.height())
 
 
+class FitLabel(QLabel):
+    """Wrapping label that always keeps the height its text needs at its current width. For layouts that only
+    approximate height-for-width, such as a grid item spanning columns, where a plain label loses its last lines."""
+
+    def __init__(self, text: str = "", role: str | None = None):
+        super().__init__(text)
+        if role:
+            self.setProperty("role", role)
+        self.setWordWrap(True)
+
+    def _fit(self) -> None:
+        need = self.heightForWidth(max(1, self.width())) if self.text() else 0
+        if need != self.minimumHeight():
+            self.setMinimumHeight(need)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._fit()
+
+    def setText(self, text: str) -> None:  # noqa: N802 (Qt naming)
+        super().setText(text)
+        self._fit()
+
+
 def label(text: str = "", role: str | None = None, wrap: bool = False, selectable: bool = False,
           shrink: bool = False) -> QLabel:
     """``shrink``: one line when there is room, wrapped (instead of widening the page) when there is not."""

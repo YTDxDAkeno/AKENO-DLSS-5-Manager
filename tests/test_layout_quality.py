@@ -42,6 +42,7 @@ def window(qtbot, akeno_home, tmp_path):
     from akeno.ui import workers
     workers.drain(30000)
     svc.db.close()
+    i18n.set_language("en")                                  # the language is global: later tests expect English
 
 
 def _visible(w) -> bool:
@@ -84,10 +85,17 @@ def _scan(key, host, problems) -> None:
         bar.setValue(0)
 
 
-@pytest.mark.parametrize("size", SIZES, ids=[f"{w}x{h}" for w, h in SIZES])
-def test_no_page_is_wider_than_the_window_and_nothing_is_clipped(window, qtbot, size):
+CASES = [("en", size) for size in SIZES] + [("de", (1280, 680))]     # German texts run longest
+
+
+@pytest.mark.parametrize("lang,size", CASES, ids=[f"{lang}-{w}x{h}" for lang, (w, h) in CASES])
+def test_no_page_is_wider_than_the_window_and_nothing_is_clipped(window, qtbot, lang, size):
     from akeno.ui.main_window import ADVANCED, NAV
     win = window
+    if lang != "en":
+        win.s.settings.set("language", lang)
+        win.ctl.settings_changed.emit("language")              # the window rebuilds every page in that language
+        qtbot.wait(200)
     win.setMinimumSize(1100 if size[0] > 1100 else size[0], 680)
     win.resize(*size)
     qtbot.wait(100)
