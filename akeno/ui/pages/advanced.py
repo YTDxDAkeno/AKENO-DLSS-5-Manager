@@ -5,11 +5,11 @@ from __future__ import annotations
 from PySide6.QtWidgets import QTabBar, QVBoxLayout, QWidget
 
 from akeno.i18n import t
-from akeno.ui.widgets import label
+from akeno.ui.widgets import PageHeader, label
 
 # page key -> tab title. These pages were top-level in v1.x; they stay fully functional here.
-TABS = (("dashboard", "Diagnostics overview"), ("benchmark", "Benchmark"), ("profiles", "Smart Profiles"),
-        ("install", "Expert tools and legacy installer"))
+TABS = (("dashboard", "Diagnostics overview"), ("profiles", "Smart Profiles"),
+        ("install", "Expert tools and legacy installer"))           # Benchmark is a page of its own since 3.0
 
 
 class AdvancedPage(QWidget):
@@ -20,10 +20,8 @@ class AdvancedPage(QWidget):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        lay.addWidget(label(t("Advanced"), "h1"))
-        lay.addWidget(label(t("Optional diagnostics: hardware evidence, frame-time measurement, runtime verification and "
-                              "the older per-backend installer. Normal installations happen in My Games."),
-                            "dim", wrap=True))
+        lay.addWidget(PageHeader(t("Advanced"), t("Optional diagnostics: hardware evidence, frame-time measurement, runtime verification and "
+                              "the older per-backend installer. Normal installations happen in My Games.")))
         self.tabs = QTabBar()
         self.tabs.setExpanding(False)
         self.keys: list[str] = []

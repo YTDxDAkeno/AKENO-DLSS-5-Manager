@@ -7,17 +7,18 @@ import logging
 import logging.handlers
 import os
 import sys
+import time
 
 from akeno import APP_NAME, __version__
 
 
-def setup_logging(debug: bool) -> None:
+def setup_logging(debug: bool, name: str = "akeno.log") -> None:
     from akeno.paths import logs_dir
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if debug else logging.INFO)
     for h in list(root.handlers):
         root.removeHandler(h)
-    fh = logging.handlers.RotatingFileHandler(logs_dir() / "akeno.log", maxBytes=2_000_000, backupCount=3,
+    fh = logging.handlers.RotatingFileHandler(logs_dir() / name, maxBytes=2_000_000, backupCount=3,
                                               encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root.addHandler(fh)
@@ -27,7 +28,36 @@ def setup_logging(debug: bool) -> None:
         root.addHandler(sh)
 
 
+def desktop_process(argv: list[str]) -> int | None:
+    """Desktop Studio runs in processes of its own: the host (``--desktop``) and one wallpaper renderer per
+    monitor (``--wallpaper-renderer``); so does the updater (``--apply-update``). They start before anything of
+    the suite's window is loaded."""
+    import re
+    if "--apply-update" in argv[:-1]:
+        from akeno.updater import apply
+        return apply.main(argv)
+    if "--wallpaper-renderer" in argv:
+        monitor = argv[argv.index("--monitor") + 1] if "--monitor" in argv[:-1] else "monitor"
+        setup_logging(False, f"wallpaper-{re.sub(r'[^A-Za-z0-9]+', '', monitor)[-12:] or 'monitor'}.log")
+        from akeno.desktop import renderer
+        return renderer.main(argv)
+    if "--desktop" in argv:
+        setup_logging(False, "desktop.log")
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AKENO.Desktop")
+            except (AttributeError, OSError):
+                pass
+        from akeno.desktop import host
+        return host.main(argv)
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
+    child = desktop_process(sys.argv[1:] if argv is None else list(argv))
+    if child is not None:
+        return child
     parser = argparse.ArgumentParser(prog="akeno", description=APP_NAME)
     parser.add_argument("--minimized", action="store_true", help="start minimised (used by 'Launch with Windows')")
     parser.add_argument("--smoke-test", action="store_true",
@@ -43,13 +73,13 @@ def main(argv: list[str] | None = None) -> int:
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AKENO.DLSS5Manager")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AKENO.GamingSuite")
         except (AttributeError, OSError):
             pass
 
-    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtCore import Qt
     from PySide6.QtGui import QGuiApplication, QIcon
-    from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+    from PySide6.QtWidgets import QApplication
 
     if args.screenshot and args.screenshot_scale:
         os.environ["QT_SCALE_FACTOR"] = str(args.screenshot_scale)
@@ -58,42 +88,107 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
     app.setOrganizationName("AKENO")
+    from akeno.ui import interaction
+    interaction.install(app)           # the wheel scrolls pages; it never changes a control by passing over it
+
+    from akeno import i18n
+    from akeno.core.db import Database
+    from akeno.core.settings import Settings
+    from akeno.licensing import manager as license_manager
+    from akeno.paths import db_path
+    from akeno.ui import art, theme, widgets
+
+    # Only what the welcome screen needs is read before the license check: language, theme and animations.
+    prefs = Settings(Database(db_path()))
+    setup_logging(bool(prefs.get("debug_logging")))
+    logging.getLogger(__name__).info("%s %s starting", APP_NAME, __version__)
+    i18n.set_language(prefs.get("language"))
+    widgets.ANIMATIONS["on"] = bool(prefs.get("animations"))
+    theme.apply(app, prefs.get("theme_accent"))
+    app.setWindowIcon(QIcon(art.app_icon_pixmap(256)))
+    lic = license_manager()
+
+    if args.smoke_test or args.screenshot:
+        # CI checks of a build: every window is created, nothing stays open (no use without a license)
+        ctl, win = build_suite(app, args, lic)
+        from akeno.ui.license_gate import LicenseGate
+        gate = LicenseGate(lic)
+        if args.smoke_test:
+            return smoke_test(app, ctl, win, gate)
+        return screenshots(app, ctl, win, args.screenshot, args.screenshot_size, gate)
+
+    from akeno.ui.shell import SuiteShell
+    holder: dict = {}
+
+    def build():
+        ctl, win = build_suite(app, args, lic)
+        holder["ctl"] = ctl
+        return win
+
+    def language(lang: str) -> None:
+        prefs.set("language", lang)
+        i18n.set_language(lang)
+
+    shell = SuiteShell(lic, build, language, busy=lambda: bool(holder.get("ctl") and holder["ctl"].busy))
+    shell.minimized = args.minimized
+    shell.start()
+    from PySide6.QtCore import QTimer
+    from akeno.updater.service import write_start_marker
+    QTimer.singleShot(3000, write_start_marker)        # an update that just ran: this version starts fine
+    return app.exec()
+
+
+def build_suite(app, args, lic):
+    """Everything behind the license: services (database, game library, mod engine), controller, main window,
+    tray icon and the start-up scans."""
+    from PySide6.QtCore import QTimer
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QSystemTrayIcon
 
     from akeno import i18n
     from akeno.services import AppServices
-    from akeno.ui import art, theme, widgets
+    from akeno.ui import art, widgets
     from akeno.ui.controller import Controller
     from akeno.ui.main_window import MainWindow
 
     services = AppServices()
-    setup_logging(bool(services.settings.get("debug_logging")))
-    logging.getLogger(__name__).info("%s %s starting", APP_NAME, __version__)
-    i18n.set_language(services.settings.get("language"))
-    widgets.ANIMATIONS["on"] = bool(services.settings.get("animations"))
-    app.setFont(theme.ui_font(10))
-    app.setStyleSheet(theme.stylesheet(services.settings.get("theme_accent")))
-    app.setWindowIcon(QIcon(art.app_icon_pixmap(256)))
-
     ctl = Controller(services)
-    win = MainWindow(ctl)
+    win = MainWindow(ctl, lic)
 
     tray = None
     if QSystemTrayIcon.isSystemTrayAvailable() and not args.smoke_test and not args.screenshot:
         tray = QSystemTrayIcon(QIcon(art.app_icon_pixmap(64)), app)
         tray.setToolTip(APP_NAME)
-        tray.activated.connect(lambda reason: (win.showNormal(), win.activateWindow()))
+        tray.activated.connect(lambda reason: (win.showNormal(), win.activateWindow()) if win.isEnabled() else None)
         tray.show()
+    win.tray = tray
+    win.notifier.tray = tray
 
     labels = {"install": "Installation finished.", "benchmark": "Benchmark finished.", "games": "Game scan finished.",
               "restore": "Restore finished."}
 
     def busy(key: str, on: bool) -> None:
-        if on or key not in labels or tray is None:
-            return
-        if services.settings.get("notifications") and not win.isActiveWindow():
-            tray.showMessage(APP_NAME, i18n.t(labels[key]), QSystemTrayIcon.MessageIcon.Information, 4000)
+        if not on and key in labels:
+            win.notifier.notify("tasks", i18n.t(labels[key]), when_hidden=True)
 
     ctl.busy_changed.connect(busy)
+
+    def license_reminder() -> None:
+        from akeno.licensing import Status
+        view = lic.view()
+        if view.status is Status.EXPIRING:
+            win.notifier.notify("license", i18n.t("Your AKENO license ends soon. Redeem a code to extend it."),
+                                once=time.strftime("license-%Y-%m-%d"))
+    reminder = QTimer(win)
+    reminder.setInterval(3600_000)
+    reminder.timeout.connect(license_reminder)
+    reminder.start()
+
+    def game_started(game_id: str, _pid: int) -> None:
+        game = services.library.get(game_id)
+        if game is not None and services.boost.configured(game_id):
+            win.notifier.notify("games", i18n.t("FPS Booster session settings are active for {g}.", g=game.name))
+    win.sessions.started.connect(game_started)
 
     def setting(key: str) -> None:
         if key in ("debug_logging", "*"):
@@ -118,28 +213,36 @@ def main(argv: list[str] | None = None) -> int:
         if services.settings.get("auto_update_compat_db"):
             win.pages["settings"].update_compat()
         if services.settings.get("check_app_updates"):
-            win.pages["settings"].check_updates()
+            win.pages["updates"].check(quiet=True)
+        outcome = win.pages["updates"].svc.after_start()
+        if outcome:
+            win.statusBar().showMessage(i18n.t("AKENO {v} was installed.", v=outcome["version"]) if outcome.get("ok")
+                                        else i18n.t("The update to {v} did not start; the previous version is back.",
+                                                    v=outcome.get("version")), 15000)
+        license_reminder()
         win.pages["downloads"].auto_check()
+        try:
+            win.desktop.ensure()                # wallpapers, dock and widgets come back with the suite
+        except Exception as exc:                # Desktop Studio must never keep the suite from starting
+            logging.getLogger(__name__).warning("desktop studio: %s", exc)
 
-    if args.smoke_test:
-        return smoke_test(app, ctl, win)
-    if args.screenshot:
-        return screenshots(app, ctl, win, args.screenshot, args.screenshot_size)
-    if args.minimized:
-        win.showMinimized()
-    else:
-        win.show()
-    QTimer.singleShot(200, startup)
-    return app.exec()
+    if not args.smoke_test and not args.screenshot:
+        QTimer.singleShot(200, startup)
+    return ctl, win
 
 
-def smoke_test(app, ctl, win) -> int:
+def smoke_test(app, ctl, win, gate=None) -> int:
     """Non-interactive check used by CI on a real Windows runner: real hardware scan, real library scan,
     every page built and shown. Prints what was found; exits non-zero on any exception."""
     from akeno.ui import workers
     from PySide6.QtCore import QEventLoop, QTimer
     from akeno.ui import assets
     s = ctl.s
+    if gate is not None:
+        gate.show()
+        app.processEvents()
+        gate_status = gate.m.view().status.value
+        gate.close()
     info = s.scan_hardware()
     games = s.library.scan()
     reports = s.discover_dependencies()
@@ -154,6 +257,7 @@ def smoke_test(app, ctl, win) -> int:
         loop.exec()
     workers.drain(30000)
     lines = [f"AKENO {__version__} smoke test OK",
+             f"License: {gate_status if gate is not None else 'not checked'} (welcome screen built)",
              f"OS: {info.os_name} {info.os_display_version or ''} build {info.os_build}"]
     for g in info.gpus:
         lines.append(f"GPU: {g.name} vendor={g.vendor.value} dev=0x{(g.device_id or 0):04X} arch={g.architecture} "
@@ -180,11 +284,17 @@ def smoke_test(app, ctl, win) -> int:
     return 3 if problems else 0
 
 
-def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
+def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009", gate=None) -> int:
     from PySide6.QtCore import QEventLoop, QTimer
     from akeno.ui import workers
     os.makedirs(out_dir, exist_ok=True)
     w, h = (int(x) for x in size.lower().split("x"))
+    if gate is not None:
+        gate.resize(min(w, 1400), min(h, 860))
+        gate.show()
+        app.processEvents()
+        gate.grab().save(os.path.join(out_dir, "license-gate.png"))
+        gate.close()
     win.setMinimumSize(min(w, 1100), min(h, 680))
     win.resize(w, h)
     win.show()

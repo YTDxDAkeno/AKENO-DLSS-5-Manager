@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ t("My account") }}{% endblock %}
+{% block content %}
+<div class="row"><h1>{{ t("Hello") }}{% if user.display_name %}, {{ user.display_name }}{% endif %}</h1><span class="spacer"></span><a class="btn" href="/account/security">{{ t("Security") }}</a></div>
+{% if needs_verification or not user.email_verified_at %}
+<div class="flash warn">{{ t("Your e-mail address is not confirmed yet.") }}
+  <form class="inline-form" method="post" action="/account/verify-email">{{ m.csrf_field() }}<button class="link" type="submit">{{ t("Send the e-mail again") }}</button></form></div>
+{% endif %}
+<div class="grid two">
+  <section class="card" aria-labelledby="lic-h">
+    <h2 id="lic-h">{{ t("License") }}
+      {% if license.active %}<span class="badge ok">{{ t("Active") }}</span>{% elif license.status == 'none' %}<span class="badge">{{ t("Not activated") }}</span>{% elif license.status == 'expired' %}<span class="badge fail">{{ t("Expired") }}</span>{% else %}<span class="badge fail">{{ t("Disabled") }}</span>{% endif %}</h2>
+    {% if license.status == 'none' %}
+      <p class="dim">{{ t("Redeem an activation code to unlock every AKENO module.") }}</p>
+    {% else %}
+    <dl class="kv">
+      <dt>{{ t("Type") }}</dt><dd>{{ t({"trial_24h": "Trial (24 hours)", "trial_72h": "Extended trial (72 hours)", "monthly": "Monthly (30 days)", "lifetime": "Lifetime"}[license.license_type]) }}</dd>
+      <dt>{{ t("Activated") }}</dt><dd>{{ m.when(license.activated_at) }}</dd>
+      <dt>{{ t("Expires") }}</dt><dd>{% if license.lifetime %}{{ t("Never") }}{% else %}{{ m.when(license.expires_at) }}{% endif %}</dd>
+      <dt>{{ t("Remaining") }}</dt><dd>{% if license.lifetime %}{{ t("unlimited") }}{% elif license.expires_at %}<span data-expires="{{ license.expires_at.isoformat() }}">{{ fmt_remaining(license.remaining_seconds) }}</span>{% else %}—{% endif %}</dd>
+      <dt>{{ t("PCs") }}</dt><dd>{{ devices|length }} / {{ license.device_limit }}</dd>
+      <dt>{{ t("Works offline") }}</dt><dd>{{ t("Yes, permanently") if license.offline_eligible else t("For the grace period after each check") }}</dd>
+    </dl>
+    {% endif %}
+  </section>
+  <section class="card" aria-labelledby="redeem-h">
+    <h2 id="redeem-h">{{ t("Redeem a code") }}</h2>
+    <p class="dim">{{ t("A code adds its time from the moment you redeem it. A lifetime code makes the license permanent.") }}</p>
+    {% if redeem_error %}<div class="flash error" role="alert">{{ t(redeem_error) }}</div>{% endif %}
+    <form method="post" action="/account/redeem">
+      {{ m.csrf_field() }}
+      {{ m.field("code", t("Activation code"), "text", code or "", True, "off", maxlength=40, extra='class="code-input" placeholder="AKENO-XXXX-XXXX-XXXX-XXXX" spellcheck="false"') }}
+      <div class="row mt"><button class="primary" type="submit">{{ t("Redeem") }}</button></div>
+    </form>
+  </section>
+</div>
+<section class="card mt-l" aria-labelledby="pcs-h">
+  <h2 id="pcs-h">{{ t("Your PCs") }}</h2>
+  {% if not devices %}<p class="dim">{{ t("No PC yet. Sign in in the AKENO app and it appears here.") }}</p>{% else %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>{{ t("Name") }}</th><th>{{ t("System") }}</th><th>{{ t("AKENO version") }}</th><th>{{ t("Last seen") }}</th><th></th></tr></thead>
+    <tbody>{% for d in devices %}<tr>
+      <td><form class="inline" method="post" action="/account/devices/{{ d.id }}/rename">{{ m.csrf_field() }}<input name="label" value="{{ d.label }}" maxlength="80" aria-label="{{ t('Name') }}"><button class="small" type="submit">{{ t("Rename") }}</button></form></td>
+      <td>{{ d.os or "—" }}</td><td>{{ d.app_version or "—" }}</td><td>{{ m.when(d.last_seen_at) }}</td>
+      <td><form method="post" action="/account/devices/{{ d.id }}/remove" data-confirm="{{ t('Remove this PC from your account?') }}">{{ m.csrf_field() }}<button class="small danger" type="submit">{{ t("Remove") }}</button></form></td>
+    </tr>{% endfor %}</tbody></table></div>
+  {% endif %}
+</section>
+<div class="grid two mt-l">
+  <section class="card" aria-labelledby="hist-h">
+    <h2 id="hist-h">{{ t("License history") }}</h2>
+    {% if not history %}<p class="dim">{{ t("No entries yet.") }}</p>{% else %}
+    <div class="table-wrap"><table><thead><tr><th>{{ t("When") }}</th><th>{{ t("What") }}</th><th>{{ t("Until") }}</th></tr></thead><tbody>
+    {% for h in history %}<tr><td>{{ m.when(h.at) }}</td><td>{{ t({"redeem": "Code redeemed", "extend": "Extended by support", "change_type": "License type changed", "grant_lifetime": "Lifetime granted", "status_disabled": "Disabled", "status_active": "Enabled again", "status_revoked": "Revoked"}.get(h.kind, h.kind)) }}</td><td>{% if h.new_type == 'lifetime' %}{{ t("Never") }}{% else %}{{ m.when(h.new_expires_at) }}{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>{% endif %}
+  </section>
+  <section class="card" aria-labelledby="dl-h">
+    <h2 id="dl-h">{{ t("Download and updates") }}</h2>
+    <p class="dim">{{ t("AKENO is distributed through GitHub Releases. The app checks for updates itself and keeps your settings, mods and backups.") }}</p>
+    <a class="btn primary" href="{{ download_url }}" rel="noopener">{{ t("Download AKENO") }}</a>
+  </section>
+</div>
+{% endblock %}

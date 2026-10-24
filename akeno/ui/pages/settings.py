@@ -8,7 +8,7 @@ import os
 import sys
 import urllib.request
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QCheckBox, QComboBox, QHBoxLayout, QLineEdit, QSpinBox, QVBoxLayout, QWidget
 
@@ -18,11 +18,18 @@ from akeno.i18n import t
 from akeno.paths import app_home, backups_dir, cache_dir, compat_override_path, is_windows, logs_dir
 from akeno.ui import theme
 from akeno.ui.pages.hardware import export_diagnostics
-from akeno.ui.widgets import Card, KeyValueGrid, ResponsiveRow, button, confirm, info, label
+from akeno.ui.widgets import (Card, Divider, FlowLayout, KeyValueGrid, PageHeader, ResponsiveRow, button, confirm,
+                               form_row, indented, info, label)
 
 log = logging.getLogger(__name__)
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
-RELEASES_API = "https://api.github.com/repos/YTDxDAkeno/AKENO-DLSS-5-Manager/releases/latest"
+# the source repository is private: everything the app downloads comes from the public release repository
+OLD_COMPAT_URL = "https://raw.githubusercontent.com/YTDxDAkeno/AKENO-DLSS-5-Manager/main/akeno/data/compatibility.json"
+
+
+def compat_url(setting: str | None) -> str:
+    from akeno import distribution
+    return setting if setting and setting != OLD_COMPAT_URL else distribution.load().compat_db
 
 
 def set_autostart(enabled: bool) -> None:
@@ -58,17 +65,18 @@ class SettingsPage(QWidget):
         super().__init__()
         self.ctl = ctl
         self.s = ctl.s
+        self.window = window
         st = self.s.settings
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        lay.setSpacing(14)
-        lay.addWidget(label(t("Settings"), "h1"))
-        rows = [ResponsiveRow() for _ in range(3)]
+        lay.setSpacing(theme.CARD_GAP)
+        lay.addWidget(PageHeader(t("Settings")))
+        rows = [ResponsiveRow(theme.CARD_GAP) for _ in range(4)]
         for r in rows:
             lay.addWidget(r)
 
-        # General / appearance
-        gen = Card(t("General"), "globe", theme.BLUE)
+        # General
+        gen = Card(t("General"), "globe")
         self.lang = QComboBox()
         self.lang.setAccessibleName(t("Language"))
         for k, v in (("auto", "Automatic (Windows language)"), ("en", "English"), ("de", "Deutsch")):
@@ -81,10 +89,10 @@ class SettingsPage(QWidget):
             self.accent.addItem(t(v), k)
         self.accent.setCurrentIndex(max(0, self.accent.findData(st.get("theme_accent"))))
         self.accent.activated.connect(lambda i: ctl.set_setting("theme_accent", self.accent.currentData()))
-        gen.body.addLayout(self._row(t("Language"), self.lang))
-        gen.body.addLayout(self._row(t("Accent colour"), self.accent))
+        gen.body.addWidget(form_row(t("Language"), self.lang))
+        gen.body.addWidget(form_row(t("Accent colour"), self.accent))
+        gen.body.addWidget(Divider())
         gen.body.addWidget(self._check("animations", t("Animations (spinners and transitions)")))
-        gen.body.addWidget(self._check("notifications", t("Show a notification when long tasks finish")))
         self.autostart = QCheckBox(t("Launch with Windows"))
         self.autostart.setChecked(bool(st.get("launch_with_windows")))
         self.autostart.toggled.connect(self._autostart)
@@ -92,8 +100,25 @@ class SettingsPage(QWidget):
         gen.body.addWidget(self._check("rescan_on_start", t("Rescan hardware when AKENO starts")))
         rows[0].add(gen)
 
+        # Notifications: the categories belong to (and wait for) the main switch
+        note = Card(t("Notifications"), "bell")
+        master = self._check("notifications", t("Show Windows notifications"))
+        note.body.addWidget(master)
+        from akeno.ui.notifications import CATEGORIES, DEFAULT
+        chosen = st.get("notification_categories") or DEFAULT
+        self.note_checks = {}
+        for key, text in CATEGORIES.items():
+            box = QCheckBox(t(text))
+            box.setChecked(bool(chosen.get(key, DEFAULT[key])))
+            box.toggled.connect(lambda on, k=key: self._note_category(k, on))
+            self.note_checks[key] = box
+            note.body.addWidget(indented(box))
+        master.toggled.connect(self._note_master)
+        self._note_master(master.isChecked())
+        rows[0].add(note)
+
         # Updates
-        upd = Card(t("Updates"), "refresh", theme.CYAN)
+        upd = Card(t("Updates"), "refresh")
         upd.body.addWidget(self._check("check_app_updates", t("Check for AKENO updates on start")))
         upd.body.addWidget(self._check("auto_update_compat_db", t("Update the compatibility database automatically")))
         mods = self._check("check_mod_updates", t("Check for new mod versions once a day"))
@@ -101,15 +126,18 @@ class SettingsPage(QWidget):
         upd.body.addWidget(mods)
         self.token = QLineEdit()
         self.token.setEchoMode(QLineEdit.EchoMode.Password)
-        self.token.setPlaceholderText(t("Optional: GitHub token for more update checks per hour"))
+        self.token.setPlaceholderText(t("Optional"))
         self.token.setAccessibleName(t("GitHub token"))
         self.token.setText(st.get("github_token") or "")
         self.token.editingFinished.connect(lambda: ctl.set_setting("github_token", self.token.text().strip()))
-        upd.body.addLayout(self._row(t("GitHub token"), self.token))
+        upd.body.addWidget(form_row(t("GitHub token"), self.token,
+                                    t("Optional: GitHub token for more update checks per hour")))
+        upd.body.addWidget(Divider())
         self.upd_info = label(t("Compatibility database {v} ({o}); package catalog {c}.", v=self.s.compat_db.version,
                                 o=t(self.s.compat_db.origin), c=self.s.catalog.version), "dim", wrap=True)
         upd.body.addWidget(self.upd_info)
         r = QHBoxLayout()
+        r.setSpacing(theme.SPACE_S)
         r.addWidget(button(t("Check for updates now"), "refresh", on_click=self.check_updates))
         r.addWidget(button(t("Update compatibility database"), "download", on_click=self.update_compat))
         r.addStretch(1)
@@ -117,19 +145,22 @@ class SettingsPage(QWidget):
         upd.body.addWidget(label(t("Database updates are fetched only from AKENO's official repository over HTTPS and "
                                    "are rejected unless every entry passes validation. They never change your "
                                    "settings, profiles or the list of installable packages."), "muted", wrap=True))
-        rows[0].add(upd)
+        rows[1].add(upd)
 
         # Storage
-        sto = Card(t("Storage"), "folder", theme.VIOLET)
-        self.sto_grid = KeyValueGrid(150)
+        sto = Card(t("Storage"), "folder")
+        self.sto_grid = KeyValueGrid(130)
         sto.body.addWidget(self.sto_grid)
         self.cache_limit = QSpinBox()
         self.cache_limit.setRange(100, 20000)
+        self.cache_limit.setSingleStep(100)
         self.cache_limit.setSuffix(" MB")
         self.cache_limit.setValue(int(st.get("cache_limit_mb")))
         self.cache_limit.valueChanged.connect(lambda v: ctl.set_setting("cache_limit_mb", v))
-        sto.body.addLayout(self._row(t("Download cache limit"), self.cache_limit))
+        sto.body.addWidget(Divider())
+        sto.body.addWidget(form_row(t("Download cache limit"), self.cache_limit))
         r2 = QHBoxLayout()
+        r2.setSpacing(theme.SPACE_S)
         r2.addWidget(button(t("Open data folder"), "folder",
                             on_click=lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(app_home())))))
         r2.addWidget(button(t("Clear download cache"), "trash", on_click=self._clear_cache))
@@ -138,37 +169,48 @@ class SettingsPage(QWidget):
         rows[1].add(sto)
 
         # Backups & benchmarks
-        bb = Card(t("Backups and benchmarks"), "database", theme.GREEN)
+        bb = Card(t("Backups and benchmarks"), "database")
         keep = QSpinBox()
         keep.setRange(1, 100)
         keep.setValue(int(st.get("backup_keep_per_game")))
         keep.valueChanged.connect(lambda v: ctl.set_setting("backup_keep_per_game", v))
         keep.setToolTip(t("After each installation or manual backup, finished backups beyond this number are deleted, "
                           "oldest first. Restore points of active installations are never deleted automatically."))
-        bb.body.addLayout(self._row(t("Backups kept per game"), keep))
+        bb.body.addWidget(form_row(t("Backups kept per game"), keep))
         dur = QSpinBox()
         dur.setRange(10, 600)
         dur.setSuffix(" s")
         dur.setValue(int(st.get("benchmark_duration_s")))
         dur.valueChanged.connect(lambda v: ctl.set_setting("benchmark_duration_s", v))
-        bb.body.addLayout(self._row(t("Benchmark duration"), dur))
+        bb.body.addWidget(form_row(t("Benchmark duration"), dur))
         delay = QSpinBox()
         delay.setRange(0, 60)
         delay.setSuffix(" s")
         delay.setValue(int(st.get("benchmark_delay_s")))
         delay.valueChanged.connect(lambda v: ctl.set_setting("benchmark_delay_s", v))
-        bb.body.addLayout(self._row(t("Delay before recording"), delay))
+        bb.body.addWidget(form_row(t("Delay before recording"), delay))
         fps = QSpinBox()
         fps.setRange(20, 500)
         fps.setSuffix(" FPS")
         fps.setValue(int(st.get("target_fps")))
         fps.valueChanged.connect(lambda v: ctl.set_setting("target_fps", v))
-        fps.setToolTip(t("Recommendations prefer the highest-quality profile that stays above this frame rate."))
-        bb.body.addLayout(self._row(t("FPS target"), fps))
-        rows[1].add(bb)
+        bb.body.addWidget(form_row(t("FPS target"), fps, t("Recommendations prefer the highest-quality profile "
+                                                         "that stays above this frame rate.")))
+        rows[2].add(bb)
+
+        # Diagnostics
+        dia = Card(t("Diagnostics"), "info")
+        dia.body.addWidget(self._check("debug_logging", t("Detailed diagnostic logging")))
+        r3 = FlowLayout(spacing=theme.SPACE_S)
+        r3.addWidget(button(t("Export Diagnostic Package"), "export", on_click=lambda: export_diagnostics(self, self.s)))
+        r3.addWidget(button(t("Open log folder"), "folder",
+                            on_click=lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_dir())))))
+        r3.addWidget(button(t("Rescan hardware"), "chip", on_click=lambda: ctl.scan_hardware()))
+        dia.body.addLayout(r3)
+        rows[2].add(dia)
 
         # Safety
-        saf = Card(t("Safety defaults"), "shield", theme.AMBER)
+        saf = Card(t("Safety defaults"), "shield")
         saf.body.addWidget(self._check("block_unknown_conflicts", t("Stop installation when unknown graphics hooks are found")))
         saf.body.addWidget(label(t("Always on: every download is checked against the SHA-256 of its original "
                                    "release, every installation is previewed before anything changes, originals "
@@ -176,34 +218,27 @@ class SettingsPage(QWidget):
                                    "Games with anti-cheat need your confirmation that you play offline. Files of "
                                    "other mods are only replaced or disabled after you approve them in the "
                                    "preview."), "muted", wrap=True))
-        rows[2].add(saf)
+        rows[3].add(saf)
 
-        # Diagnostics
-        dia = Card(t("Diagnostics"), "info", theme.BLUE)
-        dia.body.addWidget(self._check("debug_logging", t("Detailed diagnostic logging")))
-        r3 = QHBoxLayout()
-        r3.addWidget(button(t("Export Diagnostic Package"), "export", on_click=lambda: export_diagnostics(self, self.s)))
-        r3.addWidget(button(t("Open log folder"), "folder",
-                            on_click=lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(logs_dir())))))
-        r3.addWidget(button(t("Rescan hardware"), "chip", on_click=lambda: ctl.scan_hardware()))
-        r3.addStretch(1)
-        dia.body.addLayout(r3)
-        rows[2].add(dia)
-
-        reset = Card(t("Reset"), "restore", theme.RED)
+        reset = Card(t("Reset"), "restore")
         reset.body.addWidget(label(t("Factory reset restores AKENO's settings to their defaults. Your games, profiles, "
                                      "benchmarks, backups and installed mods are kept, so everything can still be "
                                      "restored."), "dim", wrap=True))
-        reset.body.addWidget(button(t("Factory reset settings"), "restore", "danger", on_click=self._reset))
-        lay.addWidget(reset)
+        reset.body.addWidget(button(t("Factory reset settings"), "restore", "danger", on_click=self._reset), 0,
+                             Qt.AlignmentFlag.AlignLeft)
+        rows[3].add(reset)
         lay.addStretch(1)
         self._refresh_storage()
 
-    def _row(self, text: str, w: QWidget) -> QHBoxLayout:
-        r = QHBoxLayout()
-        r.addWidget(label(text, "dim"), 1)
-        r.addWidget(w, 1)
-        return r
+    def _note_master(self, on: bool) -> None:
+        for box in self.note_checks.values():
+            box.setEnabled(on)
+
+    def _note_category(self, key: str, on: bool) -> None:
+        from akeno.ui.notifications import DEFAULT
+        chosen = dict(self.s.settings.get("notification_categories") or DEFAULT)
+        chosen[key] = bool(on)
+        self.s.settings.set("notification_categories", chosen)
 
     def _check(self, key: str, text: str) -> QCheckBox:
         cb = QCheckBox(text)
@@ -215,7 +250,7 @@ class SettingsPage(QWidget):
         size = self.s.downloads.cache_size()
         self.sto_grid.set_rows([(t("Data folder"), str(app_home())), (t("Backups"), str(backups_dir())),
                                 (t("Download cache"), f"{cache_dir()}  ({size / 1e6:.1f} MB)"),
-                                (t("Logs"), str(logs_dir()))])
+                                (t("Logs"), str(logs_dir()))], elide=True)
 
     def _autostart(self, on: bool) -> None:
         try:
@@ -235,24 +270,14 @@ class SettingsPage(QWidget):
             self.ctl.status.emit(t("Removed {n} cached file(s).", n=n))
 
     def check_updates(self) -> None:
-        def work():
-            return fetch_json(RELEASES_API, {"api.github.com"})
-
-        def done(data):
-            tag = str((data or {}).get("tag_name") or "").lstrip("v")
-            if not tag:
-                info(self, t("Updates"), t("No published release was found."))
-            elif _ver(tag) > _ver(__version__):
-                info(self, t("Updates"), t("AKENO {v} is available.", v=tag),
-                     t("Download it from the official GitHub releases page: {u}",
-                       u=data.get("html_url", "https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/releases")))
-            else:
-                info(self, t("Updates"), t("AKENO is up to date ({v}).", v=__version__))
-        self.ctl.run("updates", work, done, lambda e: info(self, t("Updates"), t("Update check failed: ") + str(e),
-                                                           error=True))
+        """AKENO's own updates live on the Updates page (signed manifest, verified download, rollback)."""
+        page = self.window.pages.get("updates") if self.window is not None else None
+        if page is not None:
+            self.window.go("updates")
+            page.check()
 
     def update_compat(self) -> None:
-        url = self.s.settings.get("compat_db_url")
+        url = compat_url(self.s.settings.get("compat_db_url"))
 
         def work():
             data = fetch_json(url, {"raw.githubusercontent.com"})

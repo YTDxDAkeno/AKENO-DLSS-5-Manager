@@ -1,0 +1,17 @@
+{% extends "admin/_layout.html" %}
+{% block title %}{{ t("System") }}{% endblock %}
+{% block admin %}
+<h1>{{ t("System") }}</h1>
+<section class="card"><h2>{{ t("Health") }}</h2>
+  <dl class="kv">{% for name, check in checks.items() %}
+    <dt>{{ t({"database": "Database", "signing_key": "Signing key", "mail": "E-mail", "backup": "Last backup"}[name]) }}</dt>
+    <dd><span class="badge {{ check[0] }}">{{ t({"ok": "OK", "warn": "Check", "fail": "Error"}[check[0]]) }}</span> <span class="muted">{{ check[1] }}</span></dd>{% endfor %}</dl></section>
+<section class="card"><h2>{{ t("License signing keys") }}</h2>
+  <p class="dim">{{ t("Public halves; the private keys exist only in the API container's key volume. The app accepts a new key only when the previous key endorsed it.") }}</p>
+  <div class="table-wrap"><table><thead><tr><th>{{ t("Key ID") }}</th><th>{{ t("Created") }}</th><th>{{ t("Status") }}</th><th>{{ t("Endorsed by") }}</th></tr></thead><tbody>
+  {% for k in keys %}<tr><td class="mono">{{ k.kid }}</td><td>{{ m.when(k.created_at) }}</td><td>{% if k.retired_at %}{{ t("retired (still verifies)") }}{% else %}<span class="badge ok">{{ t("signing") }}</span>{% endif %}</td><td class="mono">{{ k.endorsed_by or "—" }}</td></tr>
+  {% else %}<tr><td colspan="4" class="dim">{{ t("No key yet. Run deploy/install.sh or: akeno-server keys init") }}</td></tr>{% endfor %}</tbody></table></div></section>
+<section class="card"><h2>{{ t("Configuration") }}</h2>
+  <dl class="kv">{% for k, v in cfg.items() %}<dt class="mono">{{ k }}</dt><dd>{{ v }}</dd>{% endfor %}</dl>
+  <p class="muted mt-s">{{ t("Secrets are never shown here.") }}</p></section>
+{% endblock %}

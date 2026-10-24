@@ -106,6 +106,39 @@ def header_background(width: int, height: int, dpr: float = 1.0) -> QPixmap:
     return pm
 
 
+def page_backdrop(width: int, height: int, dpr: float = 1.0, opacity: float = 0.26) -> QPixmap:
+    """The header artwork as a faint strip behind the top right of a page: it fades in from the left and out
+    towards the bottom, so it never competes with the page title or the cards. Transparent when the asset is
+    missing (no procedural fallback: the strip is identity, not content)."""
+    from akeno.ui import assets
+    w, h = max(1, width), max(1, height)
+    pm = QPixmap(max(1, round(w * dpr)), max(1, round(h * dpr)))
+    pm.setDevicePixelRatio(dpr)
+    pm.fill(Qt.GlobalColor.transparent)
+    art_w = min(w, round(h * 3.4))
+    art_pm = assets.cover(assets.HEADER, art_w, h, dpr, h_align=1.0, v_align=0.3)
+    if art_pm.isNull():
+        return pm
+    layer = QPixmap(art_pm)
+    mask = _painter(layer)
+    mask.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
+    across = QLinearGradient(0, 0, art_w, 0)
+    across.setColorAt(0.0, QColor(0, 0, 0, 0))
+    across.setColorAt(0.55, QColor(0, 0, 0, 255))
+    mask.fillRect(QRectF(0, 0, art_w, h), across)
+    down = QLinearGradient(0, 0, 0, h)
+    down.setColorAt(0.0, QColor(0, 0, 0, 255))
+    down.setColorAt(0.35, QColor(0, 0, 0, 200))
+    down.setColorAt(1.0, QColor(0, 0, 0, 0))
+    mask.fillRect(QRectF(0, 0, art_w, h), down)
+    mask.end()
+    p = _painter(pm)
+    p.setOpacity(opacity)
+    p.drawPixmap(QPointF(w - art_w, 0), layer)
+    p.end()
+    return pm
+
+
 def banner(width: int, height: int, seed: int = 7) -> QPixmap:
     """Night city skyline with neon accents and a stylised silhouette watching it (original artwork)."""
     pm = QPixmap(width, height)

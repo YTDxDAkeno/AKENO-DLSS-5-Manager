@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ t("Recovery codes") }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ t("Recovery codes") }}</h1>
+  <p class="dim">{{ t("Two-factor sign-in is on. Keep these codes somewhere safe: each one signs you in once if your phone is lost. They are shown only now.") }}</p>
+  <div id="recovery" class="codes">{% for c in codes %}{{ c }}
+{% endfor %}</div>
+  <div class="row mt"><button type="button" data-copy="recovery" data-done="{{ t('Copied') }}">{{ t("Copy") }}</button>
+    <a class="btn primary" href="{{ next_url }}">{{ t("I saved them") }}</a></div>
+</div>
+{% endblock %}

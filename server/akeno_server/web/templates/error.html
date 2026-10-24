@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ t("Error") }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ t("Something went wrong") if error.status >= 500 else (t("Not found") if error.status == 404 else t("This did not work")) }}</h1>
+  <p class="dim">{{ t(error.message) }}</p>
+  <p class="muted">{{ error.status }} · {{ error.code }}</p>
+  <p><a class="btn" href="/">{{ t("Back to the start page") }}</a></p>
+</div>
+{% endblock %}

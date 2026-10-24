@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ t("Sign in") }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ t("Sign in") }}</h1>
+  {% if error %}<div class="flash error" role="alert">{{ t(error) }}</div>{% endif %}
+  <form method="post" action="/login{% if next %}?next={{ next|urlencode }}{% endif %}">
+    {{ m.csrf_field() }}
+    {{ m.field("email", t("E-mail address"), "email", email or "", True, "username", maxlength=320) }}
+    {{ m.field("password", t("Password"), "password", "", True, "current-password", maxlength=256) }}
+    <div class="row mt"><button class="primary" type="submit">{{ t("Sign in") }}</button>
+      <span class="spacer"></span><a href="/forgot-password">{{ t("Forgot password?") }}</a></div>
+  </form>
+  {% if registration %}<p class="muted mt">{{ t("No account yet?") }} <a href="/register">{{ t("Create account") }}</a></p>{% endif %}
+</div>
+{% endblock %}

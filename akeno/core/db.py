@@ -68,6 +68,17 @@ CREATE TABLE IF NOT EXISTS benchmarks (
     data TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS game_meta (     -- 3.0 Game Hub: what the user adds to a game (scan data stays in games)
+    game_id TEXT PRIMARY KEY,
+    favorite INTEGER NOT NULL DEFAULT 0,
+    category TEXT NOT NULL DEFAULT '',
+    notes TEXT NOT NULL DEFAULT '',
+    launch_args TEXT NOT NULL DEFAULT '',
+    playtime_s INTEGER NOT NULL DEFAULT 0,
+    launches INTEGER NOT NULL DEFAULT 0,
+    last_played TEXT,
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS runtimes (
     sha256 TEXT PRIMARY KEY,
     file_name TEXT NOT NULL,
@@ -280,6 +291,45 @@ class Database:
         self.execute("DELETE FROM benchmarks WHERE id=?", (bench_id,))
 
     # -- runtimes ------------------------------------------------------------------------------
+    # -- Game Hub ------------------------------------------------------------------------------
+    META_FIELDS = ("favorite", "category", "notes", "launch_args", "playtime_s", "launches", "last_played")
+
+    def game_meta(self, game_id: str) -> dict[str, Any]:
+        rows = self.query("SELECT * FROM game_meta WHERE game_id=?", (game_id,))
+        if rows:
+            return {k: rows[0][k] for k in ("game_id", *self.META_FIELDS)}
+        return {"game_id": game_id, "favorite": 0, "category": "", "notes": "", "launch_args": "", "playtime_s": 0,
+                "launches": 0, "last_played": None}
+
+    def all_game_meta(self) -> dict[str, dict[str, Any]]:
+        return {r["game_id"]: {k: r[k] for k in ("game_id", *self.META_FIELDS)}
+                for r in self.query("SELECT * FROM game_meta")}
+
+    def set_game_meta(self, game_id: str, **fields: Any) -> dict[str, Any]:
+        unknown = set(fields) - set(self.META_FIELDS)
+        if unknown:
+            raise ValueError(f"unknown game fields {sorted(unknown)}")
+        meta = self.game_meta(game_id)
+        meta.update(fields)
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO game_meta(game_id, favorite, category, notes, launch_args, playtime_s, launches, "
+                "last_played, updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(game_id) DO UPDATE SET "
+                "favorite=excluded.favorite, category=excluded.category, notes=excluded.notes, "
+                "launch_args=excluded.launch_args, playtime_s=excluded.playtime_s, launches=excluded.launches, "
+                "last_played=excluded.last_played, updated_at=excluded.updated_at",
+                (game_id, int(bool(meta["favorite"])), meta["category"] or "", meta["notes"] or "",
+                 meta["launch_args"] or "", int(meta["playtime_s"] or 0), int(meta["launches"] or 0),
+                 meta["last_played"], now_iso()))
+        return meta
+
+    def add_playtime(self, game_id: str, seconds: int, finished_at: str | None = None) -> dict[str, Any]:
+        """One finished play session (atomic: two sessions ending together both count)."""
+        with self._lock:
+            meta = self.game_meta(game_id)
+            return self.set_game_meta(game_id, playtime_s=int(meta["playtime_s"]) + max(0, int(seconds)),
+                                      launches=int(meta["launches"]) + 1, last_played=finished_at or now_iso())
+
     def add_runtime(self, **kw: Any) -> None:
         self.execute(
             """INSERT OR REPLACE INTO runtimes(sha256, file_name, stored_path, original_path, version, signer, trust,

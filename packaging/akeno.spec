@@ -1,4 +1,4 @@
-# PyInstaller spec for AKENO DLSS 5 Manager (Windows x64, one-folder build).
+# PyInstaller spec for AKENO Gaming Suite (Windows x64, one-folder build).
 # Build:  pyinstaller --noconfirm packaging/akeno.spec
 import re
 from pathlib import Path
@@ -14,28 +14,30 @@ VSVersionInfo(
   kids=[
     StringFileInfo([StringTable('040904B0', [
       StringStruct('CompanyName', 'AKENO community project'),
-      StringStruct('FileDescription', 'AKENO DLSS 5 Manager'),
+      StringStruct('FileDescription', 'AKENO Gaming Suite'),
       StringStruct('FileVersion', '{version}'),
       StringStruct('InternalName', 'AKENO'),
       StringStruct('LegalCopyright', 'GPL-3.0-or-later'),
       StringStruct('OriginalFilename', 'AKENO.exe'),
-      StringStruct('ProductName', 'AKENO DLSS 5 Manager'),
+      StringStruct('ProductName', 'AKENO Gaming Suite'),
       StringStruct('ProductVersion', '{version}')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]
 )
 """, encoding="utf-8")
 
-EXCLUDES = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick", "PySide6.QtPdf",
-            "PySide6.QtPdfWidgets", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuick3D", "PySide6.Qt3DCore",
-            "PySide6.QtMultimedia", "PySide6.QtCharts", "PySide6.QtDataVisualization", "PySide6.QtBluetooth",
-            "PySide6.QtNetwork", "PySide6.QtSql", "PySide6.QtTest", "tkinter", "unittest", "pytest"]
+# Desktop Studio needs Qt Multimedia (video wallpapers, FFmpeg backend), Qt WebEngine (HTML/WebGL wallpapers; it
+# brings Qml, Quick, WebChannel and Positioning) and Qt Network (the local socket between suite, host and renderers).
+EXCLUDES = ["PySide6.QtWebEngineQuick", "PySide6.QtPdf", "PySide6.QtPdfWidgets", "PySide6.QtQuick3D",
+            "PySide6.Qt3DCore", "PySide6.QtCharts", "PySide6.QtDataVisualization", "PySide6.QtBluetooth",
+            "PySide6.QtSql", "PySide6.QtTest", "tkinter", "unittest", "pytest"]
 
 a = Analysis(
     [str(ROOT / "akeno" / "__main__.py")],
     pathex=[str(ROOT)],
     datas=[(str(ROOT / "akeno" / "data"), "akeno/data")],
-    hiddenimports=["PySide6.QtSvg"],
+    hiddenimports=["PySide6.QtSvg", "PySide6.QtNetwork", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets",
+                   "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"],
     excludes=EXCLUDES,
     noarchive=False,
 )

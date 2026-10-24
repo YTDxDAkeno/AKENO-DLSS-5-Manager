@@ -1,0 +1,126 @@
+# AKENO licensing server. The VPS runs the license server only: accounts, codes, licenses, devices, signed
+# offline licenses and the admin website. Everything else of AKENO runs on the Windows PC.
+#
+# Coexists with other projects: its own project name, network and volumes, no fixed container names, ports bound
+# to 127.0.0.1 for an existing reverse proxy (see README.md). Start: docker compose up -d --build
+name: ${COMPOSE_PROJECT_NAME:-akeno-licensing}
+
+x-app: &app
+  build:
+    context: ../server
+  image: akeno-licensing:${AKENO_IMAGE_TAG:-local}
+  restart: unless-stopped
+  env_file: .env
+  environment: &app-env
+    AKENO_DATABASE_URL: postgresql://${POSTGRES_USER:-akeno}:${POSTGRES_PASSWORD:?run install.sh first}@akeno-database:5432/${POSTGRES_DB:-akeno}
+    AKENO_KEYS_DIR: /data/keys
+    AKENO_MAIL_DIR: /data/mail
+  networks: [akeno]
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+
+services:
+  akeno-database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-akeno}
+      POSTGRES_USER: ${POSTGRES_USER:-akeno}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run install.sh first}
+    volumes:
+      - akeno-db:/var/lib/postgresql/data
+    networks: [akeno]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  akeno-api:
+    <<: *app
+    environment:
+      <<: *app-env
+      AKENO_ROLE: api
+    volumes:
+      - akeno-keys:/data/keys          # the license signing keys: only this service has them
+      - akeno-mail:/data/mail
+    ports:
+      - "${AKENO_BIND:-127.0.0.1}:${AKENO_API_PORT:-8410}:8000"
+    depends_on:
+      akeno-database:
+        condition: service_healthy
+
+  akeno-web:
+    <<: *app
+    environment:
+      <<: *app-env
+      AKENO_ROLE: web
+    volumes:
+      - akeno-mail:/data/mail
+    ports:
+      - "${AKENO_BIND:-127.0.0.1}:${AKENO_WEB_PORT:-8411}:8000"
+    depends_on:
+      akeno-api:
+        condition: service_healthy
+
+  akeno-admin:
+    <<: *app
+    environment:
+      <<: *app-env
+      AKENO_ROLE: admin
+    volumes:
+      - akeno-mail:/data/mail
+      - akeno-backups:/backups:ro      # shows the last backup on the System page
+    ports:
+      - "${AKENO_BIND:-127.0.0.1}:${AKENO_ADMIN_PORT:-8412}:8000"
+    depends_on:
+      akeno-api:
+        condition: service_healthy
+
+  akeno-backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/backup/backup-loop.sh"]
+    environment:
+      PGHOST: akeno-database
+      PGDATABASE: ${POSTGRES_DB:-akeno}
+      PGUSER: ${POSTGRES_USER:-akeno}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?run install.sh first}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+    volumes:
+      - ./backup:/backup:ro
+      - akeno-backups:/backups
+      - akeno-keys:/keys:ro
+    networks: [akeno]
+    depends_on:
+      akeno-database:
+        condition: service_healthy
+
+  # Only for a VPS without a reverse proxy: docker compose --profile caddy up -d
+  akeno-caddy:
+    image: caddy:2.8-alpine
+    profiles: [caddy]
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      AKENO_PUBLIC_HOST: ${AKENO_PUBLIC_HOST:-}
+      AKENO_ADMIN_HOST: ${AKENO_ADMIN_HOST:-}
+    volumes:
+      - ./Caddyfile.docker:/etc/caddy/Caddyfile:ro
+      - akeno-caddy-data:/data
+      - akeno-caddy-config:/config
+    networks: [akeno]
+
+networks:
+  akeno: {}
+
+volumes:
+  akeno-db: {}
+  akeno-keys: {}
+  akeno-mail: {}
+  akeno-backups: {}
+  akeno-caddy-data: {}
+  akeno-caddy-config: {}

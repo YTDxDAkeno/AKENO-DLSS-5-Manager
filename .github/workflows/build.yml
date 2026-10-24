@@ -3,13 +3,19 @@ name: Build and test
 on:
   push:
     branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
     inputs:
       draft_release:
-        description: Create a draft development prerelease after Linux and Windows pass
+        description: Create a draft development prerelease (in this private repository) after Linux and Windows pass
         type: boolean
         default: false
+      publish_channel:
+        description: Publish the tested build to the public release repository (none, stable or beta)
+        type: choice
+        options: [none, stable, beta]
+        default: none
 
 permissions:
   contents: read
@@ -39,6 +45,68 @@ jobs:
         with:
           name: linux-test-results
           path: linux-test-results.xml
+
+  server:
+    name: Licensing server (SQLite, PostgreSQL 16, Docker deployment)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: akeno
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: akeno_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U akeno" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r server/requirements-test.txt
+      - name: Server tests on SQLite (includes the app's licensing code against a live server)
+        working-directory: server
+        run: python -m pytest -q --junitxml=../server-sqlite-results.xml
+      - name: Server tests on PostgreSQL 16 (redemption races with row locks)
+        working-directory: server
+        run: python -m pytest -q --junitxml=../server-postgres-results.xml
+        env:
+          AKENO_TEST_DATABASE_URL: postgresql://akeno:ci-only-password@127.0.0.1:5432/akeno_test
+      - name: Deployment with docker compose (install.sh, health, super admin, backup)
+        working-directory: deploy
+        run: |
+          cp .env.example .env
+          sed -i 's|^AKENO_PUBLIC_URL=$|AKENO_PUBLIC_URL=http://localhost:8411|' .env
+          ./install.sh < /dev/null
+          docker compose ps
+          curl -fsS http://127.0.0.1:8410/api/v1/system/ready
+          curl -fsS -o /dev/null http://127.0.0.1:8411/
+          curl -fsS -o /dev/null http://127.0.0.1:8412/login
+          echo "ci admin password 1" | docker compose exec -T akeno-api akeno-server create-super-admin --email ci@example.invalid --password-stdin
+          ./backup.sh
+          ls -la backups
+          docker compose down -v
+      - name: License server bundle for the VPS (server/ and deploy/ only, with SHA-256)
+        run: deploy/bundle.sh
+      - name: Preserve the license server bundle (download it, then ./push-to-vps.sh user@vps dir bundle)
+        uses: actions/upload-artifact@v4
+        with:
+          name: akeno-licensing-server-bundle
+          path: dist/akeno-licensing-*
+          if-no-files-found: error
+      - name: Publish bounded server test failure annotations
+        if: failure()
+        run: |
+          for f in server-sqlite-results.xml server-postgres-results.xml; do
+            [ -f "$f" ] && python tools/ci_test_annotations.py "$f" || true
+          done
+      - name: Preserve server test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-test-results
+          path: server-*-results.xml
 
   real-assets:
     name: Real upstream package contracts (original release archives)
@@ -164,6 +232,30 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           AKENO_TEST_REAL_BUNDLE: '1'
+      - name: License server address and public keys (repository variables)
+        if: ${{ vars.AKENO_LICENSE_SERVER_URL != '' || startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
+        shell: pwsh
+        env:
+          LICENSE_SERVER_URL: ${{ vars.AKENO_LICENSE_SERVER_URL }}
+          LICENSE_PUBLIC_KEYS: ${{ vars.AKENO_LICENSE_PUBLIC_KEYS }}
+          RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
+        run: |
+          $require = @(); if ($env:RELEASE_BUILD -eq 'true') { $require = @('--require') }
+          python tools/configure-licensing.py --server-url "$env:LICENSE_SERVER_URL" --keys "$env:LICENSE_PUBLIC_KEYS" @require
+          if ($LASTEXITCODE -ne 0) { throw "license configuration failed" }
+      - name: Release verification key and public release repository (repository variables)
+        shell: pwsh
+        env:
+          RELEASE_PUBLIC_KEYS: ${{ vars.AKENO_RELEASE_PUBLIC_KEYS }}
+          RELEASE_REPO: ${{ vars.AKENO_RELEASE_REPO }}
+          RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
+        run: |
+          $require = @(); if ($env:RELEASE_BUILD -eq 'true') { $require = @('--require') }
+          python tools/release_manifest.py embed --keys "$env:RELEASE_PUBLIC_KEYS" @require
+          if ($LASTEXITCODE -ne 0) { throw "release key configuration failed" }
+          if ($env:RELEASE_REPO) {
+            @{ release_repo = $env:RELEASE_REPO } | ConvertTo-Json | Set-Content akeno/data/distribution.json -Encoding utf8
+          }
       - name: PyInstaller build
         run: pyinstaller --noconfirm --distpath dist --workpath build packaging\akeno.spec
       - name: Smoke test the packaged executable
@@ -187,6 +279,11 @@ jobs:
           if ($assets.Count -lt 19) { throw "expected 19 design assets in the package, found $($assets.Count)" }
       - name: Audit public payload for proprietary NVIDIA runtimes
         run: python tools/check_public_payload.py dist/AKENO
+      - name: Desktop Studio on the runner desktop (packaged wallpaper renderers, picture and web)
+        shell: pwsh
+        run: |
+          $env:AKENO_HOME = "$env:RUNNER_TEMP\akeno-desktop"
+          python tools/desktop_check.py --exe dist\AKENO\AKENO.exe --out screenshots\desktop-studio
       - name: Packaged GUI starts normally and keeps running
         shell: pwsh
         run: |
@@ -209,7 +306,7 @@ jobs:
           "AKENO_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
           New-Item -ItemType Directory -Force packaging\out | Out-Null
           Copy-Item README.md, THIRD_PARTY_NOTICES.md, LICENSE dist\AKENO\
-          Compress-Archive -Path dist\AKENO\* -DestinationPath "packaging\out\AKENO-DLSS5-Manager-$v-portable-x64.zip"
+          Compress-Archive -Path dist\AKENO\* -DestinationPath "packaging\out\AKENO-Gaming-Suite-$v-portable-x64.zip"
       - name: Installer (Inno Setup)
         shell: pwsh
         run: |
@@ -229,7 +326,7 @@ jobs:
           '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - uses: actions/upload-artifact@v4
         with:
-          name: AKENO-DLSS5-Manager-windows-x64
+          name: AKENO-Gaming-Suite-windows-x64
           path: packaging/out/*
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
@@ -249,16 +346,97 @@ jobs:
             screenshots/v16-150pct/*.png
             screenshots/windows-runner/*.png
             screenshots/windows-runner-150pct/*.png
+            screenshots/desktop-studio/*
             screenshots/fivem-fixture/*.png
             screenshots/fivem-fixture-150pct/*.png
             ${{ runner.temp }}/akeno-gui/logs/*
             ${{ runner.temp }}/akeno-smoke/logs/*
             ${{ runner.temp }}/akeno-exe/logs/*
 
+  publish-release:
+    # Users download from the PUBLIC release repository (no GitHub login); this repository stays private.
+    # Needs: variable AKENO_RELEASE_REPO (owner/name), secrets AKENO_RELEASE_SIGNING_KEY (Ed25519 seed from
+    # tools/release_manifest.py keygen) and AKENO_RELEASE_REPO_TOKEN (fine-grained token: contents read/write on
+    # the release repository only). None of them ever reaches the Windows build.
+    name: Publish to the public release repository
+    if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_channel != 'none')
+    needs: [test-linux, server, real-assets, windows]
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+    env:
+      RELEASE_REPO: ${{ vars.AKENO_RELEASE_REPO }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install cryptography==44.0.0
+      - name: Version, tag and channel
+        shell: bash
+        env:
+          INPUT_CHANNEL: ${{ inputs.publish_channel }}
+        run: |
+          v=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' akeno/__init__.py)
+          if [[ "$GITHUB_REF" == refs/tags/v* && "${GITHUB_REF#refs/tags/v}" != "$v" ]]; then
+            echo "::error::tag ${GITHUB_REF#refs/tags/} does not match __version__ $v"; exit 1
+          fi
+          channel="${INPUT_CHANNEL:-}"
+          if [[ -z "$channel" || "$channel" == "none" ]]; then
+            if [[ "$v" == *-* ]]; then channel=beta; else channel=stable; fi
+          fi
+          test -n "$RELEASE_REPO" || { echo "::error::repository variable AKENO_RELEASE_REPO is not set"; exit 1; }
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          echo "CHANNEL=$channel" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: AKENO-Gaming-Suite-windows-x64
+          path: dist-public
+      - name: Corresponding source code (GPL-3.0-or-later) and checksums
+        shell: bash
+        run: |
+          git archive --format=zip --prefix="AKENO-Gaming-Suite-$VERSION-source/" \
+            -o "dist-public/AKENO-Gaming-Suite-$VERSION-source.zip" HEAD
+          rm -f dist-public/SHA256SUMS.txt
+          (cd dist-public && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+      - name: Signed release manifest
+        shell: bash
+        env:
+          AKENO_RELEASE_SIGNING_KEY: ${{ secrets.AKENO_RELEASE_SIGNING_KEY }}
+        run: |
+          test -n "$AKENO_RELEASE_SIGNING_KEY" || { echo "::error::secret AKENO_RELEASE_SIGNING_KEY is not set"; exit 1; }
+          python tools/release_manifest.py sign --channel "$CHANNEL" --release "$VERSION" --tag "v$VERSION" \
+            --repo "$RELEASE_REPO" --out "public/channels/$CHANNEL.json" dist-public/*
+      - name: Publish the release and update the channel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AKENO_RELEASE_REPO_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo "::error::secret AKENO_RELEASE_REPO_TOKEN is not set"; exit 1; }
+          pre=""; [[ "$CHANNEL" == beta ]] && pre="--prerelease"
+          gh release create "v$VERSION" --repo "$RELEASE_REPO" $pre --title "AKENO Gaming Suite $VERSION" \
+            --notes-file docs/RELEASE_NOTES.md dist-public/*
+          gh auth setup-git
+          git clone --depth 1 "https://github.com/$RELEASE_REPO.git" release-repo
+          git -C release-repo checkout -B main           # also works for a new, empty release repository
+          mkdir -p release-repo/channels release-repo/compatibility release-repo/community
+          cp -n distribution/release-repo/README.md release-repo/ || true
+          cp -n distribution/release-repo/channels/README.md release-repo/channels/ || true
+          cp -n distribution/release-repo/community/index.json release-repo/community/ || true
+          cp "public/channels/$CHANNEL.json" release-repo/channels/
+          cp akeno/data/compatibility.json release-repo/compatibility/compatibility.json
+          cd release-repo
+          git config user.name "AKENO release"
+          git config user.email "akeno-release@users.noreply.github.com"
+          git add -A .
+          git commit -m "AKENO Gaming Suite $VERSION ($CHANNEL)"
+          git push -u origin main
+
   development-release:
     name: Draft development release from tested Windows artifacts
     if: github.event_name == 'workflow_dispatch' && inputs.draft_release
-    needs: [test-linux, real-assets, windows]
+    needs: [test-linux, server, real-assets, windows]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -266,7 +444,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: AKENO-DLSS5-Manager-windows-x64
+          name: AKENO-Gaming-Suite-windows-x64
           path: release-inputs
       - name: Create draft prerelease with exact tested artifacts
         env:
@@ -274,4 +452,4 @@ jobs:
         shell: bash
         run: |
           v=$(sed -n 's/^__version__ = "\(.*\)"/\1/p' akeno/__init__.py)
-          gh release create "v$v-dev" --draft --prerelease --target "$GITHUB_SHA" --title "AKENO DLSS 5 Manager $v development" --notes-file docs/AKENO_V2_RELEASE_NOTES.md release-inputs/*
+          gh release create "v$v-dev" --draft --prerelease --target "$GITHUB_SHA" --title "AKENO Gaming Suite $v development" --notes-file docs/AKENO_V3_RELEASE_NOTES.md release-inputs/*

@@ -63,6 +63,55 @@ def data_strings() -> set[str]:
             "measured", "estimated", "hardware only"}
     out |= {"Performance", "Balanced", "Quality", "Ultra", "Disabled"}
     out |= stack_strings()
+    out |= suite_strings()
+    return out
+
+
+def suite_strings() -> set[str]:
+    """Licensing and suite texts that reach t() through tables (status names, error codes, page titles)."""
+    from akeno.performance import tweaks
+    from akeno.ui import game_hub
+    from akeno.ui.pages import benchmark, booster
+    perf = set(tweaks.PRIORITY_LABELS.values()) | set(tweaks.GpuPreference.LABELS.values())
+    perf |= {text for _, text in booster.MODES} | set(booster.SCOPE.values()) | set(benchmark.VERDICTS.values())
+    for title, choices in booster.CUSTOM_CHOICES.values():
+        perf |= {title} | {text for _, text in choices}
+    perf |= {c for c in game_hub.CATEGORIES if c}
+    from akeno.licensing.manager import STATUS_TEXT, TYPE_NAMES
+    from akeno.ui import account_ui, license_gate
+    from akeno.ui.main_window import SECTIONS
+    from akeno.ui.pages.account import EVENT_NAMES
+    out = perf | set(STATUS_TEXT.values()) | set(TYPE_NAMES.values()) | set(account_ui.ERRORS.values())
+    out |= set(account_ui.STATUS_NAME.values()) | set(EVENT_NAMES.values())
+    out |= {x for pair in license_gate.LicenseGate.TITLES.values() for x in pair if x}
+    out |= {license_gate.SUITE_NAME, license_gate.ERR_SHORT} | set(license_gate.FEATURES)
+    for section, items in SECTIONS:
+        out.add(section)
+        out |= {item[2] for item in items if item[0] == "group"}
+    out |= {"The license server address must start with https://", "The license server address is incomplete."}
+    out |= desktop_strings()
+    return out
+
+
+def desktop_strings() -> set[str]:
+    """Desktop Studio texts that reach t() through tables (widget names, weather, days, page choices)."""
+    from akeno.desktop import widgets
+    from akeno.ui.pages import desktop
+    out = set(widgets.TITLES.values()) | set(widgets.WEATHER.values()) | {"Weather"}
+    out |= set(widgets.WEEKDAYS) | set(widgets.DAY_SHORT) | set(widgets.MONTHS)
+    for table in (desktop.KIND_TEXT, desktop.MODE_TEXT, desktop.FIT_TEXT, desktop.EDGE_TEXT, desktop.STATE_TEXT,
+                  desktop.PAUSE_TEXT):
+        out |= set(table.values())
+    out.add(desktop.MEDIA_FILTER)
+    from akeno.sync.engine import CATEGORIES
+    from akeno.ui.pages import online
+    out |= set(CATEGORIES.values()) | set(online.KIND_TEXT.values()) | {text for _, text in online.EXPORTS}
+    out |= {"Settings", "Desktop"}
+    from akeno.ui import notifications
+    from akeno.ui.pages import updates
+    out |= set(notifications.CATEGORIES.values()) | set(updates.CHANNEL_TEXT.values())
+    out |= {"Updates install into the built program only (this copy runs from the source code).",
+            "This build has no release verification key: download updates from the release page."}
     return out
 
 

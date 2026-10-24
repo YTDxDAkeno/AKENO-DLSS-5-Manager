@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPlainTextEdit,
 from akeno.backends import runtimes
 from akeno.core.models import TrustState
 from akeno.i18n import t
-from akeno.ui.widgets import label, button, info
+from akeno.ui.widgets import fit_to_screen, label, button, info
 
 
 class RuntimeDiagnosticsDialog(QDialog):
@@ -14,7 +14,7 @@ class RuntimeDiagnosticsDialog(QDialog):
         super().__init__(parent)
         self.ctl, self.game, self.report = ctl, game, None
         self.setWindowTitle(t("Inspect existing setup"))
-        self.resize(900, 620)
+        fit_to_screen(self, 900, 620)
         lay = QVBoxLayout(self)
         lay.addWidget(label(t("Local inventory does not change game files. Signed files still require permission for local reuse."), "dim", wrap=True))
         self.output = QPlainTextEdit()

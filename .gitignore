@@ -24,3 +24,13 @@ private-inputs/
 # CI-generated redistributable components: release assets, never binary Git history.
 akeno/data/community/dependencies/
 community-build/
+
+# Licensing server: secrets, keys, local databases and backups never enter Git.
+deploy/.env
+deploy/*.env
+!deploy/.env.example
+deploy/data/
+deploy/backups/
+server/*.sqlite3
+server/**/keys/
+*.ed25519.pem

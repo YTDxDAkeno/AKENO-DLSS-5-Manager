@@ -743,7 +743,7 @@ class StackManager:
         target = self._target(game)
         if connect is not None:
             self.save_selection(game_id, server=connect or None)
-        target.launch(connect or None)
+        target.launch(connect or None, self.s.db.game_meta(game_id).get("launch_args") or None)
         if (self.active(game_id) or {}).get("params", {}).get("recipe") == "optiscaler":
             return msg("Game started. Open OptiScaler's menu with Insert to check DLSS 5.")
         return msg("Game started. Open the ReShade overlay with Home to check the add-ons.")

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ t("Forgot your password?") }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ t("Forgot your password?") }}</h1>
+  {% if sent %}
+    <p class="dim">{{ t("If an account with this address exists, a reset link is on its way. Check your inbox.") }}</p>
+  {% else %}
+  <p class="dim">{{ t("Enter the e-mail address of your account. If it exists, a link to choose a new password is sent to it.") }}</p>
+  <form method="post" action="/forgot-password">
+    {{ m.csrf_field() }}
+    {{ m.field("email", t("E-mail address"), "email", "", True, "email", maxlength=320) }}
+    <div class="row mt"><button class="primary" type="submit">{{ t("Send reset link") }}</button>
+      <a href="/login">{{ t("Back to sign-in") }}</a></div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

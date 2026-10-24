@@ -69,6 +69,8 @@ class AppServices:
         self.downloads = downloads or DownloadManager(self.catalog.allowed_hosts)
         self.installer = installer or Installer(self.db)
         self.compat_db = compat_db or CompatDatabase.load()
+        from akeno.performance.engine import BoostEngine
+        self.boost = BoostEngine()
         pm = self.catalog.tool("presentmon")
         self.benchmarks = BenchmarkService(self.db, PresentMonRunner(pm, self.downloads) if pm else None)
         from akeno.deps.resolver import DependencyResolver

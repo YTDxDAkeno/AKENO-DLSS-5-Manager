@@ -16,7 +16,7 @@ DEFAULTS: dict[str, Any] = {
     "auto_update_compat_db": False,
     "check_mod_updates": False,         # daily GitHub release check for newer mod versions (never auto-installs)
     "github_token": "",                 # optional; raises GitHub's API rate limit for update checks
-    "compat_db_url": "https://raw.githubusercontent.com/YTDxDAkeno/AKENO-DLSS-5-Manager/main/akeno/data/compatibility.json",
+    "compat_db_url": "",                # empty: the public release repository's (akeno/distribution.py)
     "cache_limit_mb": 1024,
     "backup_keep_per_game": 10,
     "verify_backups_after_create": True,
@@ -24,10 +24,13 @@ DEFAULTS: dict[str, Any] = {
     "benchmark_delay_s": 5,
     "target_fps": 60,
     "notifications": True,
+    "notification_categories": None,    # {category: bool}; None: the defaults of ui/notifications.py
+    "update_channel": "stable",         # stable | beta
     "debug_logging": False,
     "rescan_on_start": True,
     "block_unknown_conflicts": True,    # stop install when an unknown proxy DLL is present
     "selected_game_id": None,
+    "intelligent_game_mode": True,      # notice running library games: session boost, playtime, pause wallpapers
     "selected_gpu_index": None,
 }
 

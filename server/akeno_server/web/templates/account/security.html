@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ t("Security") }}{% endblock %}
+{% block content %}
+<div class="row"><h1>{{ t("Security") }}</h1><span class="spacer"></span><a class="btn" href="/account">{{ t("Back to my account") }}</a></div>
+<div class="grid two">
+  <section class="card"><h2>{{ t("Profile") }}</h2>
+    <form method="post" action="/account/profile">{{ m.csrf_field() }}
+      {{ m.field("display_name", t("Name"), "text", user.display_name, False, "nickname", maxlength=80) }}
+      <label for="f-language">{{ t("Language") }}</label>
+      <select id="f-language" name="language"><option value="en" {% if user.language == 'en' %}selected{% endif %}>English</option><option value="de" {% if user.language == 'de' %}selected{% endif %}>Deutsch</option></select>
+      <div class="row mt"><button type="submit">{{ t("Save") }}</button></div></form>
+  </section>
+  <section class="card"><h2>{{ t("Password") }}</h2>
+    {% if password_error %}<div class="flash error" role="alert">{{ t(password_error) }}</div>{% endif %}
+    <form method="post" action="/account/password">{{ m.csrf_field() }}
+      {{ m.field("current_password", t("Current password"), "password", "", True, "current-password", maxlength=256) }}
+      {{ m.field("new_password", t("New password"), "password", "", True, "new-password", t("At least 10 characters."), 256) }}
+      {{ m.field("new_password2", t("Repeat the password"), "password", "", True, "new-password", maxlength=256) }}
+      <div class="row mt"><button class="primary" type="submit">{{ t("Change password") }}</button></div></form>
+  </section>
+  <section class="card"><h2>{{ t("E-mail address") }}</h2>
+    <p class="dim">{{ user.email }}</p>
+    {% if email_error %}<div class="flash error" role="alert">{{ t(email_error) }}</div>{% endif %}
+    <form method="post" action="/account/email">{{ m.csrf_field() }}
+      {{ m.field("email", t("New e-mail address"), "email", "", True, "email", maxlength=320) }}
+      {{ m.field("password", t("Current password"), "password", "", True, "current-password", maxlength=256) }}
+      <div class="row mt"><button type="submit">{{ t("Change e-mail address") }}</button></div></form>
+  </section>
+  <section class="card"><h2>{{ t("Two-factor sign-in") }}
+      {% if two_factor %}<span class="badge ok">{{ t("On") }}</span>{% else %}<span class="badge">{{ t("Off") }}</span>{% endif %}</h2>
+    {% if two_factor %}
+      <p class="dim">{{ t("Signing in needs a code from your authenticator app.") }} {{ t("Unused recovery codes: {n}", n=recovery_left) }}</p>
+      {% if user.role == 'user' %}
+      <form method="post" action="/account/2fa/disable">{{ m.csrf_field() }}
+        {{ m.field("password", t("Current password"), "password", "", True, "current-password", maxlength=256) }}
+        {{ m.field("code", t("Code"), "text", "", True, "one-time-code", maxlength=20) }}
+        <div class="row mt"><button class="danger" type="submit">{{ t("Turn off") }}</button></div></form>
+      {% else %}<p class="muted">{{ t("Staff accounts must keep two-factor sign-in.") }}</p>{% endif %}
+    {% else %}
+      <p class="dim">{{ t("Protect your account with codes from an authenticator app (for example Aegis, 2FAS, Google or Microsoft Authenticator).") }}</p>
+      <a class="btn primary" href="/account/2fa/setup">{{ t("Set up") }}</a>
+    {% endif %}
+  </section>
+</div>
+<section class="card mt-l"><div class="row"><h2>{{ t("Open sign-ins") }}</h2><span class="spacer"></span>
+  <form method="post" action="/account/sessions/revoke-others">{{ m.csrf_field() }}<button class="small" type="submit">{{ t("End all others") }}</button></form></div>
+  <div class="table-wrap"><table><thead><tr><th>{{ t("Where") }}</th><th>{{ t("Started") }}</th><th>{{ t("Last used") }}</th><th>{{ t("Address") }}</th><th></th></tr></thead><tbody>
+  {% for s in sessions %}<tr><td>{{ t("AKENO app") if s.kind == 'app' else t("Website") }}{% if s.current %} · <strong>{{ t("this browser") }}</strong>{% endif %}<div class="muted">{{ s.user_agent[:80] }}</div></td>
+    <td>{{ m.when(s.created_at) }}</td><td>{{ m.when(s.last_used_at) }}</td><td class="mono">{{ s.ip }}</td>
+    <td><form method="post" action="/account/sessions/{{ s.id }}/revoke">{{ m.csrf_field() }}<button class="small" type="submit">{{ t("End") }}</button></form></td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+<section class="card mt-l"><h2>{{ t("Sign-in history") }}</h2>
+  <div class="table-wrap"><table><thead><tr><th>{{ t("When") }}</th><th>{{ t("Result") }}</th><th>{{ t("Where") }}</th><th>{{ t("Address") }}</th></tr></thead><tbody>
+  {% for e in sign_ins %}<tr><td>{{ m.when(e.at) }}</td><td>{% if e.success %}<span class="badge ok">{{ t("Signed in") }}</span>{% else %}<span class="badge fail">{{ t("Failed") }}</span> <span class="muted">{{ e.reason }}</span>{% endif %}</td>
+    <td>{{ t("AKENO app") if e.channel == 'app' else t("Website") }}</td><td class="mono">{{ e.ip }}</td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endblock %}

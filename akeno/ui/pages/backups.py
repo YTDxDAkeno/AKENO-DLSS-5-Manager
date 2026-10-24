@@ -61,6 +61,7 @@ class BackupsPage(QWidget):
         self.details.setReadOnly(True)
         self.details.setMinimumHeight(200)
         self.details.setAccessibleName(t("Backup details"))
+        self.details.setPlaceholderText(t("Select a backup to see its files."))
         dcard.body.addWidget(self.details)
         lay.addWidget(dcard)
         lay.addStretch(1)

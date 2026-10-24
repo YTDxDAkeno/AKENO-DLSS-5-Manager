@@ -72,16 +72,22 @@ class GameTarget:
         if running:
             raise GameRunning(", ".join(sorted({p.name for p in running})))
 
-    def launch(self, connect: str | None = None) -> None:
+    def launch(self, connect: str | None = None, args: str | None = None) -> None:
         if not is_windows():
             raise StackError("Starting games requires Windows.", code="not_windows")
         g = self.game
+        args = (args or "").strip()
         if g.launcher == "steam" and re.fullmatch(r"\d+", str(g.launcher_id or "")):
-            os.startfile(f"steam://rungameid/{g.launcher_id}")          # noqa: S606 - Steam protocol handler
-        elif g.launcher == "epic" and g.launcher_id and re.fullmatch(r"[A-Za-z0-9:._-]+", g.launcher_id):
+            if args:                                                    # Steam passes these to the game
+                from urllib.parse import quote
+                os.startfile(f"steam://run/{g.launcher_id}//{quote(args)}/")    # noqa: S606
+            else:
+                os.startfile(f"steam://rungameid/{g.launcher_id}")          # noqa: S606 - Steam protocol handler
+        elif g.launcher == "epic" and g.launcher_id and re.fullmatch(r"[A-Za-z0-9:._-]+", g.launcher_id) and not args:
             os.startfile(f"com.epicgames.launcher://apps/{g.launcher_id}?action=launch&silent=true")
         elif g.exe_path and os.path.isfile(g.exe_path):
-            subprocess.Popen([g.exe_path], cwd=os.path.dirname(g.exe_path))
+            # a command line string keeps the arguments exactly as typed (Windows parses them in the game)
+            subprocess.Popen(f'"{g.exe_path}" {args}' if args else [g.exe_path], cwd=os.path.dirname(g.exe_path))
         else:
             raise StackError("The game executable was not found.", "Select the executable in My Games.", "no_exe")
 
@@ -178,7 +184,7 @@ class FiveMTarget:
         text = self.citizen_ini.read_text(encoding="utf-8-sig", errors="replace") if self.citizen_ini.is_file() else ""
         return ini.set_values(text, {"Addons": {"ReShade5": reshade5_value()}}).encode("utf-8")
 
-    def launch(self, connect: str | None = None) -> None:
+    def launch(self, connect: str | None = None, args: str | None = None) -> None:
         if not is_windows():
             raise StackError("Starting FiveM requires Windows.", code="not_windows")
         args = [str(self.installation.launcher)]

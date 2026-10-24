@@ -127,7 +127,9 @@ def test_my_games_install_action_visible_at_1920x1080(window, qtbot):
     _settle(qtbot, win, 1920, 1009)
     panel = _game_panel(win, qtbot)
     qtbot.wait(100)
-    assert win.header.height() == 110
+    page = win.pages["library"]
+    assert page.mapTo(win, page.rect().topLeft()).y() < 40, "no banner takes height above the page"
+    assert win.density == 0
     btn = panel.btn_install
     host = win.hosts["library"]
     bottom = btn.mapTo(host, btn.rect().bottomLeft()).y()
@@ -139,7 +141,7 @@ def test_game_page_scrolls_and_header_compacts_at_150_percent(window, qtbot):
     _settle(qtbot, win, 1280, 680)          # 1920x1080 at 150 % (logical pixels, taskbar subtracted)
     _game_panel(win, qtbot)
     qtbot.wait(100)
-    assert win.header.height() < 110, "short windows get the compact header"
+    assert win.density > 0, "short windows get the compact density"
     page = win.pages["library"]
     host = win.hosts["library"].scroll
     assert host.verticalScrollBar().maximum() == 0, "My Games itself never scrolls; its list and game page do"

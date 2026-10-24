@@ -28,7 +28,7 @@ from akeno.i18n import t
 from akeno.security.downloads import CancelToken
 from akeno.ui import icons, theme
 from akeno.ui.pages.dashboard import COMPAT_TEXT
-from akeno.ui.widgets import (Card, Clickable, ElidedLabel, Spinner, WrapCheck, button, clear_layout, confirm, info,
+from akeno.ui.widgets import (FitLabel, Card, Clickable, ElidedLabel, Spinner, WrapCheck, button, clear_layout, confirm, info,
                               label, status_badge)
 
 TRUST = {TrustState.VERIFIED: ("Verified", "verified"), TrustState.NEEDS_REVIEW: ("Needs review", "needs_review"),
@@ -345,7 +345,7 @@ class InstallPage(QWidget):
         brow.addWidget(self.btn_cancel)
         brow.addWidget(self.btn_restore, 1)
         ac.addLayout(brow)
-        self.why = label("", "dim", wrap=True)
+        self.why = FitLabel("", "dim")                  # in narrow windows this card spans two grid columns
         self.why.setTextFormat(Qt.TextFormat.RichText)
         ac.addWidget(self.why)
         self.btn_log = button(t("Show installation log"), "file", kind="link", on_click=self._toggle_log)

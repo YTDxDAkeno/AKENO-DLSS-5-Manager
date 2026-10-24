@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 118" role="img" aria-label="AKENO">
+<defs><linearGradient id="a" x1="0%" y1="100%" x2="100%" y2="0%"><stop stop-color="#03c8fc"/><stop offset=".43" stop-color="#397bfa"/><stop offset=".8" stop-color="#a05cff"/><stop offset="1" stop-color="#d78aff"/></linearGradient></defs>
+<path fill="url(#a)" d="M56 8 L107 104 L85 93 L56 39 L27 96 L5 105 Z"/>
+<path fill="url(#a)" d="M39 70 L73 70 L82 86 L30 86 Z"/>
+<text x="130" y="83" font-family="Segoe UI,Arial,sans-serif" font-weight="800" font-size="69" letter-spacing="2" fill="#F4F7FF">AKENO</text>
+</svg>

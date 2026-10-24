@@ -1,0 +1,94 @@
+{% extends "admin/_layout.html" %}
+{% block title %}{{ target.email }}{% endblock %}
+{% block admin %}
+{% set d = detail %}
+{% set lic = d.license %}
+<div class="row"><h1 class="wrap-any">{{ target.email }}</h1>
+  {% if target.status == 'disabled' %}<span class="badge fail">{{ t("Disabled") }}</span>{% endif %}
+  <span class="spacer"></span><a class="btn" href="/admin/users">{{ t("All users") }}</a></div>
+<div class="grid two">
+  <section class="card"><h2>{{ t("Account") }}</h2>
+    <dl class="kv">
+      <dt>{{ t("Name") }}</dt><dd>{{ target.display_name or "—" }}</dd>
+      <dt>{{ t("Role") }}</dt><dd>{{ t({"user": "User", "support": "Support", "admin": "Admin", "super_admin": "Super Admin"}[target.role]) }}</dd>
+      <dt>{{ t("E-mail confirmed") }}</dt><dd>{{ t("Yes") if d.email_verified else t("No") }}</dd>
+      <dt>{{ t("Two-factor sign-in") }}</dt><dd>{{ t("On") if d.two_factor else t("Off") }}</dd>
+      <dt>{{ t("Registered") }}</dt><dd>{{ m.when(target.created_at) }}</dd>
+      <dt>{{ t("Last sign-in") }}</dt><dd>{{ m.when(target.last_login_at) }}</dd>
+      {% if d.locked_until %}<dt>{{ t("Locked until") }}</dt><dd>{{ m.when(d.locked_until) }}</dd>{% endif %}
+      {% if d.disabled_reason %}<dt>{{ t("Reason") }}</dt><dd>{{ d.disabled_reason }}</dd>{% endif %}
+      <dt>ID</dt><dd class="mono">{{ target.id }}</dd>
+    </dl>
+    <div class="row mt">
+      {% for action, label, perm, danger in [("revoke_sessions", "End all sign-ins", "revoke_sessions", False), ("send_reset", "Send password reset", "send_reset", False), ("reset_devices", "Reset PCs", "reset_devices", True)] %}
+        {% if can(perm) %}<form method="post" action="/admin/users/{{ target.id }}/action" {% if danger %}data-confirm="{{ t('Remove every PC of this account? They can sign in again.') }}"{% endif %}>{{ m.csrf_field() }}<input type="hidden" name="action" value="{{ action }}"><button class="small{% if danger %} danger{% endif %}" type="submit">{{ t(label) }}</button></form>{% endif %}
+      {% endfor %}
+      {% if not d.email_verified and can('resend_verification') %}<form method="post" action="/admin/users/{{ target.id }}/action">{{ m.csrf_field() }}<input type="hidden" name="action" value="resend_verification"><button class="small" type="submit">{{ t("Resend confirmation") }}</button></form>{% endif %}
+      {% if d.two_factor and can('disable_2fa') and target.id != user.id %}<form method="post" action="/admin/users/{{ target.id }}/action" data-confirm="{{ t('Remove the two-factor sign-in of this account?') }}">{{ m.csrf_field() }}<input type="hidden" name="action" value="disable_2fa"><button class="small danger" type="submit">{{ t("Reset 2FA") }}</button></form>{% endif %}
+    </div>
+    {% if can('user_status') and target.id != user.id %}
+    <form method="post" action="/admin/users/{{ target.id }}/action" class="inline mt">{{ m.csrf_field() }}
+      {% if target.status == 'active' %}<input type="hidden" name="action" value="disable"><div>{{ m.field("note", t("Reason (shown to staff)"), "text", "", False, maxlength=300) }}</div><button class="danger" type="submit">{{ t("Disable account") }}</button>
+      {% else %}<input type="hidden" name="action" value="enable"><button type="submit">{{ t("Enable account") }}</button>{% endif %}
+    </form>{% endif %}
+    {% if can('change_role') and target.id != user.id %}
+    <form method="post" action="/admin/users/{{ target.id }}/action" class="inline mt-s">{{ m.csrf_field() }}<input type="hidden" name="action" value="role">
+      <div><label for="f-role">{{ t("Role") }}</label><select id="f-role" name="role">{% for r, label in [("user", "User"), ("support", "Support"), ("admin", "Admin"), ("super_admin", "Super Admin")] %}<option value="{{ r }}" {% if target.role == r %}selected{% endif %}>{{ t(label) }}</option>{% endfor %}</select></div>
+      <button type="submit">{{ t("Change role") }}</button></form>{% endif %}
+  </section>
+  <section class="card"><h2>{{ t("License") }}
+    {% if lic.active %}<span class="badge ok">{{ t("Active") }}</span>{% elif lic.status == 'none' %}<span class="badge">{{ t("No license") }}</span>{% else %}<span class="badge fail">{{ t({"expired": "Expired", "disabled": "Disabled", "revoked": "Revoked"}.get(lic.status, lic.status)) }}</span>{% endif %}</h2>
+    {% if lic.status != 'none' %}<dl class="kv">
+      <dt>{{ t("Type") }}</dt><dd>{{ t({"trial_24h": "Trial (24 hours)", "trial_72h": "Extended trial (72 hours)", "monthly": "Monthly (30 days)", "lifetime": "Lifetime"}[lic.license_type]) }}</dd>
+      <dt>{{ t("Activated") }}</dt><dd>{{ m.when(lic.activated_at) }}</dd>
+      <dt>{{ t("Expires") }}</dt><dd>{% if lic.lifetime %}{{ t("Never") }}{% else %}{{ m.when(lic.expires_at) }}{% endif %}</dd>
+      <dt>{{ t("PCs") }}</dt><dd>{{ d.devices }} / {{ lic.device_limit }}</dd></dl>{% endif %}
+    {% if can('extend') %}
+    <form method="post" action="/admin/users/{{ target.id }}/action" class="inline mt">{{ m.csrf_field() }}<input type="hidden" name="action" value="extend">
+      <div>{{ m.field("amount", t("Extend by"), "number", "7", True, extra='min="1" max="3650"') }}</div>
+      <div><label for="f-unit">{{ t("Unit") }}</label><select id="f-unit" name="unit"><option value="days">{{ t("days") }}</option><option value="hours">{{ t("hours") }}</option></select></div>
+      <div>{{ m.field("note", t("Note"), "text", "", False, maxlength=300) }}</div>
+      <button type="submit">{{ t("Extend") }}</button></form>{% endif %}
+    {% if can('set_license') %}
+    <form method="post" action="/admin/users/{{ target.id }}/action" class="inline mt-s">{{ m.csrf_field() }}<input type="hidden" name="action" value="set_license">
+      <div><label for="f-lt">{{ t("Change type") }}</label><select id="f-lt" name="license_type">{% for ty in types %}<option value="{{ ty }}" {% if lic.license_type == ty %}selected{% endif %}>{{ t({"trial_24h": "Trial (24 hours)", "trial_72h": "Extended trial (72 hours)", "monthly": "Monthly (30 days)", "lifetime": "Lifetime"}[ty]) }}</option>{% endfor %}</select></div>
+      <div>{{ m.field("expires_at", t("Expires (UTC, optional)"), "datetime-local", "") }}</div>
+      <button type="submit">{{ t("Apply") }}</button></form>{% endif %}
+    <div class="row mt-s">
+      {% if can('grant_lifetime') and not lic.lifetime %}<form method="post" action="/admin/users/{{ target.id }}/action" data-confirm="{{ t('Grant a lifetime license to this account?') }}">{{ m.csrf_field() }}<input type="hidden" name="action" value="grant_lifetime"><button class="primary small" type="submit">{{ t("Grant lifetime") }}</button></form>{% endif %}
+      {% if can('license_status') and lic.status != 'none' %}
+        {% if lic.status == 'active' %}<form method="post" action="/admin/users/{{ target.id }}/action" data-confirm="{{ t('Disable this license? The app locks at its next check.') }}">{{ m.csrf_field() }}<input type="hidden" name="action" value="license_disable"><button class="small danger" type="submit">{{ t("Disable license") }}</button></form>
+        {% else %}<form method="post" action="/admin/users/{{ target.id }}/action">{{ m.csrf_field() }}<input type="hidden" name="action" value="license_enable"><button class="small" type="submit">{{ t("Enable license") }}</button></form>{% endif %}
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% if can('notes') %}<section class="card"><h2>{{ t("Notes") }}</h2>
+  <form method="post" action="/admin/users/{{ target.id }}/action">{{ m.csrf_field() }}<input type="hidden" name="action" value="notes">
+    <label for="f-notes" class="muted">{{ t("Visible to staff only") }}</label><textarea id="f-notes" name="notes" maxlength="5000">{{ target.notes }}</textarea>
+    <div class="row mt-s"><button type="submit">{{ t("Save notes") }}</button></div></form></section>{% endif %}
+<section class="card"><h2>{{ t("PCs") }}</h2>
+  <div class="table-wrap"><table><thead><tr><th>{{ t("Name") }}</th><th>{{ t("System") }}</th><th>{{ t("AKENO version") }}</th><th>{{ t("Last seen") }}</th><th>{{ t("Status") }}</th><th></th></tr></thead><tbody>
+  {% for dev in d.devices_list %}<tr><td>{{ dev.label }}<div class="muted mono">{{ dev.fingerprint }}…</div></td><td>{{ dev.os }}</td><td>{{ dev.app_version }}</td><td>{{ m.when(dev.last_seen_at) }}</td>
+    <td>{% if dev.active %}<span class="badge ok">{{ t("Active") }}</span>{% else %}<span class="badge">{{ t("Removed") }}</span> <span class="muted">{{ dev.revoked_by }}</span>{% endif %}</td>
+    <td>{% if dev.active and can('revoke_device') %}<form method="post" action="/admin/devices/{{ dev.id }}/revoke" data-confirm="{{ t('Remove this PC? It cannot register again until you allow it.') }}">{{ m.csrf_field() }}<button class="small danger" type="submit">{{ t("Remove") }}</button></form>
+      {% elif dev.revoked_by == 'admin' and can('revoke_device') %}<form method="post" action="/admin/devices/{{ dev.id }}/unblock">{{ m.csrf_field() }}<button class="small" type="submit">{{ t("Allow again") }}</button></form>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="6" class="dim">{{ t("No PCs.") }}</td></tr>{% endfor %}</tbody></table></div></section>
+<div class="grid two">
+  <section class="card"><h2>{{ t("License history") }}</h2>
+    <div class="table-wrap"><table><thead><tr><th>{{ t("When") }}</th><th>{{ t("What") }}</th><th>{{ t("Until") }}</th></tr></thead><tbody>
+    {% for h in d.history %}<tr><td>{{ m.when(h.at) }}</td><td>{{ t({"redeem": "Code redeemed", "extend": "Extended by support", "change_type": "License type changed", "grant_lifetime": "Lifetime granted", "status_disabled": "Disabled", "status_active": "Enabled again", "status_revoked": "Revoked"}.get(h.kind, h.kind)) }}<div class="muted">{{ h.note }}</div></td><td>{% if h.new_type == 'lifetime' %}{{ t("Never") }}{% else %}{{ m.when(h.new_expires_at) }}{% endif %}</td></tr>
+    {% else %}<tr><td colspan="3" class="dim">{{ t("No entries yet.") }}</td></tr>{% endfor %}</tbody></table></div></section>
+  <section class="card"><h2>{{ t("Sign-ins") }}</h2>
+    <div class="table-wrap"><table><thead><tr><th>{{ t("When") }}</th><th>{{ t("Result") }}</th><th>{{ t("Address") }}</th></tr></thead><tbody>
+    {% for e in d.sign_ins %}<tr><td>{{ m.when(e.at) }}</td><td>{% if e.success %}<span class="badge ok">{{ t("Signed in") }}</span>{% else %}<span class="badge fail">{{ t("Failed") }}</span> <span class="muted">{{ e.reason }}</span>{% endif %} <span class="muted">{{ e.channel }}</span></td><td class="mono">{{ e.ip }}</td></tr>
+    {% else %}<tr><td colspan="3" class="dim">{{ t("No entries yet.") }}</td></tr>{% endfor %}</tbody></table></div></section>
+</div>
+<section class="card"><h2>{{ t("Sessions") }}</h2>
+  <div class="table-wrap"><table><thead><tr><th>{{ t("Where") }}</th><th>{{ t("Started") }}</th><th>{{ t("Last used") }}</th><th>{{ t("Status") }}</th></tr></thead><tbody>
+  {% for s in d.sessions %}<tr><td>{{ t("AKENO app") if s.kind == 'app' else t("Website") }}<div class="muted">{{ s.user_agent[:70] }}</div></td><td>{{ m.when(s.created_at) }}</td><td>{{ m.when(s.last_used_at) }}</td><td>{% if s.active %}<span class="badge ok">{{ t("Active") }}</span>{% else %}<span class="badge">{{ t("Ended") }}</span>{% endif %}</td></tr>
+  {% else %}<tr><td colspan="4" class="dim">{{ t("No entries yet.") }}</td></tr>{% endfor %}</tbody></table></div></section>
+{% if audit %}<section class="card"><h2>{{ t("Audit log") }}</h2>
+  <div class="table-wrap"><table><thead><tr><th>{{ t("When") }}</th><th>{{ t("Who") }}</th><th>{{ t("Action") }}</th></tr></thead><tbody>
+  {% for e in audit %}<tr><td>{{ m.when(e.at) }}</td><td>{{ e.actor_email or t("system") }}</td><td class="mono">{{ e.action }}</td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+{% endblock %}

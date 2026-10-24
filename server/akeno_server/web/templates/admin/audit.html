@@ -1,0 +1,19 @@
+{% extends "admin/_layout.html" %}
+{% block title %}{{ t("Audit log") }}{% endblock %}
+{% block admin %}
+<h1>{{ t("Audit log") }}</h1>
+<section class="card">
+  <form method="get" action="/admin/audit" class="inline">
+    <div><label for="f-action">{{ t("Action") }}</label><select id="f-action" name="action"><option value="">{{ t("All") }}</option>
+      {% for prefix in ["codes", "license", "users", "devices", "sessions", "settings", "keys"] %}<option value="{{ prefix }}" {% if filters.action == prefix %}selected{% endif %}>{{ prefix }}.*</option>{% endfor %}</select></div>
+    <div>{{ m.field("q", t("Search (staff e-mail, target ID)"), "search", filters.q) }}</div>
+    <button type="submit">{{ t("Filter") }}</button></form>
+  <div class="table-wrap mt"><table>
+    <thead><tr><th>{{ t("When") }}</th><th>{{ t("Who") }}</th><th>{{ t("Action") }}</th><th>{{ t("Target") }}</th><th>{{ t("Details") }}</th><th>{{ t("Address") }}</th></tr></thead>
+    <tbody>{% for e in items %}<tr><td>{{ m.when(e.at) }}</td><td>{{ e.actor_email or t("system") }}<div class="muted">{{ e.actor_role }}</div></td>
+      <td class="mono">{{ e.action }}</td><td>{% if e.target_type == 'user' %}<a href="/admin/users/{{ e.target_id }}">{{ e.target_type }}</a>{% else %}{{ e.target_type }}{% endif %}<div class="muted mono">{{ e.target_id[:18] }}</div></td>
+      <td class="mono wrap-any narrow-cell">{% for k, v in e.details.items() %}{{ k }}={{ v }}{% if not loop.last %}; {% endif %}{% endfor %}</td><td class="mono">{{ e.ip }}</td></tr>
+    {% else %}<tr><td colspan="6" class="dim">{{ t("No entries yet.") }}</td></tr>{% endfor %}</tbody></table></div>
+  {{ m.pager(page, 50, total, base) }}
+</section>
+{% endblock %}

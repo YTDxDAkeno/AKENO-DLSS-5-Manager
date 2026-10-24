@@ -15,14 +15,14 @@ from PySide6.QtWidgets import (QComboBox, QFileDialog, QFrame, QHBoxLayout, QLin
 
 from akeno.games.launchers import ManualGameError
 from akeno.i18n import t
-from akeno.ui import art, theme
+from akeno.ui import art, icons, theme
 from akeno.ui.stack_panel import LAUNCHERS, GamePanel, error_text
-from akeno.ui.widgets import EmptyState, Spinner, button, clear_layout, info, label
+from akeno.ui.widgets import EmptyState, PageHeader, Spinner, button, clear_layout, info, label
 
 __all__ = ["LibraryPage", "LAUNCHERS"]
 
-ROW_HEIGHT = 62
-COVER = QSize(84, 46)
+ROW_HEIGHT = 68
+COVER = QSize(96, 54)          # 16:9, the shape of store artwork
 
 
 class GameListModel(QAbstractListModel):
@@ -34,6 +34,7 @@ class GameListModel(QAbstractListModel):
     def __init__(self):
         super().__init__()
         self.rows: list[tuple] = []          # (game, (status text, state))
+        self.favorites: dict[str, bool] = {}
 
     def set_rows(self, rows: list[tuple]) -> None:
         self.beginResetModel()
@@ -51,7 +52,7 @@ class GameListModel(QAbstractListModel):
             return None
         g, status = self.rows[index.row()]
         if role == Qt.ItemDataRole.DisplayRole:
-            return g.name
+            return ("★ " if self.favorites.get(g.id) else "") + g.name
         if role == Qt.ItemDataRole.ToolTipRole:
             return f"{g.name}\n{g.install_dir}"
         if role == Qt.ItemDataRole.AccessibleTextRole:
@@ -105,24 +106,35 @@ class GameDelegate(QStyledItemDelegate):
             return
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        r = option.rect.adjusted(1, 2, -1, -2)
+        r = option.rect.adjusted(0, 2, -2, -2)
         selected = bool(option.state & QStyle.StateFlag.State_Selected)
         hover = bool(option.state & QStyle.StateFlag.State_MouseOver)
         focus = bool(option.state & QStyle.StateFlag.State_HasFocus)
         path = QPainterPath()
-        path.addRoundedRect(r.x() + 0.5, r.y() + 0.5, r.width() - 1, r.height() - 1, 10, 10)
-        painter.fillPath(path, QColor(142, 66, 255, 41) if selected else QColor(theme.CARD))
-        border = theme.VIOLET if selected or focus else (theme.BORDER_HI if hover else theme.BORDER)
+        path.addRoundedRect(r.x() + 0.5, r.y() + 0.5, r.width() - 1, r.height() - 1, 8, 8)
+        if selected:
+            fill = QColor(theme.ACCENT)
+            fill.setAlpha(36)
+        elif hover:
+            fill = QColor(theme.SURFACE_2)
+        else:
+            fill = QColor(theme.SURFACE)
+        painter.fillPath(path, fill)
+        border = theme.ACCENT if focus else (theme.BORDER_BTN if selected or hover else theme.BORDER)
         painter.setPen(QPen(QColor(border), 1))
         painter.drawPath(path)
+        if selected:                                   # selection bar, as in the navigation
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(theme.ACCENT))
+            painter.drawRoundedRect(r.x() + 1, r.y() + 12, 3, r.height() - 24, 1.5, 1.5)
         cover = self._cover(game, painter.device().devicePixelRatioF() if painter.device() else 1.0)
-        cr = QRect(r.x() + 8, r.y() + (r.height() - COVER.height()) // 2, COVER.width(), COVER.height())
+        cr = QRect(r.x() + 10, r.y() + (r.height() - COVER.height()) // 2, COVER.width(), COVER.height())
         clip = QPainterPath()
-        clip.addRoundedRect(cr.x(), cr.y(), cr.width(), cr.height(), 6, 6)
+        clip.addRoundedRect(cr.x(), cr.y(), cr.width(), cr.height(), 5, 5)
         painter.setClipPath(clip)
         painter.drawPixmap(cr, cover)
         painter.setClipping(False)
-        x = cr.right() + 11
+        x = cr.right() + 12
         width = r.right() - 10 - x
         font = QFont(option.font)
         font.setWeight(QFont.Weight.DemiBold)
@@ -130,10 +142,19 @@ class GameDelegate(QStyledItemDelegate):
         fm = painter.fontMetrics()
         line = fm.height()
         top = r.y() + (r.height() - 3 * line) // 2
+        name = game.name
+        if getattr(index.model(), "favorites", {}).get(game.id):
+            painter.setPen(QColor(theme.AMBER))
+            painter.drawText(QRect(x, top, 16, line), Qt.AlignmentFlag.AlignVCenter, "★")
+            name_x = x + fm.horizontalAdvance("★ ")
+        else:
+            name_x = x
         painter.setPen(QColor(theme.TEXT))
-        painter.drawText(QRect(x, top, width, line), Qt.AlignmentFlag.AlignVCenter,
-                         fm.elidedText(game.name, Qt.TextElideMode.ElideRight, width))
-        painter.setFont(option.font)
+        painter.drawText(QRect(name_x, top, width - (name_x - x), line), Qt.AlignmentFlag.AlignVCenter,
+                         fm.elidedText(name, Qt.TextElideMode.ElideRight, width - (name_x - x)))
+        small = QFont(option.font)
+        small.setPointSizeF(theme.FONT_SMALL)
+        painter.setFont(small)
         fm = painter.fontMetrics()
         painter.setPen(QColor(theme.TEXT_MUTED))
         painter.drawText(QRect(x, top + line, width, line), Qt.AlignmentFlag.AlignVCenter,
@@ -143,10 +164,10 @@ class GameDelegate(QStyledItemDelegate):
         cy = top + 2 * line + line // 2
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(dot)
-        painter.drawEllipse(x + 1, cy - 3, 7, 7)
-        painter.setPen(QColor(theme.TEXT_MUTED))
-        painter.drawText(QRect(x + 13, top + 2 * line, width - 13, line), Qt.AlignmentFlag.AlignVCenter,
-                         fm.elidedText(t(text), Qt.TextElideMode.ElideRight, width - 13))
+        painter.drawEllipse(x + 1, cy - 3, 6, 6)
+        painter.setPen(QColor(theme.TEXT_DIM if state == "ok" else theme.TEXT_MUTED))
+        painter.drawText(QRect(x + 12, top + 2 * line, width - 12, line), Qt.AlignmentFlag.AlignVCenter,
+                         fm.elidedText(t(text), Qt.TextElideMode.ElideRight, width - 12))
         painter.restore()
 
 
@@ -162,35 +183,40 @@ class LibraryPage(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
-        top = QHBoxLayout()
-        top.addWidget(label(t("My Games"), "h1"))
-        top.addStretch(1)
         self.spinner = Spinner()
-        top.addWidget(self.spinner)
         self.btn_scan = button(t("Rescan"), "refresh", tip=t("Search Steam, Epic, GOG, Ubisoft, EA, Xbox and FiveM"),
                                on_click=lambda: ctl.scan_games())
-        top.addWidget(self.btn_scan)
-        top.addWidget(button(t("Add game"), "plus", "primary", on_click=self._add_manual))
-        lay.addLayout(top)
+        lay.addWidget(PageHeader(t("My Games"), None, (self.spinner, self.btn_scan,
+                                                       button(t("Add game"), "plus", "primary", on_click=self._add_manual))))
         body = QHBoxLayout()
-        body.setSpacing(16)
+        body.setSpacing(theme.CARD_GAP)
         left = QVBoxLayout()
         left.setContentsMargins(0, 0, 0, 0)
         left.setSpacing(8)
+        tools = QHBoxLayout()
+        tools.setSpacing(8)
         self.search = QLineEdit()
         self.search.setPlaceholderText(t("Search games…"))
         self.search.setAccessibleName(t("Search games"))
+        self.search.setClearButtonEnabled(True)
+        self.search.addAction(icons.icon("search", theme.TEXT_MUTED, 16), QLineEdit.ActionPosition.LeadingPosition)
         self.search.textChanged.connect(self.refresh_list)
-        left.addWidget(self.search)
+        tools.addWidget(self.search, 1)
         self.filter = QComboBox()
         self.filter.setAccessibleName(t("Filter"))
         self.filter.addItem(t("All games"), "all")
+        self.filter.addItem(t("Favourites"), "favorites")
         self.filter.addItem(t("Mod installed"), "installed")
         self.filter.addItem(t("Not installed"), "not_installed")
         for k, v in LAUNCHERS.items():
             self.filter.addItem(t(v), "launcher:" + k)
         self.filter.currentIndexChanged.connect(self.refresh_list)
-        left.addWidget(self.filter)
+        self.filter.setMinimumWidth(130)
+        self.filter.setMaximumWidth(170)
+        tools.addWidget(self.filter)
+        left.addLayout(tools)
+        self.count = label("", "muted")
+        left.addWidget(self.count)
         self.model = GameListModel()
         self.view = QListView()
         self.view.setObjectName("GameList")
@@ -204,7 +230,7 @@ class LibraryPage(QWidget):
         self.view.verticalScrollBar().setSingleStep(24)
         self.view.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.view.setSelectionMode(QListView.SelectionMode.SingleSelection)
-        self.view.setStyleSheet("QListView#GameList { background: transparent; outline: 0; }"
+        self.view.setStyleSheet("QListView#GameList { background: transparent; border: none; outline: 0; }"
                                 "QListView#GameList::item { background: transparent; border: 0; }")
         self.view.selectionModel().currentRowChanged.connect(self._row_changed)
         self.empty = EmptyState("gamepad", t("No games yet"), t("Scan your launchers or add a game folder manually."),
@@ -219,7 +245,7 @@ class LibraryPage(QWidget):
         left.addWidget(self.errors)
         self.list_holder = QWidget()
         self.list_holder.setLayout(left)
-        self.list_holder.setFixedWidth(390)
+        self.list_holder.setFixedWidth(372)
         body.addWidget(self.list_holder)
         self.detail_scroll = QScrollArea()
         self.detail_scroll.setObjectName("GameDetail")
@@ -245,7 +271,7 @@ class LibraryPage(QWidget):
     def resizeEvent(self, e):
         super().resizeEvent(e)
         # 150 % scaling on a 1080p screen leaves ~1000 logical pixels: give the game page the room.
-        self.list_holder.setFixedWidth(300 if self.width() < 1250 else 390)
+        self.list_holder.setFixedWidth(300 if self.width() < 1250 else 372)
 
     def _busy(self, key, on):
         if key == "games":
@@ -272,11 +298,17 @@ class LibraryPage(QWidget):
     def refresh_list(self, *_) -> None:
         games = self.s.library.games()
         installed = self._installed_map()
+        metas = self.s.db.all_game_meta()
+        favorites = {gid: bool(m.get("favorite")) for gid, m in metas.items()}
+        self.model.favorites = favorites
         q = self.search.text().strip().lower()
         f = self.filter.currentData() or "all"
         rows = []
-        for g in games:
-            if q and q not in g.name.lower() and q not in g.install_dir.lower():
+        for g in sorted(games, key=lambda g: not favorites.get(g.id)):      # favourites first, order otherwise kept
+            category = (metas.get(g.id) or {}).get("category", "").lower()
+            if q and q not in g.name.lower() and q not in g.install_dir.lower() and q not in category:
+                continue
+            if f == "favorites" and not favorites.get(g.id):
                 continue
             status = self._status(installed.get(g.id))
             if f == "installed" and status[1] != "ok" or f == "not_installed" and status[1] == "ok":
@@ -294,6 +326,9 @@ class LibraryPage(QWidget):
             self._syncing = False
         bar.setValue(keep)                   # a status change never moves the list
         self.list_stack.setCurrentWidget(self.view if rows else (self.no_match if games else self.empty))
+        self.count.setText(t("{n} of {m} games", n=len(rows), m=len(games)) if games and len(rows) != len(games)
+                           else (t("{n} game(s)", n=len(games)) if games else ""))
+        self.count.setVisible(bool(games))
         errs = self.s.library.last_errors
         self.errors.setText(t("Some sources could not be read: ") + "; ".join(errs) if errs else "")
         self.errors.setVisible(bool(errs))
@@ -355,6 +390,11 @@ class LibraryPage(QWidget):
         else:
             self.panel = GamePanel(self.ctl, game_id, self)
             self.detail_host.addWidget(self.panel)
+            game = self.s.library.get(game_id)
+            if game is not None and game.launcher != "fivem":
+                from akeno.ui.game_hub import GameHubCard
+                self.hub = GameHubCard(self.ctl, game, self.window())
+                self.detail_host.addWidget(self.hub)
         self._detail_to_top()
 
     def _detail_to_top(self) -> None:

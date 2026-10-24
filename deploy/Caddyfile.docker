@@ -1,0 +1,15 @@
+# Used only by the optional akeno-caddy service (docker compose --profile caddy up -d).
+{$AKENO_PUBLIC_HOST} {
+	encode zstd gzip
+	handle /api/* {
+		reverse_proxy akeno-api:8000
+	}
+	handle {
+		reverse_proxy akeno-web:8000
+	}
+}
+
+{$AKENO_ADMIN_HOST} {
+	encode zstd gzip
+	reverse_proxy akeno-admin:8000
+}

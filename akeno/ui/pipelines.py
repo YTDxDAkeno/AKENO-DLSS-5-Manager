@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QDialog,QVBoxLayout,QHBoxLayout,QTabWidget,QWidget,QComboBox,
     QCheckBox,QPlainTextEdit,QFileDialog,QLineEdit,QFormLayout,QDialogButtonBox,QScrollArea,QListWidget)
 from akeno.i18n import t
-from akeno.ui.widgets import button,label,confirm
+from akeno.ui.widgets import fit_to_screen, button,label,confirm
 from akeno.security.downloads import CancelToken,sha256_file
 from akeno.diagnostics.privacy import redact
 
@@ -18,7 +18,7 @@ class PipelineDialog(QDialog):
         super().__init__(parent)
         self.ctl=ctl;self.s=ctl.s;self.game=self.s.selected_game();self.prepared=None;self.swap=None;self.analysis=None;self.result=None
         self._closed=False;self.token=None;self.busy=False;self.revision=0
-        self.setWindowTitle(t('Rendering pipelines'));self.resize(1060,780)
+        self.setWindowTitle(t('Rendering pipelines'));fit_to_screen(self, 1060, 780)
         outer=QVBoxLayout(self);outer.addWidget(label(t('Rendering pipelines'),'h1'))
         outer.addWidget(label(self.game.name if self.game else t('No game selected'),'dim'))
         outer.addWidget(label(t('Choose an eligible rendering path, review its files, test the runtime separately, then verify the game. Installation alone does not prove Neural Rendering.'),'dim',wrap=True))

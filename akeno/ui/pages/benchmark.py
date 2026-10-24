@@ -12,9 +12,12 @@ from akeno.benchmark.stats import consistency_label
 from akeno.core import processes
 from akeno.i18n import t
 from akeno.paths import is_windows
+from akeno.performance.compare import MODES
+
+VERDICTS = {"gpu": "GPU", "cpu": "CPU", "limiter": "Frame cap / V-Sync", "mixed": "Mixed", "unknown": "Unknown"}
 from akeno.security.downloads import CancelToken
 from akeno.ui import theme
-from akeno.ui.widgets import (Card, EmptyState, FrameTimeChart, KeyValueGrid, Spinner, button, clear_layout, confirm,
+from akeno.ui.widgets import (PageHeader, Card, EmptyState, FrameTimeChart, KeyValueGrid, Spinner, button, clear_layout, confirm,
                               info, label)
 
 
@@ -27,10 +30,9 @@ class BenchmarkPage(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(14)
-        lay.addWidget(label(t("Benchmark"), "h1"))
-        lay.addWidget(label(t("Measurements come from Intel PresentMon (MIT licensed, downloaded from its official "
+        lay.addWidget(PageHeader(t("Benchmark"), t("Measurements come from Intel PresentMon (MIT licensed, downloaded from its official "
                               "GitHub release and hash-verified on first use). Start the game, go to a repeatable "
-                              "scene, then start the capture. Nothing here is simulated."), "dim", wrap=True))
+                              "scene, then start the capture. Nothing here is simulated.")))
         run = Card(t("New measurement"), "play", theme.GREEN)
         row = QHBoxLayout()
         self.game_combo = QComboBox()
@@ -38,6 +40,8 @@ class BenchmarkPage(QWidget):
         self.game_combo.setAccessibleName(t("Game"))
         row.addWidget(label(t("Game"), "dim"))
         row.addWidget(self.game_combo, 2)
+        self._verdicts: dict = {}                     # capture file -> bottleneck verdict (read once)
+        self.game_combo.currentIndexChanged.connect(lambda *_: self._compare())
         self.label_combo = QComboBox()
         self.label_combo.setAccessibleName(t("Measurement label"))
         self.label_combo.setToolTip(t("Label the run with what was active in the game: the baseline (no Neural "
@@ -119,6 +123,20 @@ class BenchmarkPage(QWidget):
         self.detail_grid = KeyValueGrid(200)
         self.detail_card.body.addWidget(self.detail_grid)
         lay.addWidget(self.detail_card)
+        self.compare_card = Card(t("Mode comparison"), "sparkle", theme.CYAN)
+        self.compare_card.body.addWidget(label(t("The latest measurement of each mode for the selected game: "
+                                                 "Baseline, Boost (FPS Booster), DLSS 5, and DLSS 5 + Boost. "
+                                                 "Differences are measured values, never estimates."), "dim",
+                                               shrink=True))
+        self.compare_table = QTableWidget(0, 5)
+        self.compare_table.setHorizontalHeaderLabels([t("Metric")] + [t(title) for _, title in MODES])
+        self.compare_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.compare_table.verticalHeader().setVisible(False)
+        self.compare_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.compare_card.body.addWidget(self.compare_table)
+        self.compare_notes = label("", "muted", shrink=True)
+        self.compare_card.body.addWidget(self.compare_notes)
+        lay.addWidget(self.compare_card)
         lay.addStretch(1)
         for sig in (ctl.games_changed, ctl.selection_changed, ctl.benchmarks_changed):
             sig.connect(self.refresh)
@@ -126,6 +144,65 @@ class BenchmarkPage(QWidget):
 
     def on_show(self) -> None:
         self.refresh()
+
+    def preset(self, game_id: str, label_id: str) -> None:
+        """From the FPS Booster: this game, this mode."""
+        self.ctl.select_game(game_id)
+        self.refresh()
+        self.preset_label(label_id)
+
+    def _compare(self) -> None:
+        from akeno.performance.bottleneck import analyse_csv
+        from akeno.performance.compare import LOAD, METRICS, compare
+        gid = self.game_combo.currentData()
+        sessions = [x for x in getattr(self, "_sessions", []) if x.get("game_id") == gid]
+        results = compare(sessions)
+        rows = [(t(title), key, "metric") for key, title, _ in METRICS] + [(t(title), key, "load") for key, title in LOAD]
+        rows.append((t("Limited by"), "bottleneck", "bottleneck"))
+        self.compare_table.setRowCount(len(rows))
+        notes = []
+        for r, (title, key, kind) in enumerate(rows):
+            self.compare_table.setItem(r, 0, QTableWidgetItem(title))
+            for c, result in enumerate(results, start=1):
+                text = "—"
+                if result.session is not None:
+                    if kind == "metric":
+                        value = result.values.get(key)
+                        if isinstance(value, (int, float)):
+                            text = f"{value * 100:.0f} %" if key == "generated_frame_share" else f"{value:.1f}"
+                            if key in result.delta_pct:
+                                text += f"  ({result.delta_pct[key]:+.1f} %)"
+                    elif kind == "load":
+                        value = result.load.get(key)
+                        text = f"{value:.1f}" if isinstance(value, (int, float)) else "—"
+                    else:
+                        csv_path = result.session.get("csv_path")
+                        if csv_path and os.path.isfile(csv_path):
+                            try:
+                                if csv_path not in self._verdicts:
+                                    with open(csv_path, encoding="utf-8", errors="replace") as fh:
+                                        self._verdicts[csv_path] = analyse_csv(fh.read(),
+                                                                               result.session.get("process_name"))
+                                verdict = self._verdicts[csv_path]
+                                text = t(VERDICTS[verdict.verdict])
+                                item = QTableWidgetItem(text)
+                                item.setToolTip(t(verdict.explanation))
+                                self.compare_table.setItem(r, c, item)
+                                continue
+                            except OSError:
+                                pass
+                self.compare_table.setItem(r, c, QTableWidgetItem(text))
+        for result in results:
+            if result.session is not None and result.warnings:
+                notes.append(t("{m}: not directly comparable ({w}).", m=t(dict(MODES)[result.mode]),
+                               w="; ".join(t(str(w)) for w in result.warnings[:4])))
+        if not any(r.session for r in results):
+            notes.append(t("No measurement in these modes yet: pick the mode under Configuration and measure the "
+                           "same scene for each."))
+        self.compare_notes.setText("\n".join(notes))
+        height = self.compare_table.horizontalHeader().height() + 4 + sum(
+            self.compare_table.rowHeight(r) for r in range(self.compare_table.rowCount()))
+        self.compare_table.setFixedHeight(max(160, height))     # every metric visible, no inner scrolling
 
     def preset_label(self, label_id: str) -> None:
         i = self.label_combo.findData(label_id)
@@ -142,6 +219,8 @@ class BenchmarkPage(QWidget):
             self.game_combo.setCurrentIndex(max(0, self.game_combo.findData(sel.id)))
         self.label_combo.clear()
         self.label_combo.addItem(t("Baseline (Neural Rendering off)"), "baseline")
+        for mode, title in MODES[1:]:                     # the FPS Booster comparison modes
+            self.label_combo.addItem(t(title), mode)
         a = self.s.backend_for(sel)
         for p in (a.profiles(sel) if a and sel else []):
             if p.id != "disabled":
@@ -165,6 +244,7 @@ class BenchmarkPage(QWidget):
         self.empty.setVisible(not sessions)
         self.detail_card.setVisible(bool(sessions))
         self._selection()
+        self._compare()
 
     def _selected(self) -> list[dict]:
         rows = sorted({i.row() for i in self.table.selectedIndexes()})
@@ -270,7 +350,13 @@ class BenchmarkPage(QWidget):
         def work(emit):
             from akeno.hardware.sensors import sample
             self.s.benchmarks.runner.ensure(token=self.token)
-            return self.s.benchmarks.run(game.id, proc, lbl, meta, dur, delay, on_status=emit, token=self.token, process_id=running[0].pid if len(running) == 1 else None, sensor_sampler=lambda: sample(gpu),
+            def sampler():
+                import psutil
+                values = dict(sample(gpu))
+                values["cpu_percent"] = psutil.cpu_percent(interval=None)
+                values["ram_used_gb"] = round(psutil.virtual_memory().used / 2 ** 30, 2)
+                return values
+            return self.s.benchmarks.run(game.id, proc, lbl, meta, dur, delay, on_status=emit, token=self.token, process_id=running[0].pid if len(running) == 1 else None, sensor_sampler=sampler,
                 context_provider=lambda: self.s.community.capture_context(game.id, running[0].pid if len(running) == 1 else None), swapchain=swapchain, allow_elevation=elevated)
 
         def done(sess):
