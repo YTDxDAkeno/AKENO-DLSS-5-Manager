@@ -415,7 +415,11 @@ class MainWindow(QMainWindow):
         self.sync_timer.setInterval(15 * 60_000)
         self.sync_timer.timeout.connect(self._auto_sync)
         self.sync_timer.start()
-        QTimer.singleShot(20_000, self._auto_sync)
+        self.sync_first = QTimer(self)                  # a child timer: it ends with the window
+        self.sync_first.setSingleShot(True)
+        self.sync_first.setInterval(20_000)
+        self.sync_first.timeout.connect(self._auto_sync)
+        self.sync_first.start()
         # Desktop Studio pauses wallpapers while a library game runs
         self.sessions.started.connect(lambda *_: self.desktop.game(True))
         self.sessions.stopped.connect(lambda *_: self.desktop.game(bool(self.sessions.running())))

@@ -184,9 +184,16 @@ def zipped(tmp_path, entries: dict, manifest: dict | None = None, name="t.akenot
     return path
 
 
-@pytest.mark.parametrize("entry", ["../evil.png", "media/../../evil.png", "/abs/evil.png", "C:/evil.png",
-                                   "media\\evil.png", "media/tool.exe", "media/run.bat", "media/x.ps1",
-                                   "media/link.lnk", "media/lib.dll", "other/a.png", "setup.exe"])
+UNSAFE = ["../evil.png", "media/../../evil.png", "/abs/evil.png", "C:/evil.png", "media\\..\\..\\evil.png",
+          "media/tool.exe", "media/run.bat", "media/x.ps1", "media/link.lnk", "media/lib.dll", "other/a.png",
+          "setup.exe"]
+if sys.platform != "win32":
+    # Python's zipfile turns "\\" into "/" on Windows (so "media\\evil.png" is media/evil.png there, and "..\\" is
+    # still refused as "../"); elsewhere a backslash name is refused outright
+    UNSAFE.append("media\\evil.png")
+
+
+@pytest.mark.parametrize("entry", UNSAFE)
 def test_theme_import_refuses_unsafe_entries(tmp_path, entry):
     with pytest.raises(themes.ThemeError):
         themes.check_archive(zipped(tmp_path, {entry: b"data"}))

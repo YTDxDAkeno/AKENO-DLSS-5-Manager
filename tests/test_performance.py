@@ -171,13 +171,18 @@ def test_background_programs_lowered_and_paused_then_restored(engine, tmp_path, 
     _, game_proc = _sleeper(tmp_path, "thegame")
     name = os.path.basename(exe).lower()
     try:
+        system.set_priority(proc.pid, "normal")    # a CI runner may start its processes below normal
+        before = system.priority_of(proc.pid)
         engine.set_background([name, "svchost.exe"], "lower")
         assert engine.background_names() == [name]                    # protected names are never kept
         engine.apply(g, "max_fps")
         engine.start_session(g, game_proc.pid)
         assert system.priority_of(proc.pid) == "below_normal"
         engine.end_session(g)
-        assert system.priority_of(proc.pid) == "normal"
+        if sys.platform == "win32" or os.geteuid() == 0:
+            assert system.priority_of(proc.pid) == before == "normal", "set back to what it was"
+        # else: Linux lets an unprivileged process lower a priority but not raise it again (CI runs without root;
+        # Windows, where AKENO runs, allows it and the Windows CI job checks it)
         engine.set_background([name], "pause")
         engine.apply(g, "max_fps")
         engine.start_session(g, game_proc.pid)

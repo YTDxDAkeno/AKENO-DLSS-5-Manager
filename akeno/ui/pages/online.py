@@ -6,6 +6,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import shiboken6
 from PySide6.QtCore import QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QInputDialog, QLineEdit,
@@ -425,6 +426,8 @@ class CloudSyncPage(QWidget):
         self.btn_sync.setEnabled(False)
 
         def done(report: sync.Report):
+            if not shiboken6.isValid(self.btn_sync):
+                return                                  # the window closed while the sync ran
             self.btn_sync.setEnabled(True)
             self._status()
             self.ctl.status.emit(t("Cloud Sync: {r}", r=t(report.text())))
@@ -436,6 +439,8 @@ class CloudSyncPage(QWidget):
                 self.ctl.settings_changed.emit("*")
 
         def failed(exc):
+            if not shiboken6.isValid(self.btn_sync):
+                return
             self.btn_sync.setEnabled(True)
             self.pill.set(t("Sync failed"), "fail")
             if not quiet:

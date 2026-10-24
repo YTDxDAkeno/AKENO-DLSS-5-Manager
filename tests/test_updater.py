@@ -208,7 +208,8 @@ def test_release_tool_round_trip(tmp_path, monkeypatch, capsys):
     assert tool.main(["keygen", "--private-out", str(keyfile)]) == 0
     printed = capsys.readouterr().out
     pair = printed.strip().splitlines()[-1].split(": ", 1)[1]
-    assert (keyfile.stat().st_mode & 0o077) == 0, "the private key file is private"
+    if sys.platform != "win32":                   # Windows protects it through the profile folder's ACL
+        assert (keyfile.stat().st_mode & 0o077) == 0, "the private key file is private"
     keys_file = tmp_path / "release-keys.json"
     assert tool.main(["embed", "--keys", pair, "--output", str(keys_file), "--require"]) == 0
     monkeypatch.setenv("AKENO_RELEASE_SIGNING_KEY", keyfile.read_text().strip())

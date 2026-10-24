@@ -326,6 +326,9 @@ def test_online_pages(akeno_home, qtbot, tmp_path, monkeypatch):
     win.sync.sync()
     sp.load()
     assert sp.engine.state["last_sync"] and (folder / sync.FOLDER / "akeno-sync.json").is_file()
+    sp.chk.setChecked(False)                       # no automatic sync of this window during later tests
+    win.sync_timer.stop()
+    win.sync_first.stop()
     win.sessions.stop()
     from akeno.ui import workers
     workers.drain(10000)
