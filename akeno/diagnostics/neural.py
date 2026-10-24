@@ -17,6 +17,8 @@ MAX_LOGS = 24
 def log_clock_ns():
     """Use the Windows filesystem's shared system-clock precision, without a replay tolerance."""
     import sys
+    # Linux stamps files from the coarse clock (CLOCK_REALTIME_COARSE), which trails time.time_ns() by up to a tick.
+    if sys.platform.startswith('linux'):return time.clock_gettime_ns(5)
     if sys.platform!='win32':return time.time_ns()
     import ctypes
     from ctypes import wintypes
