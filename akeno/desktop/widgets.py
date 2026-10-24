@@ -998,8 +998,13 @@ def import_layout(file: Path, limit: int = 60) -> list[dict]:
     data = json.loads(Path(file).read_text(encoding="utf-8"))
     if not isinstance(data, dict) or data.get("format") != "akeno-widgets":
         raise ValueError("not an AKENO widget layout")
+    return clean_layout(data.get("widgets", []), limit)
+
+
+def clean_layout(widgets, limit: int = 60) -> list[dict]:
+    """Widgets from a file, a theme or a community package: known types, sane numbers, plain options."""
     out = []
-    for w in data.get("widgets", [])[:limit]:
+    for w in (widgets if isinstance(widgets, list) else [])[:limit]:
         if not isinstance(w, dict) or w.get("type") not in PANELS:
             continue
         spec = new_widget(w["type"], out, int(w.get("screen", 0)) if str(w.get("screen", 0)).isdigit() else 0)

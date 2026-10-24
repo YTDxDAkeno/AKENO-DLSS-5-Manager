@@ -250,9 +250,17 @@ class BoosterPage(QWidget):
             entry = self.s.boost.configured(g.id) or {}
             if summary["profile"] == "custom":
                 self._custom_from(entry.get("options", {}))
+        suggestion = self.s.db.game_overrides(g.id).get("boost_choice") if g and not summary.get("profile") else None
+        if suggestion and suggestion.get("profile") in self.profile_buttons:
+            # from another PC (Cloud Sync) or a community package: shown, never applied by itself
+            self._set_profile(suggestion["profile"], refresh=False)
+            if suggestion["profile"] == "custom":
+                self._custom_from(suggestion.get("options") or {})
         self.applied.setText(t("Applied: {p} ({n} setting(s) saved for restore)",
                                p=t(next((p.name for p in PROFILES if p.id == summary.get("profile")), "")),
                                n=len(summary.get("persistent", []))) if summary.get("profile")
+                             else t("Suggested: {p}, not applied yet.", p=t(next(
+                                 (p.name for p in PROFILES if p.id == suggestion["profile"]), ""))) if suggestion
                              else t("Nothing applied for this game."))
         self.btn_restore.setEnabled(bool(summary.get("profile")))
         self._dlss_state()

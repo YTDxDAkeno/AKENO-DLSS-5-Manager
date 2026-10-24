@@ -261,11 +261,8 @@ def validate_manifest(manifest, names: set[str]) -> dict:
         clean["dock"] = out_dock
     widgets = manifest.get("widgets")
     if isinstance(widgets, list):
-        from akeno.desktop.widgets import import_layout
-        with tempfile.TemporaryDirectory() as tmp:
-            layout = Path(tmp) / "w.json"
-            layout.write_text(json.dumps({"format": "akeno-widgets", "widgets": widgets}), encoding="utf-8")
-            clean["widgets"] = import_layout(layout)
+        from akeno.desktop.widgets import clean_layout
+        clean["widgets"] = clean_layout(widgets)
     preview = manifest.get("preview")
     clean["preview"] = "preview.png" if preview == "preview.png" and "preview.png" in names else None
     return clean

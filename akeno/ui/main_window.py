@@ -32,6 +32,7 @@ SECTIONS = [
         ("installed", "Installed Mods", "layers")]),
     ("DESKTOP", [("wallpapers", "Wallpapers", "image"), ("dock", "Dock", "dock"), ("widgets", "Widgets", "grid"),
                  ("themes", "Theme Workshop", "palette")]),
+    ("ONLINE", [("community", "Community", "globe"), ("sync", "Cloud Sync", "refresh")]),
     ("ACCOUNT", [("account", "My Account", "user"), ("license", "License", "key"), ("settings", "Settings", "gear")]),
 ]
 
@@ -401,6 +402,14 @@ class MainWindow(QMainWindow):
         from akeno.ui.game_sessions import GameSessions
         self.sessions = GameSessions(self.s, self)
         self.desktop = DesktopClient()
+        from akeno.sync.data import LocalData
+        from akeno.sync.engine import SyncEngine
+        self.sync = SyncEngine(LocalData(self.s))
+        self.sync_timer = QTimer(self)                  # Cloud Sync: soon after the start, then every 15 minutes
+        self.sync_timer.setInterval(15 * 60_000)
+        self.sync_timer.timeout.connect(self._auto_sync)
+        self.sync_timer.start()
+        QTimer.singleShot(20_000, self._auto_sync)
         # Desktop Studio pauses wallpapers while a library game runs
         self.sessions.started.connect(lambda *_: self.desktop.game(True))
         self.sessions.stopped.connect(lambda *_: self.desktop.game(bool(self.sessions.running())))
@@ -437,6 +446,7 @@ class MainWindow(QMainWindow):
         from akeno.ui.pages.backups import BackupsPage
         from akeno.ui.pages.booster import BoosterPage
         from akeno.ui.pages.desktop import DockPage, ThemesPage, WallpapersPage, WidgetsPage
+        from akeno.ui.pages.online import CloudSyncPage, CommunityPage
         from akeno.ui.pages.recent import RecentPage
         from akeno.ui.pages.benchmark import BenchmarkPage
         from akeno.ui.pages.dashboard import DashboardPage
@@ -478,7 +488,8 @@ class MainWindow(QMainWindow):
         main = {"library": LibraryPage, "fivem": FiveMPage, "installed": InstalledPage, "downloads": DownloadsPage,
                 "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage, "account": AccountPage,
                 "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
-                "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage}
+                "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage,
+                "community": CommunityPage, "sync": CloudSyncPage}
         for key, _, _ in NAV:
             page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")
@@ -488,6 +499,12 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(host)
         self.pages.update(advanced)
         self._apply_density()
+
+    def _auto_sync(self) -> None:
+        page = getattr(self, "pages", {}).get("sync")
+        if page is not None and self.sync.state["enabled"] and self.sync.state["folder"] and \
+                not self.sync.lock.locked():
+            page.sync_now(quiet=True)
 
     def resizeEvent(self, e):
         super().resizeEvent(e)

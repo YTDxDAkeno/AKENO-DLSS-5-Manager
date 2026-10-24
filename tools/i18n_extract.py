@@ -103,6 +103,10 @@ def desktop_strings() -> set[str]:
                   desktop.PAUSE_TEXT):
         out |= set(table.values())
     out.add(desktop.MEDIA_FILTER)
+    from akeno.sync.engine import CATEGORIES
+    from akeno.ui.pages import online
+    out |= set(CATEGORIES.values()) | set(online.KIND_TEXT.values()) | {text for _, text in online.EXPORTS}
+    out |= {"Settings", "Desktop"}
     return out
 
 
