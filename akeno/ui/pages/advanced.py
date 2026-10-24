@@ -8,8 +8,8 @@ from akeno.i18n import t
 from akeno.ui.widgets import label
 
 # page key -> tab title. These pages were top-level in v1.x; they stay fully functional here.
-TABS = (("dashboard", "Diagnostics overview"), ("benchmark", "Benchmark"), ("profiles", "Smart Profiles"),
-        ("install", "Expert tools and legacy installer"))
+TABS = (("dashboard", "Diagnostics overview"), ("profiles", "Smart Profiles"),
+        ("install", "Expert tools and legacy installer"))           # Benchmark is a page of its own since 3.0
 
 
 class AdvancedPage(QWidget):

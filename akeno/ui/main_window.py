@@ -23,11 +23,12 @@ from akeno.ui.widgets import StatusPill, confirm, info, label
 # The navigation: sections, each with pages; a group (like "DLSS 5 Manager") holds pages shown indented when it is
 # open. NAV is the flat list of every page in display order (its index is the page's place in the stack).
 SECTIONS = [
-    ("HOME", [("library", "My Games", "gamepad")]),
+    ("HOME", [("library", "My Games", "gamepad"), ("recent", "Recently Played", "clock")]),
     ("GAMING", [("group", "dlss", "DLSS 5 Manager", "sparkle", [
         ("fivem", "FiveM Legacy", "fivem"), ("downloads", "Downloads", "download"),
         ("backups", "Restore / Backups", "restore"), ("hardware", "Hardware", "chip"),
         ("advanced", "Advanced", "gauge")]),
+        ("booster", "FPS Booster", "gauge"), ("benchmark", "Benchmark", "chart"),
         ("installed", "Installed Mods", "layers")]),
     ("ACCOUNT", [("account", "My Account", "user"), ("license", "License", "key"), ("settings", "Settings", "gear")]),
 ]
@@ -47,7 +48,7 @@ def _flatten() -> list[tuple[str, str, str]]:
 NAV = _flatten()
 GROUPS = {item[1]: [k for k, _, _ in item[4]] for _, items in SECTIONS for item in items if item[0] == "group"}
 # Pages shown as tabs of "Advanced" (diagnostics and the v1 per-backend installer).
-ADVANCED = ("dashboard", "benchmark", "profiles", "install")
+ADVANCED = ("dashboard", "profiles", "install")
 
 MAX_CONTENT_WIDTH = 2300          # ultrawide: centre the page instead of stretching cards to 3000+ px
 # (window height threshold, header height, title pt, subtitle pt)
@@ -379,6 +380,8 @@ class MainWindow(QMainWindow):
         self.s = controller.s
         from akeno.licensing import manager
         self.license = license_manager or manager()
+        from akeno.ui.game_sessions import GameSessions
+        self.sessions = GameSessions(self.s, self)
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(icons.QIcon(art.app_icon_pixmap(256)))
         self._initial_size()
@@ -410,6 +413,8 @@ class MainWindow(QMainWindow):
         from akeno.ui.pages.account import AccountPage, LicensePage
         from akeno.ui.pages.advanced import AdvancedPage
         from akeno.ui.pages.backups import BackupsPage
+        from akeno.ui.pages.booster import BoosterPage
+        from akeno.ui.pages.recent import RecentPage
         from akeno.ui.pages.benchmark import BenchmarkPage
         from akeno.ui.pages.dashboard import DashboardPage
         from akeno.ui.pages.downloads import DownloadsPage
@@ -443,14 +448,13 @@ class MainWindow(QMainWindow):
         self.pages = {}
         self.hosts = {}
         advanced = {}
-        for key, cls in (("dashboard", DashboardPage), ("benchmark", BenchmarkPage), ("profiles", ProfilesPage),
-                         ("install", InstallPage)):
+        for key, cls in (("dashboard", DashboardPage), ("profiles", ProfilesPage), ("install", InstallPage)):
             page = cls(self.ctl, self)
             page.setObjectName(f"page_{key}")
             advanced[key] = page
         main = {"library": LibraryPage, "fivem": FiveMPage, "installed": InstalledPage, "downloads": DownloadsPage,
                 "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage, "account": AccountPage,
-                "license": LicensePage}
+                "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage}
         for key, _, _ in NAV:
             page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")

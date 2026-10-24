@@ -34,6 +34,7 @@ class GameListModel(QAbstractListModel):
     def __init__(self):
         super().__init__()
         self.rows: list[tuple] = []          # (game, (status text, state))
+        self.favorites: dict[str, bool] = {}
 
     def set_rows(self, rows: list[tuple]) -> None:
         self.beginResetModel()
@@ -51,7 +52,7 @@ class GameListModel(QAbstractListModel):
             return None
         g, status = self.rows[index.row()]
         if role == Qt.ItemDataRole.DisplayRole:
-            return g.name
+            return ("★ " if self.favorites.get(g.id) else "") + g.name
         if role == Qt.ItemDataRole.ToolTipRole:
             return f"{g.name}\n{g.install_dir}"
         if role == Qt.ItemDataRole.AccessibleTextRole:
@@ -132,7 +133,8 @@ class GameDelegate(QStyledItemDelegate):
         top = r.y() + (r.height() - 3 * line) // 2
         painter.setPen(QColor(theme.TEXT))
         painter.drawText(QRect(x, top, width, line), Qt.AlignmentFlag.AlignVCenter,
-                         fm.elidedText(game.name, Qt.TextElideMode.ElideRight, width))
+                         fm.elidedText(index.data(Qt.ItemDataRole.DisplayRole) or game.name,
+                                       Qt.TextElideMode.ElideRight, width))
         painter.setFont(option.font)
         fm = painter.fontMetrics()
         painter.setPen(QColor(theme.TEXT_MUTED))
@@ -185,6 +187,7 @@ class LibraryPage(QWidget):
         self.filter = QComboBox()
         self.filter.setAccessibleName(t("Filter"))
         self.filter.addItem(t("All games"), "all")
+        self.filter.addItem(t("Favourites"), "favorites")
         self.filter.addItem(t("Mod installed"), "installed")
         self.filter.addItem(t("Not installed"), "not_installed")
         for k, v in LAUNCHERS.items():
@@ -272,11 +275,17 @@ class LibraryPage(QWidget):
     def refresh_list(self, *_) -> None:
         games = self.s.library.games()
         installed = self._installed_map()
+        metas = self.s.db.all_game_meta()
+        favorites = {gid: bool(m.get("favorite")) for gid, m in metas.items()}
+        self.model.favorites = favorites
         q = self.search.text().strip().lower()
         f = self.filter.currentData() or "all"
         rows = []
-        for g in games:
-            if q and q not in g.name.lower() and q not in g.install_dir.lower():
+        for g in sorted(games, key=lambda g: not favorites.get(g.id)):      # favourites first, order otherwise kept
+            category = (metas.get(g.id) or {}).get("category", "").lower()
+            if q and q not in g.name.lower() and q not in g.install_dir.lower() and q not in category:
+                continue
+            if f == "favorites" and not favorites.get(g.id):
                 continue
             status = self._status(installed.get(g.id))
             if f == "installed" and status[1] != "ok" or f == "not_installed" and status[1] == "ok":
@@ -355,6 +364,11 @@ class LibraryPage(QWidget):
         else:
             self.panel = GamePanel(self.ctl, game_id, self)
             self.detail_host.addWidget(self.panel)
+            game = self.s.library.get(game_id)
+            if game is not None and game.launcher != "fivem":
+                from akeno.ui.game_hub import GameHubCard
+                self.hub = GameHubCard(self.ctl, game, self.window())
+                self.detail_host.addWidget(self.hub)
         self._detail_to_top()
 
     def _detail_to_top(self) -> None:

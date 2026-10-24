@@ -50,6 +50,8 @@ def test_keyboard_shortcuts_and_accessible_names(app_window, qtbot):
     qtbot.keyClick(win, Qt.Key.Key_1, Qt.KeyboardModifier.ControlModifier)
     assert win.current_page() == "library"
     qtbot.keyClick(win, Qt.Key.Key_2, Qt.KeyboardModifier.ControlModifier)
+    assert win.current_page() == "recent"                    # Ctrl+N follows the navigation order (3.0: HOME first)
+    qtbot.keyClick(win, Qt.Key.Key_3, Qt.KeyboardModifier.ControlModifier)
     assert win.current_page() == "fivem"
     for b in win.findChildren(QPushButton):
         if b.isVisible() and b.text().strip():
