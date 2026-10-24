@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import sys
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -238,7 +239,34 @@ def test_no_password_or_access_token_is_stored(env, tmp_path):
     m.sign_in(EMAIL, "my secret password")
     raw = (tmp_path / "license" / "state.bin").read_bytes()
     assert b"my secret password" not in raw and b"access-secret-1" not in raw
-    assert set(json.loads(raw)) >= {"account", "refresh_token"}, "(a 0600 JSON file off Windows, DPAPI on it)"
+    assert m.store.load()["refresh_token"] == "refresh-secret-1" and "access_token" not in json.dumps(m.store.load())
+    if sys.platform == "win32":
+        assert b"refresh-secret-1" not in raw and b"refresh_token" not in raw, "DPAPI-encrypted on Windows"
+    else:
+        assert set(json.loads(raw)) >= {"account", "refresh_token"}, "a 0600 JSON file (development only)"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="DPAPI exists on Windows only")
+def test_sign_in_state_is_dpapi_encrypted_on_windows(env, tmp_path):
+    """The real Windows API: the saved sign-in is unreadable without this Windows user, and a changed byte makes it
+    unreadable instead of wrong."""
+    make, _, _ = env
+    FakeApi.answers["/auth/login"] = registered(verified=True)
+    m = make()
+    m.sign_in(EMAIL, "my secret password", remember=True)
+    path = tmp_path / "license" / "state.bin"
+    raw = path.read_bytes()
+    for secret in (b"refresh-secret-1", b"refresh_token", b"player@example.test", b"my secret password"):
+        assert secret not in raw
+    assert make().state.get("refresh_token") == "refresh-secret-1"
+    damaged = bytearray(raw)
+    damaged[len(damaged) // 2] ^= 0xFF
+    path.write_bytes(bytes(damaged))
+    (tmp_path / "license" / "state.bak").unlink(missing_ok=True)
+    assert make().state.get("refresh_token") is None, "tampered data is refused, never half-read"
+    m2 = make()
+    m2.sign_in(EMAIL, PASSWORD, remember=False)
+    assert "refresh_token" not in m2.store.load(), "not kept: never written, also not encrypted"
 
 
 def test_state_is_encrypted_with_dpapi_on_windows(tmp_path, monkeypatch):
@@ -397,8 +425,8 @@ def test_unreachable_server(monkeypatch):
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
         port = s.getsockname()[1]
-    with pytest.raises(ServerUnavailable) as e:
-        LicenseApi(f"http://127.0.0.1:{port}", timeout=2).call("GET", "/system/version")
+    with pytest.raises(ServerUnavailable) as e:          # (Windows needs about 2 s to refuse a local connection)
+        LicenseApi(f"http://127.0.0.1:{port}", timeout=15).call("GET", "/system/version")
     assert e.value.kind == "offline"
 
 

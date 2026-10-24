@@ -160,7 +160,8 @@ def test_registration_then_check_your_inbox(gate, qtbot):
     assert gate.current() == "verify" and gate.heading.text() == "Check your inbox"
     assert "We've sent an email verification link to" in gate.vf_text.text()
     assert EMAIL not in gate.vf_text.text() and "p••••r@example.test" in gate.vf_text.text()
-    assert not gate.btn_resend.isEnabled() and "(1:00)" in gate.btn_resend.text() or "(0:59)" in gate.btn_resend.text()
+    assert not gate.btn_resend.isEnabled() and gate.btn_resend.cooldown.remaining() > 45
+    assert "(0:" in gate.btn_resend.text() or "(1:00)" in gate.btn_resend.text()
     assert gate.rg_password.text() == "" and gate.rg_repeat.text() == ""
 
 
