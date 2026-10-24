@@ -37,7 +37,7 @@ class ServerConfig(BaseSettings):
     database_url: str = "sqlite:///./akeno-dev.sqlite3"
     public_url: str = ""                # e.g. https://licenses.your-domain (links in e-mails); empty: from the request
     admin_url: str = ""                 # where the admin website is reachable, if it has its own host name
-    download_url: str = "https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/releases"
+    download_url: str = "https://github.com/YTDxDAkeno/AKENO-Releases/releases/latest"
 
     token_secret: SecretStr = SecretStr("")
     code_pepper: SecretStr = SecretStr("")
