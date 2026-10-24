@@ -22,8 +22,8 @@ from akeno.security.downloads import CancelToken
 from akeno.stack import configs
 from akeno.stack.errors import explain
 from akeno.ui import art, theme
-from akeno.ui.widgets import Card, Clickable, FlowLayout, KeyValueGrid, Spinner, StatusPill, button, clear_layout, confirm, info, \
-    label, scaled
+from akeno.ui.widgets import Card, Clickable, Divider, FlowLayout, KeyValueGrid, Spinner, StatusPill, button, \
+    clear_layout, confirm, game_cover, info, label, scaled
 
 LAUNCHERS = {"steam": "Steam", "epic": "Epic Games", "gog": "GOG", "ubisoft": "Ubisoft Connect", "ea": "EA app",
              "xbox": "Xbox / Microsoft Store", "manual": "Added manually", "fivem": "FiveM", "battlenet": "Battle.net"}
@@ -168,14 +168,24 @@ class MethodCard(Clickable):
         super().__init__()
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAccessibleName(t(m.recipe.name))
-        border = theme.VIOLET if selected else theme.BORDER_HI
-        self.setStyleSheet(f"MethodCard {{ background: {'rgba(142,66,255,0.14)' if selected else theme.CARD_2};"
-                           f" border: 1px solid {border}; border-radius: 10px; }}"
-                           f"MethodCard:focus {{ border-color: {theme.VIOLET}; }}")
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        a = theme.accent()
+        bg = a.soft(0.12) if selected else "rgba(255,255,255,0.018)"
+        border = a.base if selected else theme.BORDER
+        self.setStyleSheet(f"MethodCard {{ background: {bg}; border: 1px solid {border}; border-radius: 8px; }}"
+                           f"MethodCard:hover {{ border-color: {a.base if selected else theme.BORDER_BTN}; }}"
+                           f"MethodCard:focus {{ border-color: {a.text}; }}")
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(14, 10, 14, 10)
+        lay.setContentsMargins(14, 10, 14, 11)
         lay.setSpacing(3)
         head = QHBoxLayout()
+        head.setSpacing(10)
+        mark = QLabel()                         # a radio mark: which method is chosen
+        mark.setFixedSize(16, 16)
+        mark.setStyleSheet(f"border-radius: 8px; border: {'5px' if selected else '1px'} solid "
+                           f"{a.strong if selected else theme.BORDER_BTN}; background: "
+                           f"{'#FFFFFF' if selected else theme.INPUT};")
+        head.addWidget(mark)
         title = label(t(m.recipe.name), "h3", shrink=True)
         head.addWidget(title)
         if recommended and m.available:
@@ -186,7 +196,9 @@ class MethodCard(Clickable):
         if m.download_bytes:
             head.addWidget(label(t("Download {size}", size=mib(m.download_bytes)), "muted"))
         lay.addLayout(head)
-        lay.addWidget(label(t(m.recipe.summary), "dim", wrap=True))
+        summary = label(t(m.recipe.summary), "dim", wrap=True)
+        summary.setContentsMargins(26, 0, 0, 0)
+        lay.addWidget(summary)
         if not m.available:
             b = m.blockers[0]
             lay.addWidget(label(f"<span style='color:{theme.RED}'>●</span> " + t(b.message) +
@@ -209,13 +221,14 @@ class GamePanel(QWidget):
         self.bridge.progress.connect(self._progress)
         self.lay = QVBoxLayout(self)
         self.lay.setContentsMargins(0, 0, 0, 0)
-        self.lay.setSpacing(12)
+        self.lay.setSpacing(theme.CARD_GAP)
         self.header = QFrame()
         self.header.setObjectName("Card")
         self.header_lay = QHBoxLayout(self.header)
-        self.header_lay.setContentsMargins(14, 12, 14, 12)
+        self.header_lay.setContentsMargins(16, 16, 20, 16)
+        self.header_lay.setSpacing(20)
         self.lay.addWidget(self.header)
-        self.main = Card(t("DLSS 5 method"), "sliders", theme.VIOLET)
+        self.main = Card(t("DLSS 5 method"), "sliders")
         self.lay.addWidget(self.main)
         self.methods_box = QVBoxLayout()
         self.methods_box.setSpacing(8)
@@ -241,12 +254,16 @@ class GamePanel(QWidget):
         self.issues_box = QVBoxLayout()
         self.issues_box.setSpacing(4)
         self.main.body.addLayout(self.issues_box)
-        actions = FlowLayout()
+        self.main.body.addWidget(Divider())
+        actions = FlowLayout(spacing=theme.SPACE_S)
         self.btn_install = button(t("Install DLSS 5"), "download", "primary", on_click=self.install)
-        self.btn_install.setMinimumHeight(40)
+        self.btn_install.setMinimumHeight(36)
         self.btn_launch = button(t("Launch game"), "play", on_click=self.launch)
-        self.btn_previous = button(t("Previous version"), "restore", on_click=self.previous)
+        self.btn_launch.setMinimumHeight(36)
+        self.btn_previous = button(t("Previous version"), "restore", "ghost", on_click=self.previous)
+        self.btn_previous.setMinimumHeight(36)
         self.btn_remove = button(t("Remove mod"), "trash", "danger", on_click=self.remove)
+        self.btn_remove.setMinimumHeight(36)
         self.btn_test = button(t("Test the 64-bit helper"), "check",
                                tip=t("Runs the helper's own DLSS self-test (300 evaluations, about a minute) "
                                      "without starting the game."), on_click=self.test_helper)
@@ -265,7 +282,7 @@ class GamePanel(QWidget):
         self.status = label("", "dim", wrap=True)
         self.status.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.main.body.addWidget(self.status)
-        self.details = Card(t("Game details"), "gamepad", theme.BLUE)
+        self.details = Card(t("Game details"), "gamepad")
         self.details_grid = KeyValueGrid(150)
         self.details.body.addWidget(self.details_grid)
         self.details_extra = QVBoxLayout()
@@ -310,12 +327,12 @@ class GamePanel(QWidget):
         g = st.game
         clear_layout(self.header_lay)
         img = QLabel()
-        pm = QPixmap(g.artwork_path) if g.artwork_path and os.path.isfile(g.artwork_path) else None
-        img.setPixmap(scaled(pm, 230, 108) if pm and not pm.isNull() else art.cover_fallback(g.name, 230, 108))
-        img.setFixedSize(230, 108)
-        self.header_lay.addWidget(img)
+        img.setPixmap(game_cover(g, 240, 135, 8))
+        img.setFixedSize(240, 135)
+        self.header_lay.addWidget(img, 0, Qt.AlignmentFlag.AlignTop)
         col = QVBoxLayout()
-        col.addWidget(label(g.name, "h1", shrink=True))
+        col.setSpacing(4)
+        col.addWidget(label(g.name, "display", shrink=True))
         api = t(GraphicsApi(st.api).label) if st.api in {a.value for a in GraphicsApi} else st.api
         if self.s.db.game_overrides(g.id).get("api"):
             api += " (" + t("your choice") + ")"          # a manual renderer stays visible as such

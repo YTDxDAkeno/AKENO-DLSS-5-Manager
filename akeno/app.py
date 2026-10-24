@@ -104,8 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     logging.getLogger(__name__).info("%s %s starting", APP_NAME, __version__)
     i18n.set_language(prefs.get("language"))
     widgets.ANIMATIONS["on"] = bool(prefs.get("animations"))
-    app.setFont(theme.ui_font(10))
-    app.setStyleSheet(theme.stylesheet(prefs.get("theme_accent")))
+    theme.apply(app, prefs.get("theme_accent"))
     app.setWindowIcon(QIcon(art.app_icon_pixmap(256)))
     lic = license_manager()
 

@@ -460,8 +460,7 @@ def main(argv: list[str] | None = None) -> int:
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("AKENO Desktop")
     from akeno.ui import theme
-    app.setFont(theme.ui_font(10))
-    app.setStyleSheet(theme.stylesheet(None))            # menus and dialogs of the dock and widgets
+    theme.apply(app, None)                               # menus and dialogs of the dock and widgets
 
     def licensed() -> bool:
         from akeno.licensing import manager

@@ -6,7 +6,7 @@ from typing import Callable, Iterable
 
 from PySide6.QtCore import QEasingCurve, QPoint, QPointF, QRect, QRectF, QSize, Qt, QTimer, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
-from PySide6.QtWidgets import (QFrame, QGraphicsDropShadowEffect, QGridLayout, QHBoxLayout, QLabel, QLayout, QPushButton,
+from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QLayout, QPushButton,
                                QSizePolicy, QVBoxLayout, QWidget, QMessageBox)
 
 from akeno.i18n import t
@@ -50,8 +50,10 @@ def button(text: str, icon_name: str | None = None, kind: str | None = None, tip
            on_click: Callable | None = None) -> QPushButton:
     b = QPushButton(text)
     if icon_name:
-        b.setIcon(icons.icon(icon_name, "#ffffff" if kind == "primary" else theme.TEXT, 18))
-        b.setIconSize(QSize(18, 18))
+        color = {"primary": "#FFFFFF", "danger": "#FF9FAC", "link": theme.ACCENT_TEXT,
+                 "ghost": theme.TEXT_DIM}.get(kind or "", theme.TEXT)
+        b.setIcon(icons.icon(icon_name, color, 16))
+        b.setIconSize(QSize(16, 16))
     if kind:
         b.setProperty("kind", kind)
     if tip:
@@ -64,22 +66,27 @@ def button(text: str, icon_name: str | None = None, kind: str | None = None, tip
 
 
 class Card(QFrame):
-    """Rounded panel with an icon + title header and an optional widget on the right."""
+    """Panel with an icon + title header and an optional widget on the right.
 
-    def __init__(self, title: str = "", icon_name: str | None = None, icon_color: str = theme.BLUE,
+    Section icons are drawn in the accent colour whatever ``icon_color`` a caller passes: colour on a card header
+    is decoration, and state colours belong to the pills and badges that carry the state."""
+
+    def __init__(self, title: str = "", icon_name: str | None = None, icon_color: str | None = None,
                  right: QWidget | None = None, parent=None, fill: bool = False):
         super().__init__(parent)
         self.setObjectName("Card")
         self.setAccessibleName(title)
         self.outer = QVBoxLayout(self)
-        self.outer.setContentsMargins(18, 12, 18, 14)
-        self.outer.setSpacing(8)
+        self.outer.setContentsMargins(*theme.CARD_PADDING)
+        self.outer.setSpacing(10)
         if title:
             head = QHBoxLayout()
             head.setSpacing(10)
             if icon_name:
                 ic = QLabel()
-                ic.setPixmap(icons.pixmap(icon_name, icon_color, 24))
+                ic.setPixmap(icons.pixmap(icon_name, theme.ACCENT_TEXT, 18))
+                ic.setFixedSize(20, 20)
+                ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 head.addWidget(ic)
             self.title_label = label(title, "h2")
             head.addWidget(self.title_label)
@@ -88,7 +95,7 @@ class Card(QFrame):
                 head.addWidget(right)
             self.outer.addLayout(head)
         self.body = QVBoxLayout()
-        self.body.setSpacing(8)
+        self.body.setSpacing(10)
         # fill=True: the body takes all extra height (no empty band at the bottom of tall cards)
         self.outer.addLayout(self.body, 1 if fill else 0)
         if not fill:
@@ -100,7 +107,7 @@ class SubCard(QFrame):
         super().__init__(parent)
         self.setObjectName("SubCard")
         self.lay = QVBoxLayout(self)
-        self.lay.setContentsMargins(14, 10, 14, 12)
+        self.lay.setContentsMargins(14, 12, 14, 12)
         self.lay.setSpacing(6)
 
 
@@ -118,8 +125,9 @@ class StatusPill(QLabel):
         self.setWordWrap(wrap)
         self.setSizePolicy(QSizePolicy.Policy.Maximum,
                            QSizePolicy.Policy.Minimum if wrap else QSizePolicy.Policy.Fixed)
-        self.setStyleSheet(f"QLabel {{ background: rgba(255,255,255,0.04); border: 1px solid {theme.BORDER_HI};"
-                           f" border-radius: 11px; padding: 3px 10px; }}")
+        self.setStyleSheet(f"QLabel {{ background: rgba(255,255,255,0.045); border: 1px solid {theme.BORDER};"
+                           f" border-radius: {theme.RADIUS_PILL}px; padding: 2px 10px; color: {theme.TEXT_DIM};"
+                           f" font-size: {theme.FONT_SMALL}pt; font-weight: 600; }}")
         self.setAccessibleName(text)
 
 
@@ -182,10 +190,11 @@ def status_badge(state: str, size: int = 22) -> QPixmap:
 class ElidedLabel(QLabel):
     """Single-line label that elides with "…" and shows the full text as tooltip."""
 
-    def __init__(self, text: str = "", role: str | None = None):
+    def __init__(self, text: str = "", role: str | None = None, mode: Qt.TextElideMode = Qt.TextElideMode.ElideRight):
         super().__init__()
         if role:
             self.setProperty("role", role)
+        self._mode = mode
         self._full = ""
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.setMinimumWidth(40)
@@ -206,7 +215,7 @@ class ElidedLabel(QLabel):
 
     def _elide(self) -> None:
         w = max(10, self.width())
-        super().setText(QFontMetrics(self.font()).elidedText(self._full, Qt.TextElideMode.ElideRight, w))
+        super().setText(QFontMetrics(self.font()).elidedText(self._full, self._mode, w))
 
 
 class CheckRow(QWidget):
@@ -232,7 +241,7 @@ class CheckRow(QWidget):
         tl = label(title)
         low = title.lower()
         if state == "fail":
-            color = "#FF8A9B"
+            color = "#FF9FAC"
         elif state == "warn" and ("community" in low or "experimental" in low or "experiment" in low):
             color = theme.AMBER
         else:
@@ -336,25 +345,26 @@ class Spinner(QWidget):
 
 
 class ActionTile(QPushButton):
-    """Large premium action button (icon, title, subtitle) with a gradient and an animated hover glow."""
+    """Large action button (icon, title, subtitle). ``style`` picks a filled accent tile (primary actions) or a
+    quiet surface tile; hover lifts the border, no glow."""
 
-    GRADS = {"blue": ("#0B3FAF", "#1C6DFF", "#3E8BFF"), "violet": ("#3E1FB0", "#6A35F0", "#8E5CFF"),
-             "install": ("#6421E6", "#9A3DFF", "#C77DFF"), "dark": ("#13213A", "#0E192C", "#3A5585")}
+    STYLES = ("blue", "violet", "install", "dark")
 
     def __init__(self, title: str, subtitle: str, icon_name: str, style: str = "dark"):
         super().__init__()
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(66)
+        self.setMinimumHeight(60)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setAccessibleName(title)
         self.setAccessibleDescription(subtitle)
         self.style_name = style
+        self.filled = style == "install"           # one filled tile per row: the main action
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(18, 8, 14, 8)
-        lay.setSpacing(14)
+        lay.setContentsMargins(16, 8, 14, 8)
+        lay.setSpacing(12)
         self.ic = QLabel()
-        self.ic.setPixmap(icons.pixmap(icon_name, "#ffffff", 32, 1.8))
-        self.ic.setFixedSize(34, 34)
+        self._icon_name = icon_name
+        self.ic.setFixedSize(26, 26)
         lay.addWidget(self.ic)
         col = QVBoxLayout()
         col.setSpacing(1)
@@ -366,54 +376,34 @@ class ActionTile(QPushButton):
         col.addWidget(self.s)
         col.addStretch(1)
         lay.addLayout(col, 1)
-        a, b, edge = self.GRADS.get(style, self.GRADS["dark"])
-        self.setStyleSheet(
-            f"QPushButton {{ background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 {a}, stop:1 {b});"
-            f" border: 1px solid {edge}; border-radius: 12px; text-align: left; padding: 0; }}"
-            f"QPushButton:hover {{ border: 1px solid #D9CCFF; }}"
-            f"QPushButton:pressed {{ background: {b}; }}"
-            f"QPushButton:focus {{ border: 1px solid #FFFFFF; }}"
-            f"QPushButton:disabled {{ background: #0D1729; border: 1px solid {theme.BORDER}; }}")
-        self._glow_color = QColor(edge if style != "dark" else "#6B5DFA")
-        self._glow = QGraphicsDropShadowEffect(self)
-        self._glow.setOffset(0, 0)
-        self._glow.setBlurRadius(0)
-        self._glow.setColor(self._glow_color)
-        self.setGraphicsEffect(self._glow)
-        self._anim = QVariantAnimation(self)
-        self._anim.setDuration(160)
-        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self._anim.valueChanged.connect(lambda v: self._glow.setBlurRadius(float(v)))
+        a = theme.accent()
+        if self.filled:
+            css = (f"QPushButton {{ background: {a.strong}; border: 1px solid {a.strong}; border-radius: 9px;"
+                   f" text-align: left; padding: 0; }}"
+                   f"QPushButton:hover {{ background: {a.hover}; border-color: {a.text}; }}"
+                   f"QPushButton:pressed {{ background: {a.pressed}; }}"
+                   f"QPushButton:focus {{ border-color: #FFFFFF; }}")
+        else:
+            css = (f"QPushButton {{ background: {theme.SURFACE_2}; border: 1px solid {theme.BORDER_HI};"
+                   f" border-radius: 9px; text-align: left; padding: 0; }}"
+                   f"QPushButton:hover {{ background: {theme.SURFACE_3}; border-color: {theme.BORDER_BTN}; }}"
+                   f"QPushButton:pressed {{ background: #111827; }}"
+                   f"QPushButton:focus {{ border-color: {a.base}; }}")
+        css += (f"QPushButton:disabled {{ background: #0D131E; border: 1px solid {theme.BORDER}; }}")
+        self.setStyleSheet(css)
         self._apply_text(True)
 
     def _apply_text(self, on: bool) -> None:
-        self.t.setStyleSheet(f"font-size: 12pt; font-weight: 700; color: {'white' if on else theme.TEXT_MUTED};")
-        self.s.setStyleSheet(f"font-size: 9pt; color: {'rgba(255,255,255,0.78)' if on else theme.TEXT_MUTED};")
-        self.ic.setEnabled(on)
-
-    def _animate(self, target: float) -> None:
-        if not ANIMATIONS["on"]:
-            self._glow.setBlurRadius(target)
-            return
-        self._anim.stop()
-        self._anim.setStartValue(self._glow.blurRadius())
-        self._anim.setEndValue(target)
-        self._anim.start()
-
-    def enterEvent(self, e):
-        if self.isEnabled():
-            self._animate(26.0)
-        super().enterEvent(e)
-
-    def leaveEvent(self, e):
-        self._animate(0.0)
-        super().leaveEvent(e)
+        main = "#FFFFFF" if self.filled else theme.TEXT
+        sub = "rgba(255,255,255,0.80)" if self.filled else theme.TEXT_DIM
+        self.t.setStyleSheet(f"font-size: 11pt; font-weight: 600; color: {main if on else theme.TEXT_DISABLED};")
+        self.s.setStyleSheet(f"font-size: 9pt; color: {sub if on else theme.TEXT_DISABLED};")
+        color = ("#FFFFFF" if self.filled else theme.ACCENT_TEXT) if on else theme.TEXT_DISABLED
+        self.ic.setPixmap(icons.pixmap(self._icon_name, color, 24, 1.8))
 
     def setEnabled(self, on: bool) -> None:  # noqa: N802 (Qt naming)
         super().setEnabled(on)
         self._apply_text(on)
-        if not on:
-            self._glow.setBlurRadius(0)
 
 
 class KeyValueGrid(QWidget):
@@ -426,13 +416,18 @@ class KeyValueGrid(QWidget):
         self.grid.setColumnMinimumWidth(0, key_width)
         self.grid.setColumnStretch(1, 1)
 
-    def set_rows(self, rows: Iterable[tuple[str, str | QWidget]]) -> None:
+    def set_rows(self, rows: Iterable[tuple[str, str | QWidget]], elide: bool = False) -> None:
+        """``elide``: values stay on one line and shorten in the middle (paths); the full text is the tooltip."""
         clear_layout(self.grid)
         for i, (k, v) in enumerate(rows):
             self.grid.addWidget(label(k, "key"), i, 0, Qt.AlignmentFlag.AlignTop)
             if isinstance(v, QWidget):
                 align = Qt.AlignmentFlag.AlignLeft if isinstance(v, StatusPill) else Qt.AlignmentFlag(0)
                 self.grid.addWidget(v, i, 1, align)
+            elif elide:
+                lb = ElidedLabel(v, "value", Qt.TextElideMode.ElideMiddle)
+                lb.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+                self.grid.addWidget(lb, i, 1, Qt.AlignmentFlag.AlignTop)
             else:
                 lb = label(v, "value", wrap=True, selectable=True)
                 lb.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
@@ -440,23 +435,49 @@ class KeyValueGrid(QWidget):
 
 
 class EmptyState(QWidget):
+    """What a list shows when it has nothing yet: an icon, what is missing and the one action that fills it."""
+
     def __init__(self, icon_name: str, title: str, text: str, action: QPushButton | None = None):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.setSpacing(6)
+        lay.setContentsMargins(16, 20, 16, 20)
         ic = QLabel()
-        ic.setPixmap(icons.pixmap(icon_name, theme.TEXT_MUTED, 42))
+        ic.setPixmap(_icon_disc(icon_name, 44))
         ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(ic)
+        lay.addSpacing(4)
         tl = label(title, "h3")
         tl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay.addWidget(tl)
         tx = label(text, "dim", wrap=True)
         tx.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tx.setMaximumWidth(520)
+        tx.setMaximumWidth(460)
         lay.addWidget(tx, 0, Qt.AlignmentFlag.AlignCenter)
         if action:
+            lay.addSpacing(6)
             lay.addWidget(action, 0, Qt.AlignmentFlag.AlignCenter)
+
+
+def _icon_disc(icon_name: str, size: int) -> QPixmap:
+    """An icon on a faint accent disc (empty states, list placeholders)."""
+    ratio = icons.device_ratio()
+    pm = QPixmap(round(size * ratio), round(size * ratio))
+    pm.fill(Qt.GlobalColor.transparent)
+    pm.setDevicePixelRatio(ratio)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    disc = QColor(theme.ACCENT)
+    disc.setAlpha(30)
+    p.setPen(Qt.PenStyle.NoPen)
+    p.setBrush(disc)
+    p.drawEllipse(QRectF(0, 0, size, size))
+    inner = size * 0.5
+    p.drawPixmap(QRectF((size - inner) / 2, (size - inner) / 2, inner, inner),
+                 icons.pixmap(icon_name, theme.ACCENT_TEXT, int(inner)), QRectF())
+    p.end()
+    return pm
 
 
 class FrameTimeChart(QWidget):
@@ -598,10 +619,6 @@ class GradientText(QWidget):
         g = QLinearGradient(r.topLeft(), r.bottomRight())
         for i, c in enumerate(self.colors):
             g.setColorAt(i / max(1, len(self.colors) - 1), QColor(c))
-        glow = QColor(self.colors[-1])
-        glow.setAlpha(55)
-        p.setPen(QPen(glow, 5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        p.drawPath(path)
         p.fillPath(path, g)
 
 
@@ -766,30 +783,22 @@ class ProfileRow(Clickable):
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        r = QRectF(self.rect()).adjusted(2.5, 2.5, -2.5, -2.5)
+        r = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
         if self.selected:
-            for i, a in enumerate((26, 16, 8)):
-                g = QColor(theme.VIOLET)
-                g.setAlpha(a)
-                p.setPen(QPen(g, 2))
-                p.setBrush(Qt.BrushStyle.NoBrush)
-                p.drawRoundedRect(r.adjusted(-i - 0.5, -i - 0.5, i + 0.5, i + 0.5), 11 + i, 11 + i)
-        bg = QLinearGradient(r.topLeft(), r.topRight())
-        if self.selected:
-            bg.setColorAt(0, QColor(78, 49, 213, 70 + int(25 * self._hover)))
-            bg.setColorAt(1, QColor(22, 142, 255, 18 + int(15 * self._hover)))
+            acc = QColor(theme.ACCENT)
+            acc.setAlpha(34 + int(14 * self._hover))
+            bg = acc
         else:
-            bg.setColorAt(0, QColor(255, 255, 255, 6 + int(14 * self._hover)))
-            bg.setColorAt(1, QColor(255, 255, 255, 3 + int(8 * self._hover)))
-        border = QColor(theme.VIOLET) if self.selected else QColor(theme.BORDER_HI)
+            bg = QColor(255, 255, 255, 5 + int(9 * self._hover))
+        border = QColor(theme.ACCENT) if self.selected else QColor(theme.BORDER_HI)
         if not self.selected and self._hover:
             hc = QColor(self.colors[0])
             border = QColor(int(border.red() + (hc.red() - border.red()) * self._hover * 0.7),
                             int(border.green() + (hc.green() - border.green()) * self._hover * 0.7),
                             int(border.blue() + (hc.blue() - border.blue()) * self._hover * 0.7))
         p.setBrush(bg)
-        p.setPen(QPen(border, 1.4 if self.selected else 1.0))
-        p.drawRoundedRect(r, 10, 10)
+        p.setPen(QPen(border, 1.2 if self.selected else 1.0))
+        p.drawRoundedRect(r, 9, 9)
 
 
 class WrapCheck(QWidget):
@@ -939,3 +948,161 @@ class ResponsiveRow(QWidget):
         if stacked:
             self._grid.setColumnStretch(0, 1)
 
+
+
+# -- page structure and forms (design system, docs/DESIGN_SYSTEM.md) ------------------------------------------
+class Divider(QFrame):
+    """1 px line between groups inside a card."""
+
+    def __init__(self):
+        super().__init__()
+        self.setProperty("role", "divider")
+        self.setFixedHeight(1)
+
+
+class PageHeader(QWidget):
+    """Page title, an optional one- or two-line description and the page's own actions on the right."""
+
+    def __init__(self, title: str, subtitle: str | None = None, actions: Iterable[QWidget] = ()):
+        super().__init__()
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 4)
+        lay.setSpacing(16)
+        col = QVBoxLayout()
+        col.setSpacing(4)
+        self.title = label(title, "h1")
+        col.addWidget(self.title, 0, Qt.AlignmentFlag.AlignLeft)
+        self.subtitle = label(subtitle or "", "dim", wrap=True)
+        self.subtitle.setVisible(bool(subtitle))
+        col.addWidget(self.subtitle)
+        lay.addLayout(col, 1)
+        self.actions = QHBoxLayout()
+        self.actions.setSpacing(8)
+        for w in actions:
+            self.actions.addWidget(w)
+        lay.addLayout(self.actions)
+        lay.setAlignment(self.actions, Qt.AlignmentFlag.AlignTop)
+
+    def set_subtitle(self, text: str) -> None:
+        self.subtitle.setText(text)
+        self.subtitle.setVisible(bool(text))
+
+
+NUMBER_WIDTH = (104, 150)          # spin boxes: room for the value and its unit, not half a card
+CHOICE_WIDTH = (200, 340)          # combo boxes
+SLIDER_WIDTH = (180, 300)
+TEXT_WIDTH = (240, 460)
+
+
+def fit_control(w: QWidget) -> QWidget:
+    """Size a value control for what it holds (see NUMBER_WIDTH...) instead of stretching it across a card."""
+    from PySide6.QtWidgets import QAbstractSpinBox, QComboBox, QLineEdit, QSlider
+    for kind, (lo, hi) in ((QAbstractSpinBox, NUMBER_WIDTH), (QComboBox, CHOICE_WIDTH), (QSlider, SLIDER_WIDTH),
+                           (QLineEdit, TEXT_WIDTH)):
+        if isinstance(w, kind):
+            if kind is QAbstractSpinBox:            # the widest value with its unit, plus the arrow buttons
+                lo = max(lo, _spin_text_width(w) + 9 + 28 + 14)
+                hi = max(hi, lo)
+            w.setMinimumWidth(lo)
+            w.setMaximumWidth(hi)
+            w.setSizePolicy(QSizePolicy.Policy.Preferred if kind is not QLineEdit else QSizePolicy.Policy.Expanding,
+                            QSizePolicy.Policy.Fixed)
+            break
+    return w
+
+
+def _spin_text_width(w) -> int:
+    fm = w.fontMetrics()
+    texts = [w.lineEdit().text() if w.lineEdit() else ""]
+    if hasattr(w, "textFromValue"):
+        for v in (w.minimum(), w.maximum()):
+            texts.append(w.prefix() + w.textFromValue(v) + w.suffix())
+    elif hasattr(w, "displayFormat"):
+        texts.append(w.displayFormat())
+    return max(fm.horizontalAdvance(x) for x in texts)
+
+
+def game_cover(game, width: int, height: int, radius: int = 6) -> QPixmap:
+    """A game's artwork cropped to ``width`` x ``height`` (cover) with rounded corners; the AKENO placeholder
+    cover when the game has no artwork."""
+    import os
+    from akeno.ui import art
+    ratio = icons.device_ratio()
+    w, h = round(width * ratio), round(height * ratio)
+    path = getattr(game, "artwork_path", None)
+    src = QPixmap(path) if path and os.path.isfile(path) else QPixmap()
+    if src.isNull():
+        src = art.cover_fallback(game.name, w, h)
+    src = src.scaled(w, h, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+    src = src.copy((src.width() - w) // 2, (src.height() - h) // 2, w, h)
+    src.setDevicePixelRatio(1)                 # painted 1:1 into ``out`` below (the fallback comes at 2x)
+    out = QPixmap(w, h)
+    out.fill(Qt.GlobalColor.transparent)
+    p = QPainter(out)
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+    clip = QPainterPath()
+    clip.addRoundedRect(QRectF(0, 0, w, h), radius * ratio, radius * ratio)
+    p.setClipPath(clip)
+    p.drawPixmap(0, 0, src)
+    p.setClipping(False)
+    p.setPen(QPen(QColor(255, 255, 255, 18), ratio))
+    p.drawRoundedRect(QRectF(0.5 * ratio, 0.5 * ratio, w - ratio, h - ratio), radius * ratio, radius * ratio)
+    p.end()
+    out.setDevicePixelRatio(ratio)
+    return out
+
+
+def form_row(text: str, control: QWidget | QLayout, help_text: str | None = None) -> QWidget:
+    """One setting: its name (and a short explanation) on the left, the control right-aligned on the same line.
+
+    Every form row of a card lines its controls up on the card's right edge, at widths that suit them."""
+    row = QWidget()
+    lay = QHBoxLayout(row)
+    lay.setContentsMargins(0, 2, 0, 2)
+    lay.setSpacing(16)
+    col = QVBoxLayout()
+    col.setSpacing(2)
+    name = label(text)
+    name.setWordWrap(True)
+    col.addWidget(name)
+    if help_text:
+        col.addWidget(label(help_text, "muted", wrap=True))
+    lay.addLayout(col, 1)
+    if isinstance(control, QLayout):
+        lay.addLayout(control)
+    else:
+        fit_control(control)
+        lay.addWidget(control, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    row.setAccessibleName(text)
+    return row
+
+
+def indented(widget: QWidget, depth: int = 1) -> QWidget:
+    """A dependent option, set in under the option it belongs to."""
+    box = QWidget()
+    lay = QHBoxLayout(box)
+    lay.setContentsMargins(26 * depth, 0, 0, 0)
+    lay.addWidget(widget)
+    return box
+
+
+class StatTile(QWidget):
+    """A measured or counted number with its name (dashboard). Shows "—" when there is no value."""
+
+    def __init__(self, name: str, value: str = "—", hint: str | None = None):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(2)
+        self.value = label(value, "stat")
+        self.name = label(name, "muted")
+        lay.addWidget(self.value)
+        lay.addWidget(self.name)
+        if hint:
+            self.setToolTip(hint)
+        self.setAccessibleName(name)
+
+    def set(self, value: str) -> None:
+        self.value.setText(value)
+        self.setAccessibleDescription(value)
