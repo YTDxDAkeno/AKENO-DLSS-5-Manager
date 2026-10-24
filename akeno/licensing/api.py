@@ -6,6 +6,13 @@ Errors fall into two kinds the rest of the app treats differently:
   license keeps working; nothing is signed out or deleted.
 * :class:`ApiError`: the server answered and refused (wrong password, invalid code, revoked sign-in …), with the
   stable ``code`` from the server.
+
+:class:`ServerUnavailable` carries a ``kind`` so the app can say what went wrong (``offline``, ``timeout``,
+``certificate``, ``maintenance``, ``server``, ``network``) and, when the server sent one, its ``code`` (for
+example ``email_unavailable``).
+
+Only reads (``GET``) are repeated after a dropped connection. Nothing that changes data is sent twice: a
+registration or a password-reset request is the user's to repeat.
 """
 
 from __future__ import annotations
@@ -13,6 +20,8 @@ from __future__ import annotations
 import json
 import socket
 import ssl
+import sys
+import time
 import urllib.error
 import urllib.request
 from urllib.parse import urlparse
@@ -20,12 +29,17 @@ from urllib.parse import urlparse
 from akeno import __version__
 
 TIMEOUT = 15
+RETRY_DELAY = 0.6                 # seconds before the one repeat of a read
 
 
 class ServerUnavailable(Exception):
-    def __init__(self, message: str, maintenance: bool = False):
+    def __init__(self, message: str, maintenance: bool = False, kind: str | None = None, code: str = "",
+                 retry_after: float | None = None):
         super().__init__(message)
         self.maintenance = maintenance
+        self.kind = kind or ("maintenance" if maintenance else "offline")
+        self.code = code
+        self.retry_after = retry_after
 
 
 class ApiError(Exception):
@@ -71,10 +85,19 @@ class LicenseApi:
         self._opener = urllib.request.build_opener(_NoRedirects, urllib.request.HTTPSHandler(context=self._ctx))
 
     def call(self, method: str, path: str, body: dict | None = None, token: str | None = None) -> dict | list:
+        try:
+            return self._once(method, path, body, token)
+        except ServerUnavailable as exc:
+            if method != "GET" or exc.kind not in ("offline", "timeout"):
+                raise
+            time.sleep(RETRY_DELAY)                   # a read is safe to repeat once after a dropped connection
+            return self._once(method, path, body, token)
+
+    def _once(self, method: str, path: str, body: dict | None, token: str | None) -> dict | list:
         data = None if body is None else json.dumps(body).encode("utf-8")
         req = urllib.request.Request(f"{self.base}/api/v1{path}", data=data, method=method)
         req.add_header("Accept", "application/json")
-        req.add_header("User-Agent", f"AKENO/{__version__}")
+        req.add_header("User-Agent", USER_AGENT)
         if data is not None:
             req.add_header("Content-Type", "application/json")
         if token:
@@ -87,11 +110,13 @@ class LicenseApi:
             return self._http_error(exc)
         except (urllib.error.URLError, socket.timeout, TimeoutError, ConnectionError, ssl.SSLError, OSError) as exc:
             reason = getattr(exc, "reason", exc)
-            if isinstance(reason, ssl.SSLCertVerificationError):
-                raise ServerUnavailable("The license server's certificate is not valid.") from exc
-            raise ServerUnavailable(f"The license server cannot be reached ({reason}).") from exc
+            if isinstance(reason, ssl.SSLCertVerificationError) or isinstance(exc, ssl.SSLCertVerificationError):
+                raise ServerUnavailable("The license server's certificate is not valid.", kind="certificate") from exc
+            if isinstance(reason, (socket.timeout, TimeoutError)):
+                raise ServerUnavailable("The license server did not answer in time.", kind="timeout") from exc
+            raise ServerUnavailable(f"The license server cannot be reached ({reason}).", kind="offline") from exc
         except ValueError as exc:
-            raise ServerUnavailable("The license server sent an unreadable answer.") from exc
+            raise ServerUnavailable("The license server sent an unreadable answer.", kind="network") from exc
 
     @staticmethod
     def _http_error(exc: urllib.error.HTTPError):
@@ -102,7 +127,29 @@ class LicenseApi:
         code = err.get("code") or f"http_{exc.code}"
         message = err.get("message") or exc.reason or "The license server refused the request."
         if exc.code >= 500 or exc.code in (407, 408) or code == "maintenance":
-            raise ServerUnavailable(message, maintenance=code == "maintenance") from exc
+            kind = "maintenance" if code == "maintenance" else ("server" if exc.code >= 500 else "network")
+            raise ServerUnavailable(message, maintenance=code == "maintenance", kind=kind,
+                                    code=code if err else "", retry_after=_retry_after(exc)) from exc
         if not err:                                   # an answer that is not from the license server (a proxy)
-            raise ServerUnavailable(f"Unexpected answer from the network ({exc.code}).") from exc
-        raise ApiError(exc.code, code, message, err.get("details")) from exc
+            raise ServerUnavailable(f"Unexpected answer from the network ({exc.code}).", kind="network") from exc
+        details = err.get("details") or {}
+        if exc.code == 429 and "retry_after" not in details and _retry_after(exc) is not None:
+            details = {**details, "retry_after": _retry_after(exc)}
+        raise ApiError(exc.code, code, message, details) from exc
+
+
+def _retry_after(exc: urllib.error.HTTPError) -> float | None:
+    try:
+        return float(exc.headers.get("Retry-After")) if exc.headers and exc.headers.get("Retry-After") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _user_agent() -> str:
+    """``AKENO/<version> (<system>)``: the server sees which AKENO version calls (never who or which PC)."""
+    import platform
+    system = "Windows" if sys.platform == "win32" else platform.system() or "unknown"
+    return f"AKENO/{__version__} ({system}; desktop)"
+
+
+USER_AGENT = _user_agent()

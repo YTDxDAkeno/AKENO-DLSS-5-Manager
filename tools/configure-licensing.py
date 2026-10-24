@@ -1,10 +1,11 @@
 """Write akeno/data/licensing.json: the license server address and the public signing keys the app trusts.
 
-    python tools/configure-licensing.py --server-url https://licenses.example --fetch
-    python tools/configure-licensing.py --server-url https://licenses.example --keys '{"keys": [...]}'
+    python tools/configure-licensing.py --server-url https://api.akeno.online --fetch
+    python tools/configure-licensing.py --server-url https://api.akeno.online --keys '{"keys": [...]}'
 
 ``--fetch`` reads ``/api/v1/system/keys`` over HTTPS and keeps only keys whose id matches their public key. The
-Windows build in CI runs this with the repository variables AKENO_LICENSE_SERVER_URL and AKENO_LICENSE_PUBLIC_KEYS.
+Windows build in CI runs this with the repository variables AKENO_LICENSE_SERVER_URL, AKENO_WEBSITE_URL (optional:
+an API on ``api.<domain>`` means the website ``https://<domain>``) and AKENO_LICENSE_PUBLIC_KEYS.
 Public keys are not secret; the file may be committed.
 """
 
@@ -42,6 +43,7 @@ def clean(keys: list) -> list[dict]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--server-url", default="", help="https:// address of the license server (empty: none)")
+    ap.add_argument("--website-url", default="", help="https:// address of the AKENO website (empty: derived)")
     ap.add_argument("--keys", default="", help='JSON: {"keys": [{"kid", "public_key"}]} or a list of keys')
     ap.add_argument("--fetch", action="store_true", help="read the keys from the server's /api/v1/system/keys")
     ap.add_argument("--output", type=Path, default=TARGET)
@@ -51,6 +53,9 @@ def main(argv: list[str] | None = None) -> int:
     url = args.server_url.strip().rstrip("/")
     if url and not url.startswith("https://"):
         raise SystemExit("the server address must start with https://")
+    website = args.website_url.strip().rstrip("/")
+    if website and not website.startswith("https://"):
+        raise SystemExit("the website address must start with https://")
     keys: list = []
     if args.keys.strip():
         doc = json.loads(args.keys)
@@ -64,8 +69,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.require and not (url and keys):
         raise SystemExit("a release build needs AKENO_LICENSE_SERVER_URL and AKENO_LICENSE_PUBLIC_KEYS: without them "
                          "it could not verify any license")
-    args.output.write_text(json.dumps({"server_url": url, "keys": keys}, indent=2) + "\n", encoding="utf-8")
-    print(f"{args.output}: server {url or '(none)'}, {len(keys)} key(s): {', '.join(k['kid'] for k in keys)}")
+    doc = {"server_url": url, "keys": keys}
+    if website:
+        doc["website_url"] = website
+    args.output.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+    print(f"{args.output}: server {url or '(none)'}, website {website or '(derived)'}, {len(keys)} key(s): "
+          f"{', '.join(k['kid'] for k in keys)}")
     print("compare the key ids with 'akeno-server keys list' on the license server")
     return 0
 
