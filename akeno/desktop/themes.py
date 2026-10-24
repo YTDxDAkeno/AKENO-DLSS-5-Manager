@@ -8,6 +8,11 @@ A theme is data, never a program. Import accepts only media, web wallpaper files
 renderer without network or file access outside their folder) and fonts; executables, scripts for Windows,
 shortcuts, links outside the archive, absolute paths, ``..`` and archives that unpack to far more than they
 weigh are refused before anything is written. Dock pins are personal paths and never part of a theme.
+
+Theme Workshop 2.0 adds optional fields, still format version 1 (older AKENO versions ignore them, and themes
+from them load unchanged): ``accent`` (a colour for widgets and the dock's accent style), the dock's ``style``,
+``labels`` and ``animate``, and widgets' ``style`` and ``color``. Before a theme is applied, the desktop as it was
+is kept (:func:`snapshot`), so "Restore previous" brings it back.
 """
 
 from __future__ import annotations
@@ -38,7 +43,8 @@ WEB_EXTS = {".html", ".htm", ".css", ".js", ".mjs", ".json", ".wasm", ".glsl", "
             ".svg", ".woff", ".woff2", ".ttf", ".otf", ".mp3", ".ogg", ".wav", ".m4a", ".flac"}
 MEDIA_EXTS = set().union(*media.KINDS.values()) | WEB_EXTS
 TOP_LEVEL = {"theme.json", "preview.png", "LICENSE", "LICENSE.txt", "README.md", "README.txt"}
-DOCK_STYLE = ("edge", "floating", "autohide", "opacity", "blur", "icon_size")
+DOCK_STYLE = ("edge", "floating", "autohide", "opacity", "blur", "icon_size", "style", "labels", "animate")
+HEX = re.compile(r"^#[0-9A-Fa-f]{6}$")
 WALLPAPER_KEYS = ("mode", "schedule", "fit", "volume", "fps_limit", "interactive", "audio_reactive")
 TEXT_LIMITS = {"name": 60, "author": 60, "description": 600, "license": 60, "version": 20}
 
@@ -88,7 +94,7 @@ def _media_files(item_path: Path) -> list[tuple[Path, str]]:
 
 def export(cfg: dict, monitor: str, out_file: Path, name: str, author: str = "", description: str = "",
            license: str = "", preview_png: bytes | None = None, include_widgets: bool = True,
-           include_dock: bool = True) -> Path:
+           include_dock: bool = True, accent: str = "") -> Path:
     """Write the monitor's wallpapers (with their files), the dock style and the widget layout as a theme."""
     name = name.strip()[:TEXT_LIMITS["name"]]
     if not name:
@@ -124,6 +130,9 @@ def export(cfg: dict, monitor: str, out_file: Path, name: str, author: str = "",
                                     else w.get("options", {})) for w in cfg.get("widgets", [])]
     if preview_png:
         manifest["preview"] = "preview.png"
+    accent = accent or cfg.get("accent") or ""
+    if HEX.match(accent):
+        manifest["accent"] = accent
     out_file = Path(out_file)
     if out_file.suffix.lower() != SUFFIX:
         out_file = out_file.with_suffix(SUFFIX)
@@ -252,9 +261,11 @@ def validate_manifest(manifest, names: set[str]) -> dict:
         out_dock = {}
         if dock.get("edge") in ("bottom", "top", "left", "right"):
             out_dock["edge"] = dock["edge"]
-        for key in ("floating", "autohide", "blur"):
+        for key in ("floating", "autohide", "blur", "labels", "animate"):
             if isinstance(dock.get(key), bool):
                 out_dock[key] = dock[key]
+        if dock.get("style") in ("glass", "solid", "clear", "accent"):
+            out_dock["style"] = dock["style"]
         for key, low, high in (("opacity", 30, 100), ("icon_size", 24, 96)):
             if isinstance(dock.get(key), int):
                 out_dock[key] = max(low, min(high, dock[key]))
@@ -265,6 +276,8 @@ def validate_manifest(manifest, names: set[str]) -> dict:
         clean["widgets"] = clean_layout(widgets)
     preview = manifest.get("preview")
     clean["preview"] = "preview.png" if preview == "preview.png" and "preview.png" in names else None
+    if isinstance(manifest.get("accent"), str) and HEX.match(manifest["accent"]):
+        clean["accent"] = manifest["accent"]
     return clean
 
 
@@ -340,5 +353,114 @@ def apply(theme: Theme, cfg: dict, monitors: list[str], widgets: bool = True, do
         cfg["dock"] = dict(cfg.get("dock", {}), **theme.manifest["dock"])
     if widgets and theme.manifest.get("widgets"):
         cfg["widgets"] = copy.deepcopy(theme.manifest["widgets"])
+        cfg["widgets_enabled"] = True
+    if theme.manifest.get("accent"):
+        cfg["accent"] = theme.manifest["accent"]
     cfg["theme"] = theme.id
     return cfg
+
+
+# -- Theme Workshop 2.0: library actions ----------------------------------------------------------------------------
+SNAPSHOT_KEYS = ("wallpapers", "dock", "widgets", "widgets_enabled", "accent", "theme")
+
+
+def snapshot_file() -> Path:
+    return sub("desktop") / "previous-desktop.json"
+
+
+def snapshot(cfg: dict, file: Path | None = None) -> None:
+    """The desktop as it is, before a theme replaces it (one level of undo)."""
+    data = {k: copy.deepcopy(cfg.get(k)) for k in SNAPSHOT_KEYS if k in cfg}
+    target = Path(file or snapshot_file())
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+
+
+def has_snapshot(file: Path | None = None) -> bool:
+    return Path(file or snapshot_file()).is_file()
+
+
+def restore_snapshot(cfg: dict, file: Path | None = None) -> bool:
+    target = Path(file or snapshot_file())
+    try:
+        data = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    pins = copy.deepcopy(cfg.get("dock", {}).get("items", []))
+    for key in SNAPSHOT_KEYS:
+        if key in data:
+            cfg[key] = copy.deepcopy(data[key])
+        elif key in ("theme", "accent"):
+            cfg.pop(key, None)
+    if isinstance(cfg.get("dock"), dict):
+        cfg["dock"]["items"] = pins                      # pins are never part of a theme, nor of its undo
+    target.unlink(missing_ok=True)
+    return True
+
+
+def save_to_library(cfg: dict, monitor: str, name: str, author: str = "", description: str = "",
+                    license: str = "", preview_png: bytes | None = None, include_widgets: bool = True,
+                    include_dock: bool = True, accent: str = "", root: Path | None = None) -> Theme:
+    """"Save current desktop as theme": written as a theme file and installed into the library."""
+    root = Path(root or library_dir())
+    root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=root, prefix=".save-") as tmp:
+        out = export(cfg, monitor, Path(tmp) / "theme", name, author, description, license, preview_png,
+                     include_widgets, include_dock, accent)
+        return install(out, replace=True, root=root)
+
+
+def export_installed(theme: Theme, out_file: Path) -> Path:
+    """A theme from the library as a file to share again (its files and theme.json, nothing else)."""
+    if theme.folder is None:
+        raise ThemeError("This theme has no files.")
+    out_file = Path(out_file)
+    if out_file.suffix.lower() != SUFFIX:
+        out_file = out_file.with_suffix(SUFFIX)
+    tmp = out_file.with_suffix(".tmp")
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(theme.folder.rglob("*")):
+            if f.is_file() and not f.is_symlink():
+                rel = f.relative_to(theme.folder).as_posix()
+                if rel in TOP_LEVEL or rel.startswith("media/"):
+                    z.write(f, rel, compress_type=zipfile.ZIP_STORED if f.suffix.lower() in
+                            media.KINDS["video"] | {".jpg", ".jpeg", ".png", ".webp", ".gif"} else zipfile.ZIP_DEFLATED)
+    check_archive(tmp)                                   # what we hand out passes our own import check
+    tmp.replace(out_file)
+    return out_file
+
+
+def edit(theme: Theme, **values) -> Theme:
+    """Change a library theme's name, author, description or licence (its files stay)."""
+    if theme.folder is None:
+        raise ThemeError("This theme has no files.")
+    manifest = json.loads((theme.folder / "theme.json").read_text(encoding="utf-8"))
+    for key in ("name", "author", "description", "license"):
+        if key in values and isinstance(values[key], str):
+            manifest[key] = values[key].strip()[:TEXT_LIMITS[key]]
+    if isinstance(values.get("accent"), str) and (HEX.match(values["accent"]) or not values["accent"]):
+        if values["accent"]:
+            manifest["accent"] = values["accent"]
+        else:
+            manifest.pop("accent", None)
+    if not manifest.get("name"):
+        raise ThemeError("A theme needs a name.")
+    (theme.folder / "theme.json").write_text(json.dumps(manifest, indent=1, ensure_ascii=False), encoding="utf-8")
+    return load(theme.folder)
+
+
+def duplicate(theme: Theme, name: str, root: Path | None = None) -> Theme:
+    """A copy of a library theme under another name (to change it without touching the original)."""
+    if theme.folder is None:
+        raise ThemeError("This theme has no files.")
+    root = Path(root or library_dir())
+    name = name.strip()[:TEXT_LIMITS["name"]] or theme.name
+    created = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    target = root / slug(name, theme.author + created)
+    shutil.copytree(theme.folder, target)
+    manifest = json.loads((target / "theme.json").read_text(encoding="utf-8"))
+    manifest.update(name=name, created=created, id=target.name)
+    (target / "theme.json").write_text(json.dumps(manifest, indent=1, ensure_ascii=False), encoding="utf-8")
+    return load(target)

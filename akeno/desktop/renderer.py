@@ -418,6 +418,8 @@ class WallpaperWindow(QWidget):
             self.view.setStyleSheet("background: black;")
         self.layout_.addWidget(self.view)
         self.layout_.setCurrentWidget(self.view)
+        if isinstance(self.view, WebView):
+            QTimer.singleShot(5000, lambda v=self.view, path=item["path"]: self._capture(v, path))
         if old is not None:
             self.layout_.removeWidget(old)
             if hasattr(old, "dispose"):
@@ -425,6 +427,20 @@ class WallpaperWindow(QWidget):
             old.deleteLater()
         if self.paused and hasattr(self.view, "set_paused"):
             self.view.set_paused(True)
+
+    def _capture(self, view: QWidget, path: str) -> None:
+        """A web wallpaper's first frame for the library (no thumbnail can be decoded from HTML). Once per page."""
+        from akeno.desktop import thumbs
+        target = thumbs.live_path(path)
+        if view is not self.view or target.exists() or self.paused:
+            return
+        try:
+            image = view.grab().toImage()
+            if not image.isNull():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                thumbs.cover(image).save(str(target), "JPG", 88)
+        except Exception as exc:                  # a missing preview never disturbs the wallpaper
+            log.info("web wallpaper preview: %s", exc)
 
     def _update_fast(self, wcfg: dict) -> None:
         web = isinstance(self.view, WebView)
