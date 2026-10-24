@@ -477,6 +477,11 @@ def test_host_runs_restarts_and_pauses_real_renderers(qapp, akeno_home, tmp_path
         assert host.status()["renderers"][name]["reasons"]
         app.send({"cmd": "game", "running": False})
         assert wait(qapp, lambda: r.paused is False, 10)
+        pid = r.process.processId()
+        app.close()                                       # the suite's window closes
+        assert wait(qapp, lambda: not host.apps, 10)
+        assert r.state == "running" and r.process.processId() == pid and not getattr(host, "_quitting", False), \
+            "closing the suite leaves the runtime and its wallpaper running"
         cfg["wallpapers"][name]["enabled"] = False
         cfgmod.save(cfg)
         assert wait(qapp, lambda: name not in host.renderers, 10), "the config file is followed live"
@@ -553,26 +558,45 @@ def test_desktop_pages_edit_the_configuration(desktop_window, tmp_path, qapp):
     img = picture(tmp_path / "pics" / "one.png")
     problems = page.add_paths([str(img), str(tmp_path / "pics" / "notes.txt")])
     assert len(problems) == 1
+    item = page.lib.by_path(img)
+    assert item is not None and page.gallery.current_item().id == item.id, "the new wallpaper is selected"
+    assert not cfgmod.wallpaper(cfgmod.load(), page.name())["enabled"], "importing alone changes no monitor"
+    assert page.apply()
     w = cfgmod.wallpaper(cfgmod.load(), page.name())
     assert w["enabled"] and [Path(i["path"]).name for i in w["playlist"]] == ["one.png"]
-    assert started, "switching a wallpaper on starts the desktop host"
+    assert started, "applying a wallpaper starts the desktop runtime"
+    assert page.gallery.model_.active, "the gallery marks the wallpaper that runs"
+    page.tabs.setCurrentIndex(3)
     page.chk_scheduled.setChecked(True)
     assert cfgmod.wallpaper(cfgmod.load(), page.name())["schedule"] == [{"from": "08:00", "index": 0}]
+    page.tabs.setCurrentIndex(2)
     page.rule_checks["battery"].setChecked(False)
     assert cfgmod.load()["pause"]["battery"] is False
+    page.tabs.setCurrentIndex(3)
     page._remove()
     assert not cfgmod.wallpaper(cfgmod.load(), page.name())["enabled"]
+    page.apply(item)
+    page.stop_wallpaper()
+    cfg = cfgmod.load()
+    assert not cfgmod.wallpapers_on(cfg) and cfg["enabled"], "stop wallpaper is not quit runtime"
     page._stop()
     assert cfgmod.load()["enabled"] is False
-    page.add_paths([str(img)])
-    assert cfgmod.load()["enabled"] is True, "switching a wallpaper on ends the Stop"
+    page.apply(item)
+    assert cfgmod.load()["enabled"] is True, "applying a wallpaper starts the runtime again"
 
     dock = win.pages["dock"]
-    dock.chk_enabled.setChecked(True)
-    dock.add_items([{"type": "app", "path": sys.executable, "name": "python"}])
-    dock.edge.setCurrentIndex(dock.edge.findData("right"))
+    dock.btn_on.setChecked(True)
+    dock.add_items([{"type": "app", "path": sys.executable, "name": "python"},
+                    {"type": "app", "path": str(tmp_path), "name": "folder"}])
+    dock.edge.buttons["right"].click()
+    dock.style.buttons["solid"].click()
     d = cfgmod.load()["dock"]
-    assert d["enabled"] and d["edge"] == "right" and len(d["items"]) == 1
+    assert d["enabled"] and d["edge"] == "right" and d["style"] == "solid" and len(d["items"]) == 2
+    assert dock.preview.cfg["edge"] == "right", "the preview follows every change"
+    dock._reorder([1, 0])
+    assert [i["name"] for i in cfgmod.load()["dock"]["items"]] == ["folder", "python"]
+    dock._theme("midnight")
+    assert cfgmod.load()["dock"]["labels"] is True and dock.chk_labels.isChecked()
 
     widgets = win.pages["widgets"]
     widgets.on_show()
@@ -582,6 +606,14 @@ def test_desktop_pages_edit_the_configuration(desktop_window, tmp_path, qapp):
     widgets.place.setText("Berlin")
     widgets._set_place()
     assert cfgmod.load()["widgets"][1]["options"]["place"] == "Berlin"
+    widgets._select("w1")
+    widgets.w_style.buttons["glass"].click()
+    widgets.swatches[2].click()
+    w1 = cfgmod.load()["widgets"][0]
+    assert w1["style"] == "glass" and w1["color"] == "#3CC8F0"
+    widgets.btn_on.setChecked(False)
+    assert cfgmod.load()["widgets_enabled"] is False and cfgmod.load()["widgets"], "hidden, not forgotten"
+    assert widgets.cards["cpu"].pic.pixmap() is not None
     cfg = cfgmod.load()
     cfgmod.save_profile(cfg, "Work")
     cfgmod.save(cfg)
@@ -596,19 +628,41 @@ def test_desktop_pages_edit_the_configuration(desktop_window, tmp_path, qapp):
 def test_theme_workshop_export_and_import(desktop_window, tmp_path, qapp, monkeypatch):
     win, _ = desktop_window
     wp = win.pages["wallpapers"]
+    first = picture(tmp_path / "p" / "before.png", "#654321")
+    wp.add_paths([str(first)])
+    assert wp.apply()
     wp.add_paths([str(picture(tmp_path / "p" / "dawn.png", "#123456"))])
+    assert wp.apply()
+    widgets = win.pages["widgets"]
+    widgets.add("clock")
     page = win.pages["themes"]
     page.on_show()
-    page.name.setText("Dawn")
-    page.author.setText("Tester")
-    out = page.export_to(tmp_path / "Dawn.akenotheme")
-    assert out.is_file()
-    th = page.import_file(out, ask=False)
-    assert th is not None and th.name == "Dawn" and th.preview is not None
+    th = page.save_current("Dawn", "Tester", accent="#3CC8F0")
+    assert th.preview is not None and th.manifest["accent"] == "#3CC8F0" and len(th.manifest["widgets"]) == 1
     assert page.grid.count() == 1
+    out = page.export_theme(th, tmp_path / "Dawn.akenotheme")
+    assert out.is_file()
+    themes.remove(th)
+    page.load()
+    assert page.grid.count() == 0
+    th = page.import_file(out, ask=False)
+    assert th is not None and th.name == "Dawn" and th.preview is not None and th.manifest["accent"] == "#3CC8F0"
+    assert page.grid.count() == 1
+    # someone else's desktop is on screen when the theme is applied
+    wp.apply(wp.lib.by_path(first))
+    cfgmod.save(wp.cfg)
+    page.reload_cfg()
     page.use(th)
     w = cfgmod.wallpaper(cfgmod.load(), wp.name())
     assert w["enabled"] and Path(w["playlist"][0]["path"]).is_relative_to(themes.library_dir())
+    assert cfgmod.load()["accent"] == "#3CC8F0" and page.btn_restore.isEnabled()
+    page.restore()
+    w = cfgmod.wallpaper(cfgmod.load(), wp.name())
+    assert Path(w["playlist"][0]["path"]).name == "before.png", "restore previous brings the old desktop back"
+    copy = page.duplicate(th, "Dawn 2")
+    assert copy.name == "Dawn 2" and copy.id != th.id and page.grid.count() == 2
+    edited = themes.edit(copy, description="Morning colours")
+    assert edited.description == "Morning colours" and themes.load(copy.folder).name == "Dawn 2"
     errors = []
     from akeno.ui.pages import desktop as dpage
     monkeypatch.setattr(dpage, "info", lambda *a, **k: errors.append(a))
@@ -617,4 +671,4 @@ def test_theme_workshop_export_and_import(desktop_window, tmp_path, qapp, monkey
         z.writestr("theme.json", json.dumps({"format": "akeno-theme", "version": 1, "name": "Bad"}))
         z.writestr("media/payload.exe", b"MZ")
     assert page.import_file(bad, ask=False) is None and errors
-    assert [x.name for x in themes.library()] == ["Dawn"]
+    assert sorted(x.name for x in themes.library()) == ["Dawn", "Dawn 2"]

@@ -6,6 +6,12 @@ It shows the monitor's playlist entry (image, GIF, video or web page) behind the
 pause/resume commands and exits when the host goes away. A crash here costs one wallpaper, never the suite: the
 host restarts it, and stops trying after repeated crashes.
 
+On Windows the window is shown only after it sits behind the icons and :func:`winapi.verify` agrees. If that
+fails it is never shown: the renderer reports the error and exits with ``EMBED_FAILED``, so a wallpaper can never
+cover the desktop like an ordinary window. While it runs it checks every two seconds that it is still attached;
+after an Explorer restart (Explorer's windows, and with them ours, are gone) it exits with ``DESKTOP_LOST`` and the
+host starts it again once the new desktop exists.
+
 Web wallpapers run in a sandboxed Chromium page (Qt WebEngine). The page is served from its own folder through the
 ``akeno-wallpaper://`` scheme: it can read the files of that folder and nothing else on the PC, every network
 request is blocked, pop-ups and plug-ins are off, and an animation frame limit applies. Optionally it receives the
@@ -32,6 +38,9 @@ from akeno.desktop import config as cfgmod
 from akeno.desktop import media, playlist, winapi
 
 log = logging.getLogger(__name__)
+
+NO_HOST, EMBED_FAILED, DESKTOP_LOST = 2, 3, 4      # exit codes the host understands
+ATTACH_TRIES = 5                                   # Explorer may still be starting (sign-in, after a restart)
 
 RAF_LIMIT = """(function () {
   var fps = %d, last = 0, native = window.requestAnimationFrame.bind(window);
@@ -261,8 +270,10 @@ def make_view(item: dict, wcfg: dict) -> QWidget:
 
 class WallpaperWindow(QWidget):
     def __init__(self, monitor: str, config_path: Path | None = None):
-        super().__init__(None, Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool |
-                         Qt.WindowType.WindowStaysOnBottomHint | Qt.WindowType.WindowDoesNotAcceptFocus)
+        flags = Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool | Qt.WindowType.WindowDoesNotAcceptFocus
+        if not winapi.WINDOWS:
+            flags |= Qt.WindowType.WindowStaysOnBottomHint    # a preview window while developing elsewhere
+        super().__init__(None, flags)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setWindowTitle("AKENO wallpaper")
         self.setStyleSheet("background: black;")
@@ -276,6 +287,9 @@ class WallpaperWindow(QWidget):
         self.virtual_desktop = winapi.virtual_desktop_id()
         self.started = datetime.now()
         self.error = ""
+        self.layer: winapi.Layer | None = None
+        self.embedded = False
+        self.lost: callable = lambda code: None          # called with an exit code when the desktop goes away
         from akeno.desktop.audio import AudioMeter
         self.meter = AudioMeter()
         self.tick = QTimer(self)
@@ -284,20 +298,93 @@ class WallpaperWindow(QWidget):
         self.fast = QTimer(self)
         self.fast.setInterval(33)
         self.fast.timeout.connect(self._fast_tick)
+        self.watch = QTimer(self)
+        self.watch.setInterval(2000)
+        self.watch.timeout.connect(self._watch)
         self.reload()
 
     def wcfg(self) -> dict:
         return cfgmod.wallpaper(cfgmod.load(self.config_path), self.monitor)
 
-    def place(self) -> None:
-        mons = {m.name: m for m in winapi.monitors()}
-        if self.monitor in mons and winapi.WINDOWS:
+    def layering(self) -> str:
+        return str(cfgmod.load(self.config_path).get("runtime", {}).get("layering", "auto"))
+
+    def target(self) -> winapi.Monitor | None:
+        return winapi.monitor_of(self.monitor, QGuiApplication.screens())
+
+    def embed(self, tries: int = ATTACH_TRIES, delay: float = 1.0) -> bool:
+        """Windows: behind the desktop icons or not at all. Elsewhere (development, tests): a preview window."""
+        if not winapi.WINDOWS:
+            self.setGeometry(self._qt_geometry())
             self.show()
-            if not winapi.attach(int(self.winId()), mons[self.monitor]):
-                self.setGeometry(self._qt_geometry())
+            self.embedded = True
+            return True
+        import time
+        hwnd = int(self.winId())                     # the native window exists now, still hidden
+        result = winapi.Embedding(False, problems=["this monitor is not connected"])
+        for attempt in range(max(1, tries)):
+            monitor = self.target()
+            if monitor is not None:
+                result = winapi.attach(hwnd, monitor, prefer=self.layering())
+                if result.ok:
+                    break
+            log.warning("wallpaper %s: attempt %d: %s", self.monitor, attempt + 1, result.error)
+            if attempt + 1 < tries:
+                time.sleep(delay)
+        if not result.ok:
+            return self._refuse(result.error)
+        self.layer = result.layer
+        self.show()                                  # Qt shows the child window where it already sits
+        winapi.place(hwnd, monitor, self.layer)      # again, in case showing moved it
+        problems = winapi.verify(hwnd, monitor, self.layer)
+        if problems:
+            return self._refuse("; ".join(problems))
+        log.info("wallpaper %s behind the desktop icons (%s)", self.monitor, self.layer.mode)
+        self.embedded = True
+        self.watch.start()
+        return True
+
+    def _refuse(self, why: str) -> bool:
+        """Never left on screen: hidden, and the error goes to the host and the suite."""
+        self.error = f"the wallpaper could not be placed behind the desktop icons: {why}"
+        log.warning("wallpaper %s: %s", self.monitor, self.error)
+        winapi.hide(int(self.winId()))
+        self.hide()
+        self.embedded = False
+        return False
+
+    def place(self) -> None:
+        """A monitor changed resolution or scaling: cover it again (or leave when it is gone)."""
+        if not winapi.WINDOWS:
+            self.setGeometry(self._qt_geometry())
             return
-        self.setGeometry(self._qt_geometry())
-        self.show()
+        monitor = self.target()
+        if self.layer is None or monitor is None:
+            self.lost(DESKTOP_LOST)
+            return
+        winapi.place(int(self.winId()), monitor, self.layer)
+
+    def _watch(self) -> None:
+        hwnd = int(self.winId())
+        if self.layer is None or not winapi.still_attached(hwnd, self.layer):
+            self.watch.stop()
+            log.warning("wallpaper %s: the desktop window went away (Explorer restarted?)", self.monitor)
+            winapi.hide(hwnd)
+            self.lost(DESKTOP_LOST)
+            return
+        monitor = self.target()
+        if monitor is None:
+            self.watch.stop()
+            winapi.hide(hwnd)
+            self.lost(DESKTOP_LOST)
+            return
+        if winapi.verify(hwnd, monitor, self.layer):
+            winapi.place(hwnd, monitor, self.layer)        # z-order or size changed: put it back once
+            problems = winapi.verify(hwnd, monitor, self.layer)
+            if problems:
+                self.watch.stop()
+                self._refuse("; ".join(problems))
+                self.lost(EMBED_FAILED)
 
     def _qt_geometry(self) -> QRect:
         for screen in QGuiApplication.screens():
@@ -331,6 +418,8 @@ class WallpaperWindow(QWidget):
             self.view.setStyleSheet("background: black;")
         self.layout_.addWidget(self.view)
         self.layout_.setCurrentWidget(self.view)
+        if isinstance(self.view, WebView):
+            QTimer.singleShot(5000, lambda v=self.view, path=item["path"]: self._capture(v, path))
         if old is not None:
             self.layout_.removeWidget(old)
             if hasattr(old, "dispose"):
@@ -338,6 +427,20 @@ class WallpaperWindow(QWidget):
             old.deleteLater()
         if self.paused and hasattr(self.view, "set_paused"):
             self.view.set_paused(True)
+
+    def _capture(self, view: QWidget, path: str) -> None:
+        """A web wallpaper's first frame for the library (no thumbnail can be decoded from HTML). Once per page."""
+        from akeno.desktop import thumbs
+        target = thumbs.live_path(path)
+        if view is not self.view or target.exists() or self.paused:
+            return
+        try:
+            image = view.grab().toImage()
+            if not image.isNull():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                thumbs.cover(image).save(str(target), "JPG", 88)
+        except Exception as exc:                  # a missing preview never disturbs the wallpaper
+            log.info("web wallpaper preview: %s", exc)
 
     def _update_fast(self, wcfg: dict) -> None:
         web = isinstance(self.view, WebView)
@@ -372,10 +475,11 @@ class WallpaperWindow(QWidget):
         self.check_playlist()
 
     def closeEvent(self, e):
+        self.watch.stop()
         if hasattr(self.view, "dispose"):
             self.view.dispose()
         if winapi.WINDOWS:
-            winapi.detach(int(self.winId()))
+            winapi.hide(int(self.winId()))      # hidden, then destroyed in place: never detached over the desktop
         super().closeEvent(e)
 
     def sizeHint(self) -> QSize:
@@ -391,13 +495,24 @@ def main(argv: list[str] | None = None) -> int:
     register_scheme()
     app = QApplication.instance() or QApplication(sys.argv[:1])
     app.setQuitOnLastWindowClosed(False)
-    window = WallpaperWindow(args.monitor)
-    window.place()
     from akeno.desktop.ipc import Channel
     channel = Channel.open(args.server, {"role": "renderer", "monitor": args.monitor})
     if channel is None:
         log.warning("desktop host %s not reachable", args.server)
-        return 2
+        return NO_HOST
+    window = WallpaperWindow(args.monitor)
+
+    def leave(code: int) -> None:
+        window.close()
+        winapi.refresh_wallpaper()
+        app.exit(code)
+    window.lost = lambda code: (channel.send({"cmd": "ready", "monitor": args.monitor, "error": window.error,
+                                              "embedded": False}), channel.flush(), leave(code))
+    if not window.embed():
+        channel.send({"cmd": "ready", "monitor": args.monitor, "error": window.error, "embedded": False})
+        channel.flush()
+        window.close()
+        return EMBED_FAILED
 
     def command(message: dict) -> None:
         cmd = message.get("cmd")
@@ -407,16 +522,21 @@ def main(argv: list[str] | None = None) -> int:
             window.set_paused(False)
         elif cmd == "reload":
             window.reload()
-            channel.send({"cmd": "ready", "monitor": args.monitor, "error": window.error})
+            channel.send({"cmd": "ready", "monitor": args.monitor, "error": window.error,
+                          "embedded": window.embedded, "layer": window.layer.mode if window.layer else "",
+                          "hwnd": int(window.winId())})
+        elif cmd == "place":
+            window.place()
         elif cmd == "vdesk":
             window.set_virtual_desktop(message.get("id"))
         elif cmd == "quit":
-            window.close()
-            winapi.refresh_wallpaper()
-            app.quit()
+            leave(0)
     channel.message.connect(command)
-    channel.closed.connect(lambda: (window.close(), winapi.refresh_wallpaper(), app.quit()))
-    channel.send({"cmd": "ready", "monitor": args.monitor, "error": window.error})
+    channel.closed.connect(lambda: leave(0))
+    for screen in QGuiApplication.screens():
+        screen.geometryChanged.connect(lambda *_: window.place())
+    channel.send({"cmd": "ready", "monitor": args.monitor, "error": window.error, "embedded": window.embedded,
+                  "layer": window.layer.mode if window.layer else "", "hwnd": int(window.winId())})
     code = app.exec()
     for obj in (channel, window):       # Qt objects go before the application object (no crash on exit)
         obj.deleteLater()

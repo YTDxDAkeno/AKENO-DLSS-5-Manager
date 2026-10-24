@@ -17,6 +17,7 @@ class State:
     remote_session: bool = False
     covered: bool = False
     cpu_percent: float = 0.0
+    user_paused: bool = False
 
 
 @dataclass
@@ -27,6 +28,8 @@ class Decision:
 
 def decide(rules: dict, state: State) -> Decision:
     reasons = []
+    if state.user_paused:
+        reasons.append(msg("paused from the tray menu"))
     if rules.get("game", True) and state.game_running:
         reasons.append(msg("a game is running"))
     if rules.get("fullscreen", True) and state.fullscreen_app:

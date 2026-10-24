@@ -28,11 +28,18 @@ WALLPAPER_DEFAULTS = {
 PAUSE_DEFAULTS = {"game": True, "fullscreen": True, "battery": True, "remote": True, "covered": True,
                   "cpu_percent": 85}
 DOCK_DEFAULTS = {"enabled": False, "edge": "bottom", "screen": 0, "floating": False, "position": None,
-                 "autohide": False, "opacity": 92, "blur": True, "icon_size": 48, "items": []}
+                 "autohide": False, "opacity": 92, "blur": True, "icon_size": 48, "items": [],
+                 "style": "glass", "hide_in_games": True, "animate": True, "labels": False}
 # dock item: {"type": "app", "path": ..., "name": ...} or {"type": "group", "name": ..., "items": [...]}
+# style: glass (Windows 11 acrylic) | solid | clear | accent
+RUNTIME_DEFAULTS = {"autostart": False, "tray": True, "layering": "auto"}
+# layering: auto (Microsoft's way on Windows 11 24H2: below the icon view in Progman) | workerw (inside Windows'
+# wallpaper window, the alternative Lively and ScreenPlay offer when the first shows nothing on a particular PC)
 DEFAULTS = {"version": VERSION, "enabled": True, "wallpapers": {}, "pause": PAUSE_DEFAULTS, "dock": DOCK_DEFAULTS,
-            "widgets": [], "widgets_locked": False, "profiles": {}}
-# "enabled": False is the Stop button: everything stays configured, nothing is shown until Start
+            "widgets": [], "widgets_locked": False, "widgets_enabled": True, "profiles": {},
+            "runtime": RUNTIME_DEFAULTS, "accent": ""}
+# "enabled": False is "Quit Desktop Runtime": everything stays configured, nothing is shown until it is started
+# "widgets_enabled": False hides the widgets without forgetting them (the "Widgets" switch)
 # widget: {"id": "w1", "type": "clock", "x": 40, "y": 40, "w": 260, "h": 140, "screen": 0, "options": {}}
 WIDGET_TYPES = ("clock", "calendar", "cpu", "gpu", "temperature", "ram", "vram", "network", "disk", "fps",
                 "shortcuts", "music", "visualizer", "notes", "todo", "weather", "uptime", "downloads", "license")
@@ -51,6 +58,29 @@ def _merge(defaults: dict, value) -> dict:
             else:
                 out[k] = copy.deepcopy(v)          # a copy: editing it never changes the loaded configuration
     return out
+
+
+def wallpapers_on(cfg: dict) -> bool:
+    return any(w.get("enabled") and w.get("playlist") for w in cfg.get("wallpapers", {}).values())
+
+
+def widgets_on(cfg: dict) -> bool:
+    return bool(cfg.get("widgets")) and bool(cfg.get("widgets_enabled", True))
+
+
+def anything_on(cfg: dict) -> bool:
+    """Something the desktop runtime has to show (and the runtime itself is not quit)."""
+    if not cfg.get("enabled", True):
+        return False
+    return wallpapers_on(cfg) or bool(cfg.get("dock", {}).get("enabled")) or widgets_on(cfg)
+
+
+def stop_wallpapers(cfg: dict) -> dict:
+    """"Stop wallpaper": every monitor shows Windows' own wallpaper again; playlists, dock and widgets stay."""
+    for w in cfg.get("wallpapers", {}).values():
+        if isinstance(w, dict):
+            w["enabled"] = False
+    return cfg
 
 
 def wallpaper(cfg: dict, monitor: str) -> dict:

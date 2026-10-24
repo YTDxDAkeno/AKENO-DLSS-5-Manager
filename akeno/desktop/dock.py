@@ -1,6 +1,10 @@
-"""AKENO Dock: a launcher bar for pinned programs, folders and groups. It is an ordinary always-on-top window
-(it never replaces or hides the Windows taskbar or Explorer), docked to a screen edge or floating, optionally
-auto-hiding, translucent with the Windows 11 acrylic backdrop, with a dot under running programs."""
+"""AKENO Dock: a launcher bar for pinned programs, folders, shortcuts and groups. It is an ordinary always-on-top
+tool window (it never replaces or hides the Windows taskbar or Explorer, and it has no Alt+Tab entry), docked to a
+screen edge or floating, optionally auto-hiding, with a dot under running programs.
+
+Styles: ``glass`` (Windows 11 acrylic behind a translucent bar), ``solid``, ``clear`` (icons only) and ``accent``.
+It slides in and out when auto-hiding and fades away while a game or a fullscreen program runs (the host decides
+that, see host.py), so it never sits over a game."""
 
 from __future__ import annotations
 
@@ -11,8 +15,8 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from PySide6.QtCore import QFileInfo, QPoint, QRect, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QCursor, QGuiApplication, QIcon, QPainter, QPainterPath
+from PySide6.QtCore import QEasingCurve, QFileInfo, QPoint, QPropertyAnimation, QRect, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QCursor, QGuiApplication, QIcon, QLinearGradient, QPainter, QPainterPath
 from PySide6.QtWidgets import (QBoxLayout, QFileDialog, QFileIconProvider, QInputDialog, QMenu, QToolButton,
                                QWidget)
 
@@ -20,6 +24,33 @@ from akeno.desktop import winapi
 from akeno.i18n import t
 
 EDGES = ("bottom", "top", "left", "right")
+STYLES = ("glass", "solid", "clear", "accent")
+ACCENT = QColor("#8E42FF")
+
+
+def paint_background(p: QPainter, rect: QRect, style: str, radius: float = 18, accent: QColor = ACCENT) -> None:
+    """The dock's bar in one of its styles (also used by the suite's dock preview)."""
+    path = QPainterPath()
+    path.addRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
+    if style == "clear":
+        return
+    if style == "solid":
+        p.fillPath(path, QColor(15, 21, 34))
+        p.setPen(QColor(38, 50, 72))
+    elif style == "accent":
+        grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        dark = QColor(accent).darker(260)
+        dark.setAlpha(225)
+        tint = QColor(accent).darker(150)
+        tint.setAlpha(225)
+        grad.setColorAt(0, tint)
+        grad.setColorAt(1, dark)
+        p.fillPath(path, grad)
+        p.setPen(QColor(accent).lighter(130))
+    else:
+        p.fillPath(path, QColor(13, 25, 43, 200))
+        p.setPen(QColor(255, 255, 255, 38))
+    p.drawPath(path)
 
 
 def lnk_target(path: str) -> str | None:
@@ -62,14 +93,22 @@ def running_exes() -> set[str]:
 
 
 class DockButton(QToolButton):
-    def __init__(self, item: dict, size: int, on_remove: Callable[[dict], None]):
+    def __init__(self, item: dict, size: int, on_remove: Callable[[dict], None], labels: bool = False,
+                 animate: bool = True):
         super().__init__()
         self.item = item
         self.running = False
         self._remove = on_remove
+        self.size_ = size
+        self.animate = animate
         self.setAutoRaise(True)
         self.setIconSize(QSize(size, size))
-        self.setFixedSize(size + 16, size + 16)
+        if labels:
+            self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+            self.setText((item.get("name") or Path(item.get("path", "")).stem)[:14])
+            self.setFixedSize(max(size + 16, 76), size + 34)
+        else:
+            self.setFixedSize(size + 16, size + 16)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip(item.get("name") or Path(item.get("path", "")).stem)
         self.setAccessibleName(self.toolTip())
@@ -80,9 +119,19 @@ class DockButton(QToolButton):
         else:
             icon = provider.icon(QFileInfo(item.get("path", "")))
             self.setIcon(icon if not icon.isNull() else QIcon())
-            self.clicked.connect(lambda: launch(item["path"]))
-        self.setStyleSheet("QToolButton { border: none; border-radius: 10px; background: transparent; }"
-                           "QToolButton:hover { background: rgba(255,255,255,0.12); }")
+            self.clicked.connect(self._launch)
+        self.setStyleSheet("QToolButton { border: none; border-radius: 10px; background: transparent; color: #E8EDF6;"
+                           " font-size: 8pt; } QToolButton:hover { background: rgba(255,255,255,0.12); }")
+
+    def _launch(self) -> None:
+        launch(self.item["path"])
+        if self.animate:                        # a short press-in: the click was seen
+            anim = QPropertyAnimation(self, b"iconSize", self)
+            anim.setDuration(220)
+            anim.setKeyValueAt(0, QSize(self.size_, self.size_))
+            anim.setKeyValueAt(0.4, QSize(int(self.size_ * 0.82), int(self.size_ * 0.82)))
+            anim.setKeyValueAt(1, QSize(self.size_, self.size_))
+            anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
 
     def target(self) -> str | None:
         path = self.item.get("path", "")
@@ -124,6 +173,7 @@ class DockWindow(QWidget):
         self.on_change = on_change
         self.buttons: list[DockButton] = []
         self.hidden_away = False
+        self.game_mode = False
         self._drag: QPoint | None = None
         self.box = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
         self.box.setContentsMargins(10, 8, 10, 8)
@@ -152,8 +202,9 @@ class DockWindow(QWidget):
         self.box.setDirection(QBoxLayout.Direction.TopToBottom if self.vertical() else
                               QBoxLayout.Direction.LeftToRight)
         size = int(self.cfg.get("icon_size", 48))
+        labels, animate = bool(self.cfg.get("labels")), bool(self.cfg.get("animate", True))
         for item in self.cfg.get("items", []):
-            b = DockButton(item, size, self.remove_item)
+            b = DockButton(item, size, self.remove_item, labels and not self.vertical(), animate)
             self.buttons.append(b)
             self.box.addWidget(b)
         add = QToolButton()
@@ -177,36 +228,63 @@ class DockWindow(QWidget):
         return screen.availableGeometry()
 
     def place(self) -> None:
+        self.resize(self.sizeHint())
+        self.move(self.target_pos())
+
+    def target_pos(self) -> QPoint:
+        """Where the dock sits when shown (place() moves it there)."""
         area = self.screen_geometry()
         size = self.sizeHint()
-        self.resize(size)
         if self.cfg.get("floating") and self.cfg.get("position"):
-            x, y = self.cfg["position"]
-            self.move(x, y)
-            return
+            return QPoint(*self.cfg["position"])
         edge = self.cfg.get("edge", "bottom")
-        if edge == "bottom":
-            self.move(area.center().x() - size.width() // 2, area.bottom() - size.height() - 8)
-        elif edge == "top":
-            self.move(area.center().x() - size.width() // 2, area.top() + 8)
-        elif edge == "left":
-            self.move(area.left() + 8, area.center().y() - size.height() // 2)
-        else:
-            self.move(area.right() - size.width() - 8, area.center().y() - size.height() // 2)
+        return {"bottom": QPoint(area.center().x() - size.width() // 2, area.bottom() - size.height() - 8),
+                "top": QPoint(area.center().x() - size.width() // 2, area.top() + 8),
+                "left": QPoint(area.left() + 8, area.center().y() - size.height() // 2)}.get(
+            edge, QPoint(area.right() - size.width() - 8, area.center().y() - size.height() // 2))
+
+    def _slide(self, to: QPoint) -> None:
+        if not self.cfg.get("animate", True) or not self.isVisible():
+            self.move(to)
+            return
+        self._anim = QPropertyAnimation(self, b"pos", self)
+        self._anim.setDuration(180)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._anim.setEndValue(to)
+        self._anim.start()
 
     def showEvent(self, e):
         super().showEvent(e)
-        if self.cfg.get("blur", True):
+        if self.cfg.get("style", "glass") == "glass" and self.cfg.get("blur", True):
             winapi.set_acrylic(int(self.winId()))
 
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        path = QPainterPath()
-        path.addRoundedRect(self.rect().adjusted(1, 1, -1, -1), 18, 18)
-        p.fillPath(path, QColor(13, 25, 43, 215))
-        p.setPen(QColor(38, 58, 90))
-        p.drawPath(path)
+        paint_background(p, self.rect(), self.cfg.get("style", "glass"))
+
+    def set_game_mode(self, on: bool) -> None:
+        """A game or fullscreen program is in front: the always-on-top dock steps aside until it ends."""
+        if on == self.game_mode:
+            return
+        self.game_mode = on
+        target = max(0.3, min(1.0, int(self.cfg.get("opacity", 92)) / 100))
+        if not self.cfg.get("animate", True):
+            self.setVisible(not on)
+            if not on:
+                self.place()
+            return
+        self._fade = QPropertyAnimation(self, b"windowOpacity", self)
+        self._fade.setDuration(200)
+        if on:
+            self._fade.setEndValue(0.0)
+            self._fade.finished.connect(lambda: self.game_mode and self.hide())
+        else:
+            self.place()
+            self.setWindowOpacity(0.0)
+            self.show()
+            self._fade.setEndValue(target)
+        self._fade.start()
 
     # -- running indicators, auto-hide -------------------------------------------------------------------------------
     def update_running(self) -> None:
@@ -222,6 +300,8 @@ class DockWindow(QWidget):
                 b.update()
 
     def _autohide(self) -> None:
+        if self.game_mode:
+            return
         if not self.cfg.get("autohide") or self.cfg.get("floating"):
             if self.hidden_away:
                 self.hidden_away = False
@@ -235,7 +315,7 @@ class DockWindow(QWidget):
                    "left": pos.x() <= area.left() + 2, "right": pos.x() >= area.right() - 2}[edge]
         if self.hidden_away and at_edge:
             self.hidden_away = False
-            self.place()
+            self._slide(self.target_pos())
         elif not self.hidden_away and not inside:
             self._idle += 1
             if self._idle >= 6:                   # 1.5 s away from the dock
@@ -244,7 +324,7 @@ class DockWindow(QWidget):
                 g = self.geometry()
                 offset = {"bottom": QPoint(0, g.height() - 3), "top": QPoint(0, -g.height() + 3),
                           "left": QPoint(-g.width() + 3, 0), "right": QPoint(g.width() - 3, 0)}[edge]
-                self.move(g.topLeft() + offset)
+                self._slide(self.target_pos() + offset)
         else:
             self._idle = 0
 

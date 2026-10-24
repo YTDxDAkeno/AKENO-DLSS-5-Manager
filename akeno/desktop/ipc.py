@@ -51,6 +51,11 @@ class Channel(QObject):
             self.socket.write(json.dumps(message, separators=(",", ":")).encode() + b"\n")
             self.socket.flush()
 
+    def flush(self, timeout_ms: int = 1000) -> None:
+        """Wait until everything sent has left (before a process exits)."""
+        if self.socket.state() == QLocalSocket.LocalSocketState.ConnectedState and self.socket.bytesToWrite():
+            self.socket.waitForBytesWritten(timeout_ms)
+
     def request(self, message: dict, timeout_ms: int = 2000) -> dict | None:
         """Send and wait for the answer with the same command (the suite asks the host for its status)."""
         answers: list[dict] = []
