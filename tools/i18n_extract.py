@@ -82,6 +82,9 @@ def suite_strings() -> set[str]:
     from akeno.ui.main_window import SECTIONS
     from akeno.ui.pages.account import EVENT_NAMES
     out = perf | set(STATUS_TEXT.values()) | set(TYPE_NAMES.values()) | set(account_ui.ERRORS.values())
+    out |= set(account_ui.SERVICE_ERRORS.values()) | set(account_ui.NETWORK.values())
+    from akeno.licensing import forms
+    out |= set(forms.RULES) | {forms.TOO_LONG} | set(forms.STRENGTH)
     out |= set(account_ui.STATUS_NAME.values()) | set(EVENT_NAMES.values())
     out |= {x for pair in license_gate.LicenseGate.TITLES.values() for x in pair if x}
     out |= {license_gate.SUITE_NAME, license_gate.ERR_SHORT} | set(license_gate.FEATURES)
