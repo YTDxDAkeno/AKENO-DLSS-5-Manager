@@ -76,6 +76,7 @@ Changing the license of future versions is a decision only the copyright holder(
 ## Effects of making the source repository private
 
 - **GitHub Actions:** runs keep working. On the Free plan, private repositories get 2,000 Actions minutes per month, and Windows minutes count twice. The Windows job of this workflow takes about 25–40 minutes, so expect roughly 30 full runs per month before the minutes run out. Pushes to every branch trigger a run; limit the `push` trigger to `main` and pull requests if the minutes get tight.
+- **The `release` environment** of the publish job: on GitHub Free, environments in private repositories can't be configured, and protection rules (such as required reviewers) and environment secrets reportedly no longer apply. That is why the publish secrets are repository secrets: publishing keeps working, just without an approval step. On a paid plan, add required reviewers to the `release` environment for that step.
 - **Releases:** existing releases of the source repository can no longer be downloaded without access. Public downloads move to the release repository.
 - **Older installed versions:** AKENO 2.x checks `api.github.com/repos/YTDxDAkeno/AKENO-DLSS-5-Manager/releases/latest` and its compatibility database URL in that repository. Both return 404 once it is private, and those versions say "Update check failed". Their users install 3.0 from the release repository once; from then on, updates come from there.
 - **The VPS** needs no GitHub access (see `deploy/README.md`).
