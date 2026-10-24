@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import enum
 import logging
+import secrets
 import threading
 import time
 from dataclasses import dataclass, field
@@ -152,41 +153,53 @@ class LicenseManager:
         return view
 
     def trusted_keys(self) -> dict:
-        out = {}
-        for kid, b64 in {**self.config.keys, **{k["kid"]: k["public_key"] for k in self.state.get("keys", [])}}.items():
+        """The build's keys, plus keys those keys endorsed (rotation). Endorsements are checked again each time,
+        so nothing written into the saved state can add a key by itself."""
+        trusted = {}
+        for kid, b64 in self.config.keys.items():
             try:
-                out[kid] = crypto.public_key(b64)
+                trusted[kid] = crypto.public_key(b64)
             except ValueError:
                 log.warning("ignoring malformed license key %s", kid)
-        return out
+        learned = [k for k in self.state.get("keys", []) if isinstance(k, dict) and k.get("via") == "endorsed"]
+        progress = True
+        while progress:
+            progress = False
+            for k in learned:
+                if k.get("kid") in trusted or not k.get("endorsement"):
+                    continue
+                if self._endorsed(k, trusted):
+                    trusted[k["kid"]] = crypto.public_key(k["public_key"])
+                    progress = True
+        return trusted
+
+    @staticmethod
+    def _endorsed(k: dict, trusted: dict) -> bool:
+        try:
+            _, endorsed = crypto.verify(k["endorsement"], trusted, "akeno-key-endorsement")
+            return (endorsed.get("kid") == k["kid"] and endorsed.get("public_key") == k["public_key"]
+                    and crypto.kid_for(k["public_key"]) == k["kid"])
+        except (crypto.BadSignature, ValueError, KeyError):
+            return False
 
     def _learn_keys(self, api: LicenseApi) -> None:
-        """New server keys are trusted only through an endorsement by a key already trusted (rotation)."""
+        """New server keys are trusted only through an endorsement by a key already trusted (rotation). A build
+        without keys trusts nothing: a server's keys are never accepted just because it offers them."""
+        trusted = self.trusted_keys()
+        if not trusted:
+            raise crypto.BadSignature("this build has no license verification keys")
         doc = api.call("GET", "/system/keys")
         rows = [k for k in doc.get("keys", []) if isinstance(k, dict) and k.get("kid") and k.get("public_key")]
         learned = self.state.setdefault("keys", [])
-        trusted = self.trusted_keys()
-        if not trusted:
-            # a build without embedded keys: pin the server's keys on this first HTTPS connection
-            for k in rows:
-                if crypto.kid_for(k["public_key"]) == k["kid"]:
-                    learned.append({"kid": k["kid"], "public_key": k["public_key"], "via": "pinned"})
-            log.warning("no license keys in this build: pinned %d key(s) from %s", len(learned),
-                        self.config.server_url)
-            return
         progress = True
         while progress:
             progress = False
             for k in rows:
                 if k["kid"] in trusted or not k.get("endorsement"):
                     continue
-                try:
-                    _, endorsed = crypto.verify(k["endorsement"], trusted, "akeno-key-endorsement")
-                except crypto.BadSignature:
-                    continue
-                if endorsed.get("kid") == k["kid"] and endorsed.get("public_key") == k["public_key"] \
-                        and crypto.kid_for(k["public_key"]) == k["kid"]:
-                    learned.append({"kid": k["kid"], "public_key": k["public_key"], "via": "endorsed"})
+                if self._endorsed(k, trusted):
+                    learned.append({"kid": k["kid"], "public_key": k["public_key"], "via": "endorsed",
+                                    "endorsement": k["endorsement"]})
                     trusted[k["kid"]] = crypto.public_key(k["public_key"])
                     progress = True
 
@@ -200,8 +213,10 @@ class LicenseManager:
         return crypto.verify(token, self.trusted_keys(), typ)[1]
 
     def _bound_here(self, payload: dict) -> bool:
-        return (payload.get("ent") == ENTITLEMENT and payload.get("dfp") == device.fingerprint()
-                and payload.get("dev") == self.state.get("device_id"))
+        """Issued by the AKENO license server for this app, this entitlement and this PC."""
+        return (payload.get("iss") == cfgmod.ISSUER and payload.get("aud") == cfgmod.AUDIENCE
+                and payload.get("ent") == ENTITLEMENT and payload.get("dfp") == device.fingerprint()
+                and payload.get("dev") == self.state.get("device_id") and payload.get("dev") is not None)
 
     def _certificate(self) -> dict | None:
         token = self.state.get("certificate")
@@ -225,8 +240,9 @@ class LicenseManager:
             return None
         if not self._bound_here(payload):
             return None
-        exp = payload.get("exp")
-        if not isinstance(exp, (int, float)) or now >= exp or payload.get("iat", 0) > now + TOLERANCE:
+        exp, nbf = payload.get("exp"), payload.get("nbf", payload.get("iat", 0))
+        if not isinstance(exp, (int, float)) or now >= exp or not isinstance(nbf, (int, float)) or \
+                nbf > now + TOLERANCE:
             return None
         return payload
 
@@ -360,7 +376,7 @@ class LicenseManager:
 
     def _after_sign_in(self, api: LicenseApi) -> LicenseView:
         if not self.trusted_keys():
-            self._learn_keys(api)
+            raise ApiError(0, "no_trusted_keys", "This copy of AKENO has no license verification keys.")
         self._register_device(api)
         return self.validate(api)
 
@@ -386,12 +402,13 @@ class LicenseManager:
                 api = api or self._api()
                 if not self.state.get("device_id"):
                     self._register_device(api)
-                out = self._validate_once(api)
-                if out["result"] == "device_not_registered":
+                out, nonce = self._validate_once(api)
+                if out.get("result") == "device_not_registered" and \
+                        self._statement(api, out, nonce).get("res") == "device_not_registered":
                     self.state.pop("device_id", None)     # e.g. an administrator reset the PCs: take a slot again
                     self._register_device(api)
-                    out = self._validate_once(api)
-                self._apply(api, out)
+                    out, nonce = self._validate_once(api)
+                self._apply(api, out, nonce)
             except ServerUnavailable as exc:
                 self.state["last_error"] = {"kind": "maintenance" if exc.maintenance else "offline",
                                             "message": str(exc), "at": time.time()}
@@ -402,9 +419,17 @@ class LicenseManager:
                                             "at": time.time()}
                 self._handle_refusal(exc)
                 raise
+            except crypto.BadSignature as exc:
+                # not the AKENO license server's answer: the saved license stays exactly as it was
+                log.warning("license answer rejected: %s", exc)
+                self.state["last_error"] = {"kind": "unverified", "code": "unverified_response",
+                                            "message": str(exc), "at": time.time()}
+                self._save()
+                raise ApiError(502, "unverified_response",
+                               "The license server's answer could not be verified.") from exc
             return self._notify()
 
-    def _validate_once(self, api: LicenseApi) -> dict:
+    def _validate_once(self, api: LicenseApi) -> tuple[dict, str]:
         serial = None
         cert = self.state.get("certificate")
         if cert:
@@ -412,34 +437,68 @@ class LicenseManager:
                 serial = crypto.verify(cert, self.trusted_keys(), "akeno-offline-license")[1].get("serial")
             except crypto.BadSignature:
                 serial = None
-        return self._authed(api, "POST", "/licenses/validate", {
-            "device_id": self.state["device_id"], "app_version": __version__, "certificate_serial": serial})
+        nonce = secrets.token_urlsafe(24)               # fresh per request: an old answer cannot be replayed
+        out = self._authed(api, "POST", "/licenses/validate", {
+            "device_id": self.state["device_id"], "app_version": __version__, "certificate_serial": serial,
+            "nonce": nonce})
+        return out, nonce
 
-    def _apply(self, api: LicenseApi, out: dict) -> None:
-        server_time = _ts(out.get("server_time")) or time.time()
+    def _statement(self, api: LicenseApi, out: dict, nonce: str) -> dict:
+        """The signed validation statement of this answer, or BadSignature: a forged, replayed or foreign answer
+        changes nothing here, whatever its unsigned fields say."""
+        token = out.get("validation") if isinstance(out, dict) else None
+        if not isinstance(token, str):
+            raise crypto.BadSignature("the answer carries no signed validation")
+        st = self._verify(api, token, "akeno-validation")
+        if st.get("iss") != cfgmod.ISSUER or st.get("aud") != cfgmod.AUDIENCE or st.get("ent") != ENTITLEMENT:
+            raise crypto.BadSignature("the validation is not for this app")
+        if st.get("nonce") != nonce:
+            raise crypto.BadSignature("the validation answers another request (replayed)")
+        account = (self.state.get("account") or {}).get("id")
+        if account is not None and st.get("sub") != str(account):
+            raise crypto.BadSignature("the validation is for another account")
+        if st.get("dev") not in (None, self.state.get("device_id")) or \
+                st.get("dfp") not in (None, device.fingerprint()):
+            raise crypto.BadSignature("the validation is for another PC")
+        if not isinstance(st.get("iat"), (int, float)):
+            raise crypto.BadSignature("the validation has no time")
+        return st
+
+    def _apply(self, api: LicenseApi, out: dict, nonce: str) -> None:
+        st = self._statement(api, out, nonce)
+        lease = out.get("lease")
+        lease_payload = None
+        if lease:
+            lease_payload = self._verify(api, lease, "akeno-lease")
+            if not self._bound_here(lease_payload) or lease_payload.get("nonce") != nonce:
+                raise crypto.BadSignature("the lease is not for this PC or this request")
+        cert = out.get("offline_certificate")
+        if cert and cert != "unchanged":
+            payload = self._verify(api, cert, "akeno-offline-license")
+            if payload.get("lt") != "lifetime" or not self._bound_here(payload):
+                raise crypto.BadSignature("the offline license is not for this PC")
+        # everything checked: now the answer counts
+        server_time = float(st["iat"])
         self.clock.learn(server_time)
-        self.state["license"] = out.get("license") or {}
+        self.state["license"] = {"status": st.get("st"), "license_type": st.get("lt"),
+                                 "expires_at": st.get("lexp"), "activated_at": st.get("act")}
+        self.state["license_info"] = out.get("license") or {}      # unsigned extras, shown only
         self.state["validation_interval"] = int(out.get("validation_interval_seconds") or 12 * 3600)
         self.state["min_client_version"] = out.get("min_client_version")
         self.state["latest_client_version"] = out.get("latest_client_version")
-        if out.get("certificate_revoked") or out.get("result") != "ok":
+        if st.get("crev") or st.get("res") != "ok":
             self.state.pop("certificate", None)
-        lease = out.get("lease")
-        if lease:
-            payload = self._verify(api, lease, "akeno-lease")
-            old = self.state.get("lease_iat", 0)
-            if payload.get("iat", 0) >= old:          # never go back to an older lease
+        if lease_payload is not None:
+            if lease_payload.get("iat", 0) >= self.state.get("lease_iat", 0):    # never back to an older lease
                 self.state["lease"] = lease
-                self.state["lease_iat"] = payload.get("iat", 0)
+                self.state["lease_iat"] = lease_payload.get("iat", 0)
         else:
             self.state.pop("lease", None)
             self.state.pop("lease_iat", None)
-        cert = out.get("offline_certificate")
-        if cert and cert != "unchanged":
-            self._verify(api, cert, "akeno-offline-license")
+        if cert and cert != "unchanged" and st.get("res") == "ok":
             self.state["certificate"] = cert
         self.state.pop("disabled", None)
-        if out.get("result") == "account_disabled":
+        if st.get("res") == "account_disabled":
             self.state["disabled"] = True
         self.state["last_validation"] = server_time
         self.state.pop("last_error", None)
@@ -520,6 +579,8 @@ class LicenseManager:
 
     def set_server(self, url: str) -> None:
         from akeno.licensing.api import check_url
+        if self.config.locked:
+            raise PermissionError("The license server of this build cannot be changed.")
         with self._lock:
             url = check_url(url) if url else ""
             cfgmod.save_server_url(url)

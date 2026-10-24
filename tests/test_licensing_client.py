@@ -60,6 +60,9 @@ class FakeApi:
         return answer(body) if callable(answer) else answer
 
 
+CLAIMS = {"iss": "akeno-licensing", "aud": "akeno-desktop", "ent": "akeno-suite"}
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
     monkeypatch.setenv("AKENO_HOME", str(tmp_path / "home"))
@@ -69,32 +72,58 @@ def env(tmp_path, monkeypatch):
     signer = Signer()
     now = time.time()
 
-    def lease(lt="monthly", lexp=None, grace=72 * 3600):
+    def lease(lt="monthly", lexp=None, grace=72 * 3600, nonce=None, by=None, **extra):
         lexp = lexp if lexp is not None else (None if lt == "lifetime" else now + 30 * 86400)
         exp = now + grace if lexp is None else min(lexp, now + grace)
-        return signer.sign("akeno-lease", {"ent": "akeno-suite", "lt": lt, "dev": "dev-1",
-                                           "dfp": device.fingerprint(), "iat": int(now), "exp": int(exp),
-                                           "lexp": None if lexp is None else int(lexp), "act": int(now)})
+        payload = dict(CLAIMS, lt=lt, dev="dev-1", dfp=device.fingerprint(), iat=int(now), nbf=int(now),
+                       exp=int(exp), lexp=None if lexp is None else int(lexp), act=int(now), nonce=nonce)
+        payload.update(extra)
+        return (by or signer).sign("akeno-lease", payload)
+
+    def certificate(by=None, **extra):
+        payload = dict(CLAIMS, lt="lifetime", dev="dev-1", dfp=device.fingerprint(), serial="s1", act=int(now),
+                       iat=int(now), nbf=int(now))
+        payload.update(extra)
+        return (by or signer).sign("akeno-offline-license", payload)
+
+    class Answer:
+        """The server's answer to one validation request: signed for the request's own nonce."""
+
+        def __init__(self, lt="monthly", result="ok", cert=False, extra=None, by=None, **kw):
+            self.lt, self.result, self.cert, self.extra, self.by, self.kw = lt, result, cert, extra or {}, by, kw
+
+        def __or__(self, other):
+            return Answer(self.lt, self.result, self.cert, {**self.extra, **other}, self.by, **self.kw)
+
+        def __call__(self, body):
+            nonce = (body or {}).get("nonce")
+            lic = self.extra.get("license") or {"status": {"ok": "active", "no_license": "none",
+                                                           "expired": "expired"}.get(self.result, "active"),
+                                                "license_type": self.lt}
+            out = {"result": self.result, "server_time": now, "license": lic,
+                   "lease": lease(self.lt, nonce=nonce, by=self.by, **self.kw) if self.result == "ok" else None,
+                   "offline_certificate": certificate(by=self.by) if self.cert else None,
+                   "certificate_revoked": False, "validation_interval_seconds": 3600}
+            out["validation"] = (self.by or signer).sign("akeno-validation", dict(
+                CLAIMS, sub="u1", dev="dev-1", dfp=device.fingerprint(), nonce=nonce, res=self.result,
+                crev=False, st=lic.get("status"), lt=lic.get("license_type", self.lt), lexp=None, act=int(now),
+                iat=int(now), exp=int(now + 600)))
+            out.update({k: v for k, v in self.extra.items() if k != "license"})
+            return out
 
     def validate(lt="monthly", result="ok", cert=False, **kw):
-        out = {"result": result, "server_time": now, "license": {"status": "active", "license_type": lt},
-               "lease": lease(lt, **kw) if result == "ok" else None, "offline_certificate": None,
-               "certificate_revoked": False, "validation_interval_seconds": 3600}
-        if cert:
-            out["offline_certificate"] = signer.sign("akeno-offline-license", {
-                "ent": "akeno-suite", "lt": "lifetime", "dev": "dev-1", "dfp": device.fingerprint(), "serial": "s1",
-                "act": int(now)})
-        return out
+        return Answer(lt, result, cert, **kw)
 
     tokens = {"access_token": "a", "refresh_token": "r", "expires_in": 900,
               "user": {"id": "u1", "email": "player@example.test", "display_name": "P"}}
     FakeApi.answers = {"/auth/login": tokens, "/auth/register": tokens, "/auth/refresh": tokens,
                        "/devices/register": {"id": "dev-1", "label": "Gaming PC"},
-                       "/licenses/validate": validate("monthly"), "/auth/logout": {}}
+                       "/licenses/validate": validate("monthly"), "/auth/logout": {}, "/system/keys": {"keys": []}}
 
-    def make(**kw):
-        cfg = cfgmod.LicensingConfig("https://licenses.invalid", {signer.kid: signer.public})
+    def make(keys=None):
+        cfg = cfgmod.LicensingConfig("https://licenses.invalid", {signer.kid: signer.public} if keys is None else keys)
         return LicenseManager(cfg, SecureStore(tmp_path / "license"), FakeApi)
+    make.lease, make.certificate, make.Answer = lease, certificate, Answer
     return make, validate, signer
 
 
@@ -140,10 +169,7 @@ def test_forged_or_foreign_lease_does_not_unlock(env, tmp_path):
     make, validate, _ = env
     m = make()
     other = Signer()
-    out = validate()
-    out["lease"] = other.sign("akeno-lease", {"ent": "akeno-suite", "lt": "monthly", "dev": "dev-1",
-                                              "dfp": device.fingerprint(), "iat": 1, "exp": time.time() + 99})
-    FakeApi.answers["/licenses/validate"] = out
+    FakeApi.answers["/licenses/validate"] = validate(by=other)
     FakeApi.answers["/system/keys"] = {"keys": [{"kid": other.kid, "public_key": other.public}]}
     with pytest.raises(Exception):
         m.sign_in("player@example.test", "pw")                # unknown key, no endorsement: refused
@@ -311,3 +337,198 @@ def test_main_window_has_account_and_license_pages(env, qtbot, tmp_path, monkeyp
     assert win.pages["license"].summary.values["type"].text() in ("Monthly (30 days)", "Monatlich (30 Tage)")
     win.go("account")
     assert win.pages["account"].email.text() == "player@example.test"
+
+
+# -- attacks on the license check ---------------------------------------------------------------------------------
+class Later:
+    """The PC's clock some time later (a new start of AKENO)."""
+
+    def __init__(self, seconds: float):
+        self.shift = seconds
+
+    def time(self):
+        return time.time() + self.shift
+
+    def monotonic(self):
+        return time.monotonic()
+
+
+def test_fake_server_with_its_own_keys_cannot_issue_a_license(env):
+    make, validate, _ = env
+    m = make()
+    attacker = Signer()
+    # a fake VPS: everything signed with its own key, "license_valid": true, and its key offered for "learning"
+    FakeApi.answers["/licenses/validate"] = validate("lifetime", cert=True, by=attacker) | {
+        "license_valid": True, "result": "ok"}
+    FakeApi.answers["/system/keys"] = {"keys": [{"kid": attacker.kid, "public_key": attacker.public,
+                                                 "endorsement": attacker.sign("akeno-key-endorsement", {
+                                                     "kid": attacker.kid, "public_key": attacker.public})}]}
+    with pytest.raises(ApiError) as err:
+        m.sign_in("player@example.test", "pw")
+    assert err.value.code == "unverified_response"
+    view = make().view()
+    assert not view.unlocked and view.status is not Status.LIFETIME_OFFLINE
+    assert "lease" not in m.state and "certificate" not in m.state
+    assert attacker.kid not in m.trusted_keys(), "a self-endorsed key is never trusted"
+
+
+def test_unsigned_ok_and_tampered_tokens_are_rejected(env):
+    make, validate, signer = env
+    m = make()
+    m.sign_in("player@example.test", "pw")
+    good = validate("monthly")({"nonce": "x" * 32})
+    FakeApi.answers["/licenses/validate"] = lambda body: {**good, "validation": None, "license_valid": True}
+    with pytest.raises(ApiError):
+        m.validate()
+    h, b, sig = validate("monthly")({"nonce": "y" * 32})["lease"].split(".")
+    payload = json.loads(base64.urlsafe_b64decode(b + "=" * (-len(b) % 4)))
+    payload.update(lt="lifetime", exp=int(time.time() + 10 ** 9))
+    forged = f"{h}.{b64e(json.dumps(payload).encode())}.{sig}"            # payload changed, signature kept
+    real = validate("monthly")
+
+    def tampered(body):
+        out = real(body)
+        out["lease"] = forged
+        return out
+    FakeApi.answers["/licenses/validate"] = tampered
+    with pytest.raises(ApiError):
+        m.validate()
+    assert m.view().license_type == "monthly", "the saved license is unchanged"
+
+
+def test_replayed_answer_is_rejected(env):
+    make, validate, _ = env
+    m = make()
+    captured = validate("monthly")({"nonce": "captured-nonce-from-last-month"})
+    m.sign_in("player@example.test", "pw")
+    FakeApi.answers["/licenses/validate"] = validate(result="expired") | {"license": {"status": "expired"}}
+    assert m.validate().status is Status.EXPIRED
+    FakeApi.answers["/licenses/validate"] = captured                     # an old, genuinely signed "ok" answer
+    with pytest.raises(ApiError) as err:
+        m.validate()
+    assert err.value.code == "unverified_response"
+    assert m.view().status is Status.EXPIRED and not m.view().unlocked
+
+
+def test_wrong_issuer_audience_or_pc_is_rejected(env):
+    make, validate, signer = env
+    for claim in ({"aud": "akeno-admin"}, {"iss": "someone-else"}, {"dev": "dev-2"}):
+        m = make()
+        real = validate("monthly")
+
+        def answer(body, claim=claim):
+            out = real(body)
+            out["lease"] = make.lease("monthly", nonce=body["nonce"], **claim)
+            return out
+        FakeApi.answers["/licenses/validate"] = answer
+        with pytest.raises(ApiError):
+            m.sign_in("player@example.test", "pw")
+        assert not m.view().unlocked, claim
+        m.sign_out()
+
+
+def test_forged_lifetime_certificate_is_rejected(env):
+    make, validate, signer = env
+    m = make()
+    m.sign_in("player@example.test", "pw")
+    attacker = Signer()
+    for cert in (make.certificate(by=attacker), make.certificate(aud="akeno-web"), make.certificate(lt="monthly"),
+                 make.certificate(dfp="another-pc")):
+        m.state["certificate"] = cert
+        m.state.pop("lease", None)
+        m._save()
+        FakeApi.down = True
+        view = make().view()
+        assert view.status is not Status.LIFETIME_OFFLINE and not view.unlocked
+        FakeApi.down = False
+
+
+def test_authentic_lifetime_license_works_without_internet_for_good(env, monkeypatch):
+    from akeno.licensing import clock as clockmod
+    make, validate, _ = env
+    FakeApi.answers["/licenses/validate"] = validate("lifetime", cert=True)
+    make().sign_in("player@example.test", "pw")
+    FakeApi.down = True
+    monkeypatch.setattr(clockmod, "time", Later(3 * 365 * 86400))      # three years later, never online again
+    m = make()
+    assert m.view().status is Status.LIFETIME_OFFLINE and m.view().unlocked
+    assert m.check_if_due().unlocked                                    # the failed check changes nothing
+    monkeypatch.setattr(clockmod, "time", Later(-30 * 86400))           # clock turned back: still lifetime
+    assert make().view().unlocked
+
+
+def test_unsigned_revocation_does_not_delete_the_lifetime_certificate(env):
+    make, validate, _ = env
+    FakeApi.answers["/licenses/validate"] = validate("lifetime", cert=True)
+    m = make()
+    m.sign_in("player@example.test", "pw")
+    attacker = Signer()
+    FakeApi.answers["/licenses/validate"] = validate("lifetime", result="license_revoked", by=attacker) | {
+        "certificate_revoked": True}
+    with pytest.raises(ApiError):
+        m.validate()
+    assert m.state.get("certificate") and m.view().unlocked
+
+
+def test_trial_and_monthly_respect_expiry_and_offline_grace(env, monkeypatch):
+    from akeno.licensing import clock as clockmod
+    make, validate, _ = env
+    FakeApi.answers["/licenses/validate"] = validate("monthly")           # 72 h offline grace
+    make().sign_in("player@example.test", "pw")
+    FakeApi.down = True
+    monkeypatch.setattr(clockmod, "time", Later(48 * 3600))
+    assert make().view().unlocked, "inside the offline grace"
+    monkeypatch.setattr(clockmod, "time", Later(80 * 3600))
+    view = make().view()
+    assert not view.unlocked and view.status is Status.SERVER_UNAVAILABLE, "grace over: check online"
+    monkeypatch.undo()
+    monkeypatch.setenv("AKENO_DEVICE_ID", "test-machine")
+    FakeApi.down = False
+    m = make()
+    m.sign_out()
+    FakeApi.answers["/licenses/validate"] = validate("trial_24h", lexp=time.time() + 24 * 3600)
+    m.sign_in("player@example.test", "pw")
+    FakeApi.down = True
+    monkeypatch.setattr(clockmod, "time", Later(25 * 3600))
+    assert not make().view().unlocked, "a 24-hour trial ends after 24 hours, also offline"
+
+
+def test_built_program_uses_its_own_server_only(env, monkeypatch, tmp_path):
+    import sys
+    from akeno.licensing import api as apimod
+    make, validate, _ = env
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setenv("AKENO_LICENSE_SERVER", "https://fake-licenses.example")
+    cfgmod.user_file().parent.mkdir(parents=True, exist_ok=True)
+    cfgmod.user_file().write_text(json.dumps({"server_url": "https://also-fake.example"}))
+    cfg = cfgmod.load()
+    assert cfg.locked and "fake" not in cfg.server_url
+    with pytest.raises(ValueError):
+        apimod.check_url("http://127.0.0.1:8000")
+    with pytest.raises(PermissionError):
+        cfgmod.save_server_url("https://fake-licenses.example")
+    m = make()
+    m.config.locked = True
+    with pytest.raises(PermissionError):
+        m.set_server("https://fake-licenses.example")
+
+
+def test_build_without_keys_accepts_no_license(env):
+    make, validate, _ = env
+    other = Signer()
+    FakeApi.answers["/licenses/validate"] = validate(by=other)
+    FakeApi.answers["/system/keys"] = {"keys": [{"kid": other.kid, "public_key": other.public}]}
+    m = make(keys={})
+    with pytest.raises(ApiError) as err:
+        m.sign_in("player@example.test", "pw")
+    assert err.value.code == "no_trusted_keys" and not m.trusted_keys() and not m.view().unlocked
+
+
+def test_license_api_never_follows_redirects():
+    import urllib.request
+    from akeno.licensing.api import LicenseApi, _NoRedirects
+    api = LicenseApi("https://licenses.example")
+    assert any(isinstance(h, _NoRedirects) for h in api._opener.handlers)
+    assert api._ctx.verify_mode.name == "CERT_REQUIRED" and api._ctx.check_hostname
+    req = urllib.request.Request("https://licenses.example/api/v1/x")
+    assert _NoRedirects().redirect_request(req, None, 302, "Found", {}, "http://evil.example/") is None

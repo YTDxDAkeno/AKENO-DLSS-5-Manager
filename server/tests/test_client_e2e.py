@@ -247,24 +247,33 @@ def test_rotated_key_is_learned_through_endorsement(server, home):
     assert new.kid in m.trusted_keys() and m.state["keys"][-1]["via"] == "endorsed"
 
 
-def test_foreign_server_key_is_refused(server, home):
-    """A server signing with a key that is not endorsed by a trusted key cannot unlock the app."""
+def test_attacker_vps_cannot_issue_an_accepted_license(server, home):
+    """Someone runs this very server software on their own VPS, with their own signing keys, admin account and
+    lifetime codes. The app trusts only the official public key it was built with: nothing it says counts."""
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from akeno_server.auth.tokens import b64e
-    other = Ed25519PrivateKey.generate()
-    raw = signing.raw_public(other.public_key())
-    m = client(server, keys={signing.kid_for(raw): b64e(raw)})
-    with pytest.raises(Exception):
+    official = Ed25519PrivateKey.generate()               # the real AKENO key, which the attacker does not have
+    raw = signing.raw_public(official.public_key())
+    official_keys = {signing.kid_for(raw): b64e(raw)}
+    m = client(server, keys=official_keys)
+    with pytest.raises(ApiError) as err:
         m.create_account("player@example.test", PASSWORD)
-        m.redeem(make_codes("monthly")[0])
-    assert not m.view().unlocked
+    assert err.value.code == "unverified_response"
+    m._access = None
+    with pytest.raises(ApiError):
+        m.redeem(make_codes("lifetime")[0])                # a "lifetime" code of the attacker's server
+    assert not m.view().unlocked and not m.state.get("certificate") and not m.state.get("lease")
+    assert set(m.trusted_keys()) == set(official_keys), "the attacker's keys were never learned"
+    later = client(server, keys=official_keys, api=DownApi)
+    assert not later.view().unlocked and later.view().status is not Status.LIFETIME_OFFLINE
 
 
-def test_build_without_keys_pins_on_first_sign_in(server, home):
+def test_build_without_keys_accepts_no_license(server, home):
     m = client(server, keys={})
-    m.create_account("player@example.test", PASSWORD)
-    assert m.state["keys"][0]["via"] == "pinned"
-    assert m.redeem(make_codes("monthly")[0]).unlocked
+    with pytest.raises(ApiError) as err:
+        m.create_account("player@example.test", PASSWORD)
+    assert err.value.code == "no_trusted_keys"
+    assert not m.state.get("keys") and not m.view().unlocked, "a server's keys are never pinned"
 
 
 def test_sign_out_forgets_license_but_nothing_else(server, home):

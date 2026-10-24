@@ -34,6 +34,7 @@ from akeno_server.models import (Device, License, LicenseCode, LicenseEvent, Lic
                                  LicenseValidation, OfflineCertificate, User)
 
 ISSUER = "akeno-licensing"
+AUDIENCE = "akeno-desktop"          # the Windows app; tokens for anything else must never verify there
 RANK = {LicenseType.TRIAL_24H: 0, LicenseType.TRIAL_72H: 1, LicenseType.MONTHLY: 2, LicenseType.LIFETIME: 3}
 
 
@@ -303,17 +304,20 @@ def _ts(value: datetime | None) -> int | None:
     return None if value is None else int(value.timestamp())
 
 
-def issue_lease(db: Session, user: User, lic: License, device: Device) -> tuple[str, dict]:
-    """A signed, device-bound statement that the license runs; valid offline until ``exp``."""
+def issue_lease(db: Session, user: User, lic: License, device: Device, nonce: str | None = None) -> tuple[str, dict]:
+    """A signed, device-bound statement that the license runs; valid offline until ``exp``. ``nonce`` is the
+    app's random value of this request: the app accepts the lease as fresh only with its own nonce."""
     now = utcnow()
     grace = settings.get(db, "offline_grace_hours") * 3600
     exp = now + timedelta(seconds=grace)
     if lic.expires_at is not None:
         exp = min(exp, lic.expires_at)
-    payload = {"typ": "akeno-lease", "v": 1, "iss": ISSUER, "sub": str(user.id), "lic": str(lic.id),
-               "dev": str(device.id), "dfp": device.fingerprint, "ent": ENTITLEMENT, "lt": lic.license_type,
-               "lexp": _ts(lic.expires_at), "act": _ts(lic.activated_at), "iat": _ts(now), "exp": _ts(exp),
-               "grace": grace, "jti": secrets.token_hex(8)}
+    payload = {"typ": "akeno-lease", "v": 2, "iss": ISSUER, "aud": AUDIENCE, "sub": str(user.id),
+               "lic": str(lic.id), "dev": str(device.id), "dfp": device.fingerprint, "ent": ENTITLEMENT,
+               "lt": lic.license_type, "lexp": _ts(lic.expires_at), "act": _ts(lic.activated_at), "iat": _ts(now),
+               "nbf": _ts(now), "exp": _ts(exp), "grace": grace, "jti": secrets.token_hex(8)}
+    if nonce:
+        payload["nonce"] = nonce
     kid, key = signing.store().active()
     return signing.sign(key, kid, "akeno-lease", payload), payload
 
@@ -332,9 +336,10 @@ def issue_offline_certificate(db: Session, user: User, lic: License, device: Dev
     cert = OfflineCertificate(license_id=lic.id, device_id=device.id, kid=kid, issued_at=now, payload_sha256="")
     db.add(cert)
     db.flush()
-    payload = {"typ": "akeno-offline-license", "v": 1, "iss": ISSUER, "sub": str(user.id), "lic": str(lic.id),
-               "dev": str(device.id), "dfp": device.fingerprint, "ent": ENTITLEMENT, "lt": lic.license_type,
-               "act": _ts(lic.activated_at), "iat": _ts(now), "serial": str(cert.id)}
+    payload = {"typ": "akeno-offline-license", "v": 2, "iss": ISSUER, "aud": AUDIENCE, "sub": str(user.id),
+               "lic": str(lic.id), "dev": str(device.id), "dfp": device.fingerprint, "ent": ENTITLEMENT,
+               "lt": lic.license_type, "act": _ts(lic.activated_at), "iat": _ts(now), "nbf": _ts(now),
+               "serial": str(cert.id)}
     token = signing.sign(key, kid, "akeno-offline-license", payload)
     cert.payload_sha256 = hashlib.sha256(token.encode()).hexdigest()
     return token, payload
@@ -350,9 +355,24 @@ def current_certificate_ok(db: Session, serial: str | None, device: Device) -> b
     return cert is not None and cert.revoked_at is None and cert.device_id == device.id
 
 
+def validation_statement(user: User, lic: License | None, device: Device | None, result: str, nonce: str,
+                         certificate_revoked: bool, now) -> str:
+    """The signed answer to one validation request. The app acts on a validation (unlock, lock, delete a
+    certificate) only through this statement, never through the unsigned JSON next to it."""
+    payload = {"typ": "akeno-validation", "v": 2, "iss": ISSUER, "aud": AUDIENCE, "sub": str(user.id),
+               "dev": str(device.id) if device else None, "dfp": device.fingerprint if device else None,
+               "ent": ENTITLEMENT, "nonce": nonce, "res": result, "crev": bool(certificate_revoked),
+               "st": lic.status if lic else "none", "lt": lic.license_type if lic else None,
+               "lexp": _ts(lic.expires_at) if lic else None, "act": _ts(lic.activated_at) if lic else None,
+               "iat": _ts(now), "exp": _ts(now + timedelta(minutes=10)), "jti": secrets.token_hex(8)}
+    kid, key = signing.store().active()
+    return signing.sign(key, kid, "akeno-validation", payload)
+
+
 def validate(db: Session, user: User, device: Device | None, app_version: str = "", ip: str = "",
-             certificate_serial: str | None = None) -> dict:
-    """The app's periodic check: license state plus a fresh lease (and, for lifetime, the certificate)."""
+             certificate_serial: str | None = None, nonce: str = "") -> dict:
+    """The app's periodic check: license state plus a fresh lease (and, for lifetime, the certificate), all
+    bound to the app's nonce in a signed validation statement."""
     now = utcnow()
     lic = license_of(db, user.id)
     result = "ok"
@@ -376,7 +396,7 @@ def validate(db: Session, user: User, device: Device | None, app_version: str = 
         device.last_seen_at = now
         if app_version:
             device.app_version = app_version[:40]
-        out["lease"], _ = issue_lease(db, user, lic, device)
+        out["lease"], _ = issue_lease(db, user, lic, device, nonce)
         if lic.lifetime:
             if current_certificate_ok(db, certificate_serial, device):
                 out["offline_certificate"] = "unchanged"
@@ -385,6 +405,7 @@ def validate(db: Session, user: User, device: Device | None, app_version: str = 
     # the app deletes the certificate it holds: the license, account or PC no longer qualifies for it
     out["certificate_revoked"] = bool(certificate_serial) and (result != "ok" or not lic.lifetime)
     out["result"] = result
+    out["validation"] = validation_statement(user, lic, device, result, nonce, out["certificate_revoked"], now)
     db.add(LicenseValidation(user_id=user.id, license_id=lic.id if lic else None,
                              device_id=device.id if device else None, result=result, app_version=app_version[:40],
                              ip=ip))

@@ -106,6 +106,7 @@ class LicenseGate(QWidget):
         rl.addWidget(self.pages, 1)
         foot = QHBoxLayout()
         self.server_link = button(t("License server…"), kind="link", on_click=lambda: self.show_page("server"))
+        self.server_link.setVisible(not self.m.config.locked)     # a built AKENO talks to its own server only
         foot.addWidget(self.server_link)
         foot.addStretch(1)
         self.lang = QComboBox()
@@ -219,12 +220,18 @@ class LicenseGate(QWidget):
         lay.addStretch(1)
         # license server address
         lay = self._page("server")
-        lay.addWidget(label(t("The address of the AKENO license server. It comes with this copy of AKENO; change it "
+        locked = self.m.config.locked
+        lay.addWidget(label(t("This copy of AKENO accepts licenses only from the official AKENO license server it "
+                              "was built with. Download AKENO from the official release page.") if locked else
+                            t("The address of the AKENO license server. It comes with this copy of AKENO; change it "
                               "only if you run your own server."), "dim", shrink=True))
         self.server_edit = self._field(lay, "Server address (https://…)")
         self.server_edit.setText(self.m.config.server_url)
+        self.server_edit.setReadOnly(locked)
         row = QHBoxLayout()
-        row.addWidget(button(t("Save"), "check", "primary", on_click=self._save_server))
+        save = button(t("Save"), "check", "primary", on_click=self._save_server)
+        save.setVisible(not locked)
+        row.addWidget(save)
         row.addWidget(button(t("Back"), kind="link", on_click=lambda: self.refresh(self.m.view())))
         row.addStretch(1)
         lay.addLayout(row)
@@ -405,7 +412,7 @@ class LicenseGate(QWidget):
     def _save_server(self) -> None:
         try:
             self.m.set_server(self.server_edit.text())
-        except ValueError as exc:
+        except (ValueError, PermissionError) as exc:
             self._say(error_text(exc), error=True)
             return
         self._say(t("Saved."))

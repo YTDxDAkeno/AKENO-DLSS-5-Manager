@@ -41,15 +41,25 @@ class ApiError(Exception):
         return self.status == 401
 
 
-def check_url(url: str) -> str:
+def check_url(url: str, strict: bool | None = None) -> str:
+    """HTTPS only. Plain HTTP to this PC itself is allowed when running from source (tests), never in a build."""
+    from akeno.licensing.config import production
+    strict = production() if strict is None else strict
     url = (url or "").strip().rstrip("/")
     parsed = urlparse(url)
     local = parsed.hostname in ("localhost", "127.0.0.1", "::1")
-    if parsed.scheme != "https" and not (parsed.scheme == "http" and local):
+    if parsed.scheme != "https" and not (parsed.scheme == "http" and local and not strict):
         raise ValueError("The license server address must start with https://")
     if not parsed.hostname:
         raise ValueError("The license server address is incomplete.")
     return url
+
+
+class _NoRedirects(urllib.request.HTTPRedirectHandler):
+    """The license API never redirects: following one could leave HTTPS or the official host."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 class LicenseApi:
@@ -57,6 +67,8 @@ class LicenseApi:
         self.base = check_url(base_url)
         self.timeout = timeout
         self._ctx = ssl.create_default_context()      # system certificate store; verification always on
+        self._ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+        self._opener = urllib.request.build_opener(_NoRedirects, urllib.request.HTTPSHandler(context=self._ctx))
 
     def call(self, method: str, path: str, body: dict | None = None, token: str | None = None) -> dict | list:
         data = None if body is None else json.dumps(body).encode("utf-8")
@@ -68,7 +80,7 @@ class LicenseApi:
         if token:
             req.add_header("Authorization", f"Bearer {token}")
         try:
-            with urllib.request.urlopen(req, timeout=self.timeout, context=self._ctx) as resp:
+            with self._opener.open(req, timeout=self.timeout) as resp:
                 raw = resp.read()
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:

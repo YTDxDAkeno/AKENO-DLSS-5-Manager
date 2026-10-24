@@ -45,6 +45,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--keys", default="", help='JSON: {"keys": [{"kid", "public_key"}]} or a list of keys')
     ap.add_argument("--fetch", action="store_true", help="read the keys from the server's /api/v1/system/keys")
     ap.add_argument("--output", type=Path, default=TARGET)
+    ap.add_argument("--require", action="store_true",
+                    help="fail without a server address and at least one key (release builds)")
     args = ap.parse_args(argv)
     url = args.server_url.strip().rstrip("/")
     if url and not url.startswith("https://"):
@@ -59,8 +61,12 @@ def main(argv: list[str] | None = None) -> int:
         with urllib.request.urlopen(f"{url}/api/v1/system/keys", timeout=20) as resp:
             keys = json.load(resp).get("keys", [])
     keys = clean(keys)
+    if args.require and not (url and keys):
+        raise SystemExit("a release build needs AKENO_LICENSE_SERVER_URL and AKENO_LICENSE_PUBLIC_KEYS: without them "
+                         "it could not verify any license")
     args.output.write_text(json.dumps({"server_url": url, "keys": keys}, indent=2) + "\n", encoding="utf-8")
-    print(f"{args.output}: server {url or '(none)'}, {len(keys)} key(s)")
+    print(f"{args.output}: server {url or '(none)'}, {len(keys)} key(s): {', '.join(k['kid'] for k in keys)}")
+    print("compare the key ids with 'akeno-server keys list' on the license server")
     return 0
 
 

@@ -16,6 +16,10 @@ from akeno.licensing.manager import DeviceLimitReached
 from akeno.ui.widgets import StatusPill, label
 
 ERRORS = {
+    "unverified_response": "The license server's answer could not be verified. Nothing was changed; your saved "
+                           "license stays as it is.",
+    "no_trusted_keys": "This copy of AKENO has no license verification keys. Download AKENO from the official "
+                       "release page.",
     "invalid_credentials": "E-mail address or password is wrong.",
     "totp_required": "Enter the code from your authenticator app.",
     "invalid_totp": "The authenticator code is wrong or was already used.",

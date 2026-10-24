@@ -108,10 +108,13 @@ class ValidateIn(Strict):
     device_id: str = Field(max_length=40)
     app_version: str = Field("", max_length=40)
     certificate_serial: str | None = Field(None, max_length=40)
+    # a fresh random value per request: the signed answer must carry it (no replayed answers)
+    nonce: str = Field(min_length=22, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class ValidateOut(BaseModel):
     result: str
+    validation: str
     license: LicenseOut
     server_time: datetime
     lease: str | None

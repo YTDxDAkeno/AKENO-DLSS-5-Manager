@@ -41,7 +41,8 @@ def validate(body: schemas.ValidateIn, request: Request, caller: Caller = Depend
     limit(request, "validate", str(caller.user.id))
     device = lic.find_device(db, caller.user, body.device_id)
     try:
-        out = lic.validate(db, caller.user, device, body.app_version, client_ip(request), body.certificate_serial)
+        out = lic.validate(db, caller.user, device, body.app_version, client_ip(request), body.certificate_serial,
+                           body.nonce)
     except SigningUnavailable as exc:
         raise unavailable("signing_unavailable", "The license server cannot sign licenses right now.") from exc
     if device is not None and caller.session.device_id != device.id:

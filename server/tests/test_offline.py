@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import secrets
+
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 from akeno_server import clock
@@ -19,11 +21,16 @@ def trusted(client) -> dict:
             for k in client.get("/api/v1/system/keys").json()["keys"]}
 
 
-def validate(client, tokens, device, serial=None):
+def validate(client, tokens, device, serial=None, nonce=None):
+    nonce = nonce or secrets.token_urlsafe(24)
     r = client.post("/api/v1/licenses/validate", headers=bearer(tokens),
-                    json={"device_id": device["id"], "app_version": "3.0.0", "certificate_serial": serial})
+                    json={"device_id": device["id"], "app_version": "3.0.0", "certificate_serial": serial,
+                          "nonce": nonce})
     assert r.status_code == 200, r.text
-    return r.json()
+    out = r.json()
+    _, statement = signing.verify(out["validation"], trusted(client), "akeno-validation")
+    assert statement["nonce"] == nonce and statement["res"] == out["result"]
+    return out
 
 
 def setup(client, kind="lifetime"):
@@ -182,6 +189,34 @@ def test_validation_without_signing_key_reports_unavailable(app, monkeypatch, tm
         tokens = register(c)
         c.post("/api/v1/licenses/redeem", headers=bearer(tokens), json={"code": make_codes("monthly")[0]})
         device = register_device(c, tokens)
-        r = c.post("/api/v1/licenses/validate", headers=bearer(tokens), json={"device_id": device["id"]})
+        r = c.post("/api/v1/licenses/validate", headers=bearer(tokens),
+                   json={"device_id": device["id"], "nonce": secrets.token_urlsafe(24)})
         assert r.status_code == 503 and r.json()["error"]["code"] == "signing_unavailable"
         assert c.get("/api/v1/system/ready").status_code == 503
+
+
+def test_signed_answers_carry_issuer_audience_device_and_the_nonce(client):
+    tokens, device = setup(client, "monthly")
+    nonce = secrets.token_urlsafe(24)
+    out = validate(client, tokens, device, nonce=nonce)
+    keys = trusted(client)
+    _, lease = signing.verify(out["lease"], keys, "akeno-lease")
+    _, statement = signing.verify(out["validation"], keys, "akeno-validation")
+    for doc in (lease, statement):
+        assert doc["iss"] == "akeno-licensing" and doc["aud"] == "akeno-desktop" and doc["dev"] == device["id"]
+        assert doc["nonce"] == nonce and doc["ent"] == "akeno-suite"
+    assert lease["nbf"] <= lease["iat"] < lease["exp"] and statement["st"] == "active"
+    assert statement["lt"] == "monthly" and statement["crev"] is False
+    r = client.post("/api/v1/licenses/validate", headers=bearer(tokens), json={"device_id": device["id"]})
+    assert r.status_code == 422, "a validation without the app's nonce is refused"
+    r = client.post("/api/v1/licenses/validate", headers=bearer(tokens),
+                    json={"device_id": device["id"], "nonce": "short"})
+    assert r.status_code == 422
+
+
+def test_lifetime_certificate_has_issuer_and_audience(client):
+    tokens, device = setup(client)
+    out = validate(client, tokens, device)
+    _, cert = signing.verify(out["offline_certificate"], trusted(client), "akeno-offline-license")
+    assert cert["iss"] == "akeno-licensing" and cert["aud"] == "akeno-desktop" and cert["lt"] == "lifetime"
+    assert cert["dev"] == device["id"] and "exp" not in cert, "lifetime: no end date, valid offline for good"
