@@ -51,9 +51,20 @@ There are two layouts:
   ScreenPlay (`windowsintegration.cpp`, `IsWindows24H2OrNewer`, `searchWorkerWindowToParentTo`) looks for the
   `WorkerW` among `Progman`'s children on 24H2, not among the top-level windows.
 
-**Root cause in AKENO before 2.0** (`akeno/desktop/winapi.py` at `ed5d0a7`):
+**Root cause in AKENO before 2.0** (`akeno/desktop/winapi.py` and `renderer.py` at `ed5d0a7`):
 
-- `attach()` called `SetParent` into `Progman` without changing the window's styles. The window stayed a
+- **The wallpaper was usually never attached at all.**
+  - The renderer looked up its monitor by name: `{m.name: m for m in winapi.monitors()}[self.monitor]`. Win32 names
+    monitors by device (`\\.\DISPLAY1`), but the monitor name comes from the configuration, which uses
+    `QScreen.name()`. Qt 6 returns the monitor's model name there (the GitHub Windows runner reports
+    `HyperVMonitor`; a gaming PC reports its monitor's model).
+  - When the names did not match, `place()` skipped `attach()` entirely and showed the frameless window at the
+    screen's geometry, as an ordinary window over the desktop icons.
+  - The Desktop Studio 2.0 measurement on the Windows runner found this (`tools/desktop_check.py`: "this monitor is
+    not connected"). Qt screens are now matched to Win32 monitors by their physical position
+    (`winapi.monitor_of`), and the name counts only where it is the device name.
+
+- Where attaching did run, `attach()` called `SetParent` into `Progman` without changing the window's styles. The window stayed a
   `WS_POPUP` without `WS_CHILD` and without `WS_EX_LAYERED`. On the raised desktop, such a window is not
   composited below the layered icon view, so it can end up in front of the icons.
 - `attach()` never checked the result: no parent check, no z-order check, no size check.
@@ -169,4 +180,6 @@ The media in `tests/fixtures/media` are test patterns generated with FFmpeg's `t
 
    Archives with executables, absolute paths or `..` entries are refused before anything is written.
 9. **Themes never run code.** `.akenotheme` stays a data-only ZIP (see `DESKTOP_STUDIO.md`). The new fields are
-   optional, so version-1 themes from 1.x still import.
+   optional, so themes from AKENO 3.0 (format version 1) still import.
+10. **Monitors are matched by physical position, not by name** (`winapi.monitor_of`). The configuration keeps Qt's
+    screen names, so existing settings stay valid.

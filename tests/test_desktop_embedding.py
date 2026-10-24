@@ -286,6 +286,44 @@ def test_hide_never_detaches():
         "closing hides the window where it is; it never becomes a top-level window over the desktop"
 
 
+class FakeScreen:
+    def __init__(self, name, x, y, width, height, dpr=1.0):
+        self._name, self.rect, self.dpr = name, (x, y, width, height), dpr
+
+    def name(self):
+        return self._name
+
+    def geometry(self):
+        from PySide6.QtCore import QRect
+        return QRect(*self.rect)
+
+    def devicePixelRatio(self):
+        return self.dpr
+
+
+def real_monitor(monkeypatch) -> str:
+    """Win32 knows the main screen as DISPLAY1 while Qt 6 names it by model (on the CI runner: "HyperVMonitor")."""
+    from PySide6.QtGui import QGuiApplication
+    screen = QGuiApplication.primaryScreen()
+    x, y, width, height = w.native_rect(screen)
+    monkeypatch.setattr(w, "monitors", lambda: [w.Monitor(r"\\.\DISPLAY1", x, y, width, height, True)])
+    return screen.name()
+
+
+def test_qt_screens_are_matched_to_windows_monitors_by_position_not_name():
+    d1, d2, d3 = r"\\.\DISPLAY1", r"\\.\DISPLAY2", r"\\.\DISPLAY3"
+    mons = [w.Monitor(d1, 0, 0, 3840, 2160, True), w.Monitor(d2, 3840, 0, 1920, 1080),
+            w.Monitor(d3, -2560, -200, 2560, 1440)]
+    screens = [FakeScreen("DELL U3223QE", 0, 0, 2560, 1440, 1.5), FakeScreen("HyperVMonitor", 3840, 0, 1920, 1080),
+               FakeScreen("LG ULTRAGEAR", -2560, -200, 1707, 960, 1.5)]
+    assert w.monitor_of("DELL U3223QE", screens, mons).name == d1, "4K at 150 %: Qt size 2560x1440"
+    assert w.monitor_of("HyperVMonitor", screens, mons).name == d2
+    assert w.monitor_of("LG ULTRAGEAR", screens, mons).name == d3, "left of and above the main monitor"
+    assert w.monitor_of("unplugged", screens, mons) is None
+    assert w.monitor_of(d2, [FakeScreen(d2, 1, 1, 10, 10)], mons).name == d2, "Qt builds that use device names"
+    assert w.match_monitor("x", (3900, 10, 100, 100), mons).name == d2, "otherwise the monitor under its centre"
+
+
 @pytest.mark.parametrize("layout", ["classic", "raised"])
 def test_find_layer_describes_the_desktop(layout):
     shell = Shell(layout)
@@ -298,21 +336,21 @@ def test_renderer_refuses_to_show_a_wallpaper_it_could_not_attach(qapp, tmp_path
     """The safety rule: if attaching fails, the window is never shown and the error is reported."""
     from akeno.desktop import config as cfgmod
     from akeno.desktop import renderer
-    from PySide6.QtGui import QColor, QImage
+    from PySide6.QtGui import QColor, QGuiApplication, QImage
     img = QImage(64, 36, QImage.Format.Format_RGB32)
     img.fill(QColor("#ff0000"))
     img.save(str(tmp_path / "a.png"))
     cfg = cfgmod.load()
-    cfg["wallpapers"]["M"] = dict(cfgmod.WALLPAPER_DEFAULTS, enabled=True,
+    cfg["wallpapers"][QGuiApplication.primaryScreen().name()] = dict(cfgmod.WALLPAPER_DEFAULTS, enabled=True,
                                   playlist=[{"path": str(tmp_path / "a.png"), "kind": "image"}])
     file = tmp_path / "desktop.json"
     cfgmod.save(cfg, file)
     monkeypatch.setattr(w, "WINDOWS", True)
     monkeypatch.setattr(w, "virtual_desktop_id", lambda: None)
-    monkeypatch.setattr(w, "monitors", lambda: [w.Monitor("M", 0, 0, 640, 360, True)])
+    name = real_monitor(monkeypatch)
     monkeypatch.setattr(w, "attach", lambda *a, **k: w.Embedding(False, problems=["no desktop layer"]))
     monkeypatch.setattr(w, "hide", lambda hwnd, api=None: None)
-    win = renderer.WallpaperWindow("M", file)
+    win = renderer.WallpaperWindow(name, file)
     shown = []
     monkeypatch.setattr(win, "show", lambda: shown.append(True))
     assert not win.embed(tries=2, delay=0)
@@ -329,14 +367,14 @@ def test_renderer_hides_when_verification_fails_after_showing(qapp, tmp_path, mo
     shell = Shell("raised")
     monkeypatch.setattr(w, "WINDOWS", True)
     monkeypatch.setattr(w, "virtual_desktop_id", lambda: None)
-    monkeypatch.setattr(w, "monitors", lambda: [w.Monitor("M", 0, 0, 640, 360, True)])
+    name = real_monitor(monkeypatch)
     layer = w.find_layer(shell)
     monkeypatch.setattr(w, "attach", lambda *a, **k: w.Embedding(True, "raised", [], layer))
     monkeypatch.setattr(w, "place", lambda *a, **k: None)
     monkeypatch.setattr(w, "verify", lambda *a, **k: ["the wallpaper is not below the desktop icons"])
     hidden = []
     monkeypatch.setattr(w, "hide", lambda hwnd, api=None: hidden.append(hwnd))
-    win = renderer.WallpaperWindow("M", file)
+    win = renderer.WallpaperWindow(name, file)
     monkeypatch.setattr(win, "show", lambda: None)
     assert not win.embed(tries=1, delay=0)
     assert hidden and not win.embedded and "not below the desktop icons" in win.error
@@ -350,10 +388,10 @@ def test_renderer_leaves_when_explorer_restarts(qapp, tmp_path, monkeypatch):
     cfgmod.save(cfgmod.load(), file)
     monkeypatch.setattr(w, "WINDOWS", True)
     monkeypatch.setattr(w, "virtual_desktop_id", lambda: None)
-    monkeypatch.setattr(w, "monitors", lambda: [w.Monitor("M", 0, 0, 640, 360, True)])
+    name = real_monitor(monkeypatch)
     monkeypatch.setattr(w, "hide", lambda hwnd, api=None: None)
     monkeypatch.setattr(w, "still_attached", lambda *a, **k: False)
-    win = renderer.WallpaperWindow("M", file)
+    win = renderer.WallpaperWindow(name, file)
     win.layer = w.Layer("workerw", 1, 2, 3, 1)
     codes = []
     win.lost = codes.append

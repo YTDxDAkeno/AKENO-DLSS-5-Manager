@@ -310,7 +310,7 @@ class WallpaperWindow(QWidget):
         return str(cfgmod.load(self.config_path).get("runtime", {}).get("layering", "auto"))
 
     def target(self) -> winapi.Monitor | None:
-        return next((m for m in winapi.monitors() if m.name == self.monitor), None)
+        return winapi.monitor_of(self.monitor, QGuiApplication.screens())
 
     def embed(self, tries: int = ATTACH_TRIES, delay: float = 1.0) -> bool:
         """Windows: behind the desktop icons or not at all. Elsewhere (development, tests): a preview window."""

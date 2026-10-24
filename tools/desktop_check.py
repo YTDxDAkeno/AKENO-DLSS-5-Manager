@@ -119,7 +119,7 @@ def main() -> int:
                             abs(c.blue() - target.blue()) < 40:
                         hits += 1
                 result["screen_share_with_wallpaper_colour"] = round(hits / len(samples), 2)
-            mon = next((m for m in winapi.monitors() if m.name == name), None)
+            mon = winapi.monitor_of(name, QGuiApplication.screens())
             if renderer is not None and renderer.hwnd and mon is not None:
                 result["window"] = winapi.inspect(renderer.hwnd, mon)
             phases[phase] = result

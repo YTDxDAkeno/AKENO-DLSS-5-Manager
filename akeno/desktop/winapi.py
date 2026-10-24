@@ -98,7 +98,7 @@ SPAWN_WORKER = 0x052C
 
 @dataclass(frozen=True)
 class Monitor:
-    name: str                  # \\.\DISPLAY1 (QScreen.name() on Windows)
+    name: str                  # \\.\DISPLAY1 (Qt 6 names screens by model instead: see monitor_of)
     x: int
     y: int
     width: int
@@ -436,6 +436,36 @@ def monitors() -> list[Monitor]:
         return True
     user32.EnumDisplayMonitors(None, None, MonitorEnumProc(visit), 0)
     return out
+
+
+def match_monitor(name: str, rect: tuple[int, int, int, int], mons: list[Monitor] | None = None) -> Monitor | None:
+    """The Win32 monitor of a Qt screen.
+
+    Qt 6 names a screen by its model ("DELL U2720Q", "HyperVMonitor"), Win32 by its device (``DISPLAY1``), so
+    the screen's native rectangle decides; the name only counts where it is the device name. ``rect`` is the screen's
+    top-left (Qt keeps it in physical pixels) and its size in physical pixels."""
+    mons = monitors() if mons is None else mons
+    x, y, w, h = rect
+    for m in mons:
+        if m.name == name:
+            return m
+    for m in mons:
+        if (m.x, m.y) == (x, y):
+            return m
+    cx, cy = x + w // 2, y + h // 2
+    return next((m for m in mons if m.x <= cx < m.x + m.width and m.y <= cy < m.y + m.height), None)
+
+
+def native_rect(screen) -> tuple[int, int, int, int]:
+    """A QScreen in physical pixels: Qt 6 keeps a screen's top-left native and scales only its size."""
+    g, dpr = screen.geometry(), screen.devicePixelRatio()
+    return g.x(), g.y(), round(g.width() * dpr), round(g.height() * dpr)
+
+
+def monitor_of(name: str, screens, mons: list[Monitor] | None = None) -> Monitor | None:
+    """The Win32 monitor of the Qt screen called ``name`` (what the configuration uses), None when it is gone."""
+    screen = next((s for s in screens if s.name() == name), None)
+    return None if screen is None else match_monitor(name, native_rect(screen), mons)
 
 
 def fullscreen_app() -> bool:

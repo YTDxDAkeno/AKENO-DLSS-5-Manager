@@ -71,20 +71,23 @@ A new wallpaper for a monitor gives it a fresh start. The runtime also ends by i
      `WorkerW` that sits behind the `WorkerW` holding the icons.
    - **Alternative** (Desktop Runtime tab → Desktop layer → "Inside Windows' wallpaper window"): on the raised
      desktop, a child of the wallpaper `WorkerW`. This is for PCs where the default shows nothing.
-3. **Verified before it is shown.** `winapi.verify()` checks:
+3. **Monitors are matched by position.** Qt 6 names screens by model ("DELL U3223QE", "HyperVMonitor"), Win32 by
+   device (`\\.\DISPLAY1`). `winapi.monitor_of()` maps the configuration's Qt screen name to the Win32 monitor at
+   the same physical position. In 3.0 a name mismatch skipped attaching and showed a plain window over the icons.
+4. **Verified before it is shown.** `winapi.verify()` checks:
    - the parent;
    - the z-order (below the icon view, or behind the icon host);
    - that the window covers the monitor within 2 px;
    - visibility.
-4. **Fail-safe.** If no layer exists, or verification fails after five tries, the window is hidden and never shown,
+5. **Fail-safe.** If no layer exists, or verification fails after five tries, the window is hidden and never shown,
    and the renderer exits with `EMBED_FAILED`. There is no fallback window: a wallpaper that cannot sit behind
    the icons is not shown at all. `SetParent(NULL)` is never called, so the wallpaper never becomes a top-level
    window over the desktop.
-5. **Explorer restart.** The renderer checks every 2 s that it is still attached. If not, it hides itself and exits
+6. **Explorer restart.** The renderer checks every 2 s that it is still attached. If not, it hides itself and exits
    with `DESKTOP_LOST`.
-6. **No `SPI_SETDESKWALLPAPER` on the raised desktop.** That call would destroy Explorer's `WorkerW`. On the classic
+7. **No `SPI_SETDESKWALLPAPER` on the raised desktop.** That call would destroy Explorer's `WorkerW`. On the classic
    layout it redraws Windows' own wallpaper after the last renderer stops.
-7. **Clicks go through.** The window is `WS_EX_TRANSPARENT` and never takes the focus. Desktop clicks reach the icon
+8. **Clicks go through.** The window is `WS_EX_TRANSPARENT` and never takes the focus. Desktop clicks reach the icon
    view; web wallpapers receive the mouse position over the socket instead.
 
 Widgets are never attached into Explorer. They stay ordinary windows at the bottom of the z-order. On **Win+D** the

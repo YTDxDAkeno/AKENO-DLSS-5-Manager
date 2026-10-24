@@ -451,10 +451,10 @@ class DesktopHost(QObject):
         workers.run(lambda: GameWatcher(lambda: games).scan(), done, failed)
 
     def state_for(self, monitor: str) -> pause.State:
-        mons = {m.name: m for m in winapi.monitors()}
+        mon = winapi.monitor_of(monitor, QGuiApplication.screens())
         return pause.State(game_running=self.game_running(), fullscreen_app=winapi.fullscreen_app(),
                            on_battery=winapi.on_battery(), remote_session=winapi.remote_session(),
-                           covered=monitor in mons and winapi.covered(mons[monitor]),
+                           covered=mon is not None and winapi.covered(mon),
                            cpu_percent=psutil.cpu_percent(None), user_paused=self.user_paused)
 
     def evaluate(self) -> None:
