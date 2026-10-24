@@ -79,6 +79,8 @@ verifying" link when it cannot know whether verification is required).
 No database migration, no new table or column. Tests: `server/tests/test_account_mail.py` (20) and the account
 section of `server/tests/test_client_e2e.py` (8, the app's code against a running server).
 
+**Integrating into production:** see `docs/handover/CODEX_ACCOUNTS_HANDOVER.md`. It covers the targeted patch `accounts-server.patch`, a hunk-by-hunk intent list for conflicts with production fixes, the rollout and rollback, and the acceptance check `tools/account_acceptance.py`.
+
 ## Production configuration this needs (for the VPS)
 
 1. **`AKENO_PUBLIC_URL=https://akeno.online`** in the environment of *akeno-api* (and akeno-web).

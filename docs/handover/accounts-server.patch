@@ -1,0 +1,513 @@
+diff --git a/server/akeno_server/api/auth.py b/server/akeno_server/api/auth.py
+index 3978897..fa0723e 100644
+--- a/server/akeno_server/api/auth.py
++++ b/server/akeno_server/api/auth.py
+@@ -5,18 +5,24 @@ from __future__ import annotations
+ from fastapi import APIRouter, Depends, Request, status
+ from sqlalchemy.orm import Session
+ 
++from akeno_server import mail
+ from akeno_server.api import schemas
+ from akeno_server.api.common import user_out
+ from akeno_server.api.deps import Caller, base_url, client_ip, current, limit, not_in_maintenance, user_agent
+ from akeno_server.auth import service as auth
+ from akeno_server.db import get_db
++from akeno_server.errors import ApiError, unavailable
+ 
+ router = APIRouter(prefix="/auth", tags=["auth"], dependencies=[Depends(not_in_maintenance)])
+ 
+ 
+-def _tokens(issued: auth.IssuedSession, user) -> dict:
++def _tokens(issued: auth.IssuedSession, user, **extra) -> dict:
+     return {"access_token": issued.access_token, "token_type": "bearer", "expires_in": issued.expires_in,
+-            "refresh_token": issued.token, "user": user_out(user)}
++            "refresh_token": issued.token, "user": user_out(user), **extra}
++
++
++def _mail_failed() -> ApiError:
++    return unavailable("email_delivery_failed", "The e-mail could not be sent. Please try again later.")
+ 
+ 
+ @router.post("/register", status_code=status.HTTP_201_CREATED, response_model=schemas.TokensOut)
+@@ -24,11 +30,11 @@ def register(body: schemas.RegisterIn, request: Request, db: Session = Depends(g
+     limit(request, "register")
+     auth.registration_allowed(db)
+     user = auth.create_user(db, body.email, body.password, body.display_name, body.language)
+-    auth.send_verification(db, user, base=base_url(request))
++    delivery = auth.delivery(auth.send_verification(db, user, base=base_url(request)))
+     user.last_login_at = user.created_at
+     issued = auth.start_session(db, user, "app", client_ip(request), user_agent(request))
+     db.commit()
+-    return _tokens(issued, user)
++    return _tokens(issued, user, verification_email=delivery)
+ 
+ 
+ @router.post("/login", response_model=schemas.TokensOut)
+@@ -82,14 +88,46 @@ def verify_email(body: schemas.TokenIn, request: Request, db: Session = Depends(
+     return {"status": "verified", "email": user.email}
+ 
+ 
+-@router.post("/verify-email/resend", status_code=status.HTTP_202_ACCEPTED)
++@router.post("/verify-email/resend", status_code=status.HTTP_202_ACCEPTED, response_model=schemas.EmailSentOut)
+ def resend(request: Request, caller: Caller = Depends(current), db: Session = Depends(get_db)):
++    """202 ``sent`` only when the mail server accepted the e-mail; 503 ``email_unavailable`` or
++    ``email_delivery_failed`` otherwise."""
++    user = db.merge(caller.user)
++    if user.email_verified_at is not None:
++        return {"status": "already_verified", "email": user.email}
+     limit(request, "reset_email", "verify:" + str(caller.user.id))
++    if not mail.deliverable():
++        raise auth.email_unavailable()
++    sent = auth.send_verification(db, user, base=base_url(request))
++    db.commit()
++    if not sent:
++        raise _mail_failed()
++    return {"status": "sent", "email": user.email}
++
++
++@router.post("/change-email", status_code=status.HTTP_202_ACCEPTED, response_model=schemas.EmailSentOut)
++def change_email(body: schemas.ChangeEmailIn, request: Request, caller: Caller = Depends(current),
++                 db: Session = Depends(get_db)):
++    """Like the website: the current password confirms it, a link goes to the new address, and the address changes
++    only when that link is opened (the old address is told). Also corrects a mistyped address before it was
++    confirmed."""
++    limit(request, "reset_email", "email-change:" + str(caller.user.id))
++    if not mail.deliverable():
++        raise auth.email_unavailable()
+     user = db.merge(caller.user)
+-    if user.email_verified_at is None:
+-        auth.send_verification(db, user, base=base_url(request))
+-        db.commit()
+-    return {"status": "sent" if user.email_verified_at is None else "already_verified"}
++    sent = auth.change_email(db, user, body.password, body.new_email, base=base_url(request))
++    db.commit()
++    if not sent:
++        raise _mail_failed()
++    return {"status": "sent", "email": auth.check_email(body.new_email)}
++
++
++@router.post("/sessions/revoke-others")
++def revoke_others(caller: Caller = Depends(current), db: Session = Depends(get_db)):
++    """End every other sign-in of the account (other PCs and the website); this one stays."""
++    n = auth.revoke_all(db, caller.user.id, "revoked_by_user", keep=caller.session.id)
++    db.commit()
++    return {"revoked": n}
+ 
+ 
+ @router.get("/me", response_model=schemas.UserOut)
+diff --git a/server/akeno_server/api/schemas.py b/server/akeno_server/api/schemas.py
+index c3c3ae5..5e43879 100644
+--- a/server/akeno_server/api/schemas.py
++++ b/server/akeno_server/api/schemas.py
+@@ -54,6 +54,11 @@ class ChangePasswordIn(Strict):
+     new_password: str = Field(max_length=256)
+ 
+ 
++class ChangeEmailIn(Strict):
++    password: str = Field(max_length=256)
++    new_email: str = Field(max_length=320)
++
++
+ class PatchMeIn(Strict):
+     display_name: str | None = Field(None, max_length=80)
+     language: Literal["en", "de"] | None = None
+@@ -70,12 +75,22 @@ class UserOut(BaseModel):
+     created_at: datetime
+ 
+ 
++EmailDelivery = Literal["sent", "failed", "unavailable"]
++
++
+ class TokensOut(BaseModel):
+     access_token: str
+     token_type: Literal["bearer"] = "bearer"
+     expires_in: int
+     refresh_token: str
+     user: UserOut
++    # registration only: what happened to the confirmation e-mail (sent = accepted by the mail server)
++    verification_email: EmailDelivery | None = None
++
++
++class EmailSentOut(BaseModel):
++    status: Literal["sent", "already_verified"]
++    email: str | None = None
+ 
+ 
+ # -- licenses --------------------------------------------------------------------------------------------------------
+diff --git a/server/akeno_server/api/system.py b/server/akeno_server/api/system.py
+index 736167d..d84263b 100644
+--- a/server/akeno_server/api/system.py
++++ b/server/akeno_server/api/system.py
+@@ -46,6 +46,7 @@ def version(db: Session = Depends(get_db)):
+             "min_client_version": settings.get(db, "min_client_version") or None,
+             "latest_client_version": settings.get(db, "latest_client_version") or None,
+             "registration_enabled": settings.get(db, "registration_enabled"),
++            "require_email_verification": settings.get(db, "require_email_verification"),
+             "download_url": get_config().download_url, "server_time": utcnow()}
+ 
+ 
+diff --git a/server/akeno_server/auth/service.py b/server/akeno_server/auth/service.py
+index 56e16c9..58df361 100644
+--- a/server/akeno_server/auth/service.py
++++ b/server/akeno_server/auth/service.py
+@@ -15,7 +15,7 @@ from akeno_server import mail, settings
+ from akeno_server.auth import passwords, tokens, totp
+ from akeno_server.clock import utcnow
+ from akeno_server.config import get_config
+-from akeno_server.errors import ApiError, bad_request, conflict, forbidden, too_many, unauthorized
++from akeno_server.errors import ApiError, bad_request, conflict, forbidden, too_many, unauthorized, unavailable
+ from akeno_server.models import (EmailVerificationToken, PasswordResetToken, Role, SignInEvent, User,
+                                  UserCredential, UserSession)
+ 
+@@ -255,12 +255,36 @@ def link(path: str, token: str, base: str = "") -> str:
+     return f"{page(path, base)}?token={token}"
+ 
+ 
+-def send_verification(db: Session, user: User, email: str | None = None, base: str = "") -> None:
++def _retire(db: Session, model, user_id: uuid.UUID) -> None:
++    """End every unused link of this kind for the account (a newer link or a password change replaces them)."""
++    now = utcnow()
++    db.execute(update(model).where(model.user_id == user_id, model.used_at.is_(None), model.expires_at > now)
++               .values(expires_at=now))
++
++
++def email_unavailable() -> ApiError:
++    return unavailable("email_unavailable", "E-mails cannot be sent at the moment. Please try again later.")
++
++
++def delivery(accepted: bool) -> str:
++    """What happened to an e-mail, for the user: ``sent`` (accepted for delivery), ``failed`` (the mail server did
++    not take it) or ``unavailable`` (this server cannot reach anybody by e-mail yet)."""
++    if not mail.deliverable():
++        return "unavailable"
++    return "sent" if accepted else "failed"
++
++
++def send_verification(db: Session, user: User, email: str | None = None, base: str = "") -> bool:
++    """A new confirmation link. True when the e-mail was accepted for delivery; only then do the previous links
++    stop working (an e-mail that could not be sent leaves the last one that was)."""
+     secret = tokens.new_secret()
+-    db.add(EmailVerificationToken(user_id=user.id, email=email or user.email, token_hash=tokens.digest(secret),
+-                                  expires_at=utcnow() + timedelta(hours=48)))
+-    mail.send(mail.compose("verify", email or user.email, user.language, link("/verify-email", secret, base),
+-                           user.display_name))
++    accepted = mail.send(mail.compose("verify", email or user.email, user.language,
++                                      link("/verify-email", secret, base), user.display_name))
++    if accepted:
++        _retire(db, EmailVerificationToken, user.id)
++        db.add(EmailVerificationToken(user_id=user.id, email=email or user.email, token_hash=tokens.digest(secret),
++                                      expires_at=utcnow() + timedelta(hours=48)))
++    return accepted
+ 
+ 
+ def verify_email(db: Session, token: str) -> User:
+@@ -272,6 +296,7 @@ def verify_email(db: Session, token: str) -> User:
+     user = db.get(User, row.user_id)
+     if user is None:
+         raise bad_request("invalid_token", "This link is invalid or has expired.")
++    old_email = user.email
+     if normalize_email(row.email) != user.email_normalized:
+         if user_by_email(db, row.email) is not None:
+             raise conflict("email_taken", "An account with this e-mail address already exists.")
+@@ -279,19 +304,28 @@ def verify_email(db: Session, token: str) -> User:
+         user.email_normalized = normalize_email(row.email)
+     row.used_at = now
+     user.email_verified_at = now
++    if user.email != old_email:
++        # the previous address learns about the change (it is the account owner's alarm if it was not them)
++        mail.send(mail.compose("email_changed", old_email, user.language, user.email, user.display_name))
+     return user
+ 
+ 
+ def request_reset(db: Session, email: str, ip: str = "", base: str = "") -> None:
+-    """Always looks the same from outside, whether or not the address has an account."""
++    """Always looks the same from outside, whether or not the address has an account.
++
++    Only a system-wide problem is reported: when no e-mail can reach anybody, every request fails alike (before the
++    address is looked up), so the answer still says nothing about accounts. A new link replaces older ones."""
++    if not mail.deliverable():
++        raise email_unavailable()
+     user = user_by_email(db, email)
+     if user is None or not user.active:
+         return
+     secret = tokens.new_secret()
+-    db.add(PasswordResetToken(user_id=user.id, token_hash=tokens.digest(secret), ip=ip,
+-                              expires_at=utcnow() + timedelta(hours=1)))
+-    mail.send(mail.compose("reset", user.email, user.language, link("/reset-password", secret, base),
+-                           user.display_name))
++    if mail.send(mail.compose("reset", user.email, user.language, link("/reset-password", secret, base),
++                              user.display_name)):
++        _retire(db, PasswordResetToken, user.id)
++        db.add(PasswordResetToken(user_id=user.id, token_hash=tokens.digest(secret), ip=ip,
++                                  expires_at=utcnow() + timedelta(hours=1)))
+ 
+ 
+ def confirm_reset(db: Session, token: str, new_password: str, base: str = "") -> User:
+@@ -318,6 +352,7 @@ def set_password(db: Session, user: User, new_password: str, keep_session: uuid.
+     user.credential.password_hash = passwords.hash_password(new_password)
+     user.credential.password_changed_at = utcnow()
+     revoke_all(db, user.id, "password_changed", keep=keep_session)
++    _retire(db, PasswordResetToken, user.id)          # no older reset link can change the new password again
+     mail.send(mail.compose("password_changed", user.email, user.language, page("/forgot-password", base),
+                            user.display_name))
+ 
+@@ -329,13 +364,14 @@ def change_password(db: Session, user: User, current: str, new_password: str, ke
+     set_password(db, user, new_password, keep_session=keep_session, base=base)
+ 
+ 
+-def change_email(db: Session, user: User, password: str, new_email: str, base: str = "") -> None:
++def change_email(db: Session, user: User, password: str, new_email: str, base: str = "") -> bool:
++    """Send a confirmation link to ``new_email``; the address changes when it is opened. True when it was sent."""
+     new_email = check_email(new_email)
+     if not passwords.verify_password(user.credential.password_hash, password):
+         raise bad_request("wrong_password", "The current password is wrong.")
+     if user_by_email(db, new_email) is not None:
+         raise conflict("email_taken", "An account with this e-mail address already exists.")
+-    send_verification(db, user, new_email, base=base)
++    return send_verification(db, user, new_email, base=base)
+ 
+ 
+ def registration_allowed(db: Session) -> None:
+diff --git a/server/akeno_server/mail.py b/server/akeno_server/mail.py
+index b7bb59e..822af70 100644
+--- a/server/akeno_server/mail.py
++++ b/server/akeno_server/mail.py
+@@ -2,6 +2,11 @@
+ 
+ ``AKENO_MAIL_BACKEND``: ``smtp`` (any provider or your own mail server), ``file`` (writes .eml files into
+ ``AKENO_MAIL_DIR``: the development mail sink, also handy before SMTP is set up) or ``console`` (the log).
++
++:func:`send` says whether the message was accepted (by the SMTP server, the file sink or the log), so callers can
++tell the user the truth. :func:`deliverable` says whether messages can reach anybody at all: in production only
++SMTP does; the file sink and the log reach nobody. A production log never contains a message body (the links in
++it carry secrets).
+ """
+ 
+ from __future__ import annotations
+@@ -11,7 +16,7 @@ import smtplib
+ import ssl
+ import uuid
+ from email.message import EmailMessage
+-from email.utils import formatdate, make_msgid
++from email.utils import formatdate, make_msgid, parseaddr
+ from pathlib import Path
+ 
+ from akeno_server.config import get_config
+@@ -37,6 +42,16 @@ TEXTS = {
+                "wählst du hier:\n\n{link}\n\nDer Link ist eine Stunde gültig und funktioniert einmal. Warst du "
+                "das nicht, ignoriere diese E-Mail: dein Passwort bleibt unverändert.\n"),
+     },
++    "email_changed": {
++        "en": ("Your AKENO e-mail address was changed",
++               "Hello{name},\n\nthe e-mail address of your AKENO account was just changed to {link}. From now on, "
++               "sign-in and e-mails use the new address.\n\nIf this was not you, reply to this e-mail or contact "
++               "AKENO support at once.\n"),
++        "de": ("Die E-Mail-Adresse deines AKENO-Kontos wurde geändert",
++               "Hallo{name},\n\ndie E-Mail-Adresse deines AKENO-Kontos wurde gerade in {link} geändert. Anmeldung "
++               "und E-Mails nutzen ab jetzt die neue Adresse.\n\nWarst du das nicht, antworte auf diese E-Mail oder "
++               "wende dich sofort an den AKENO-Support.\n"),
++    },
+     "password_changed": {
+         "en": ("Your AKENO password was changed",
+                "Hello{name},\n\nthe password of your AKENO account was just changed and every sign-in was ended. "
+@@ -58,22 +73,50 @@ def compose(kind: str, to: str, language: str, link: str, name: str = "") -> Ema
+     msg["To"] = to
+     msg["Subject"] = subject
+     msg["Date"] = formatdate(localtime=False)
+-    msg["Message-ID"] = make_msgid(domain="akeno.invalid")
++    msg["Message-ID"] = make_msgid(domain=_sender_domain(cfg.mail_from))
+     msg.set_content(body.format(name=f" {name}" if name else "", link=link))
+     return msg
+ 
+ 
+-def send(msg: EmailMessage) -> None:
++def _sender_domain(sender: str) -> str:
++    """The domain of the From address, for the Message-ID (spam filters distrust a foreign or invalid one)."""
++    domain = parseaddr(sender)[1].rpartition("@")[2].strip().lower()
++    return domain if "." in domain and domain != "localhost" else "akeno.invalid"
++
++
++def deliverable() -> bool:
++    """Whether e-mails can reach their recipients. In production only SMTP with a host does."""
++    cfg = get_config()
++    if cfg.mail_backend == "smtp":
++        return bool(cfg.smtp_host)
++    return cfg.environment != "production"
++
++
++def send(msg: EmailMessage) -> bool:
++    """Hand ``msg`` to the configured backend. True when it was accepted, False when it could not be sent.
++
++    A failure is logged (recipient only) and never raised: a request must not fail, or reveal whether an account
++    exists, because of an e-mail."""
+     cfg = get_config()
+     outbox.append(msg)
+     del outbox[:-50]
+     if cfg.mail_backend == "console":
+-        log.info("e-mail to %s: %s\n%s", msg["To"], msg["Subject"], msg.get_content())
+-        return
++        if cfg.environment == "production":
++            log.info("e-mail to %s: %s (body not logged: it may contain sign-in links)", msg["To"], msg["Subject"])
++        else:
++            log.info("e-mail to %s: %s\n%s", msg["To"], msg["Subject"], msg.get_content())
++        return True
+     if cfg.mail_backend == "file":
+-        Path(cfg.mail_dir).mkdir(parents=True, exist_ok=True)
+-        (Path(cfg.mail_dir) / f"{uuid.uuid4().hex}.eml").write_bytes(bytes(msg))
+-        return
++        try:
++            Path(cfg.mail_dir).mkdir(parents=True, exist_ok=True)
++            (Path(cfg.mail_dir) / f"{uuid.uuid4().hex}.eml").write_bytes(bytes(msg))
++        except OSError:
++            log.exception("could not write e-mail to %s into %s", msg["To"], cfg.mail_dir)
++            return False
++        return True
++    if not cfg.smtp_host:
++        log.error("could not send e-mail to %s: AKENO_SMTP_HOST is not set", msg["To"])
++        return False
+     try:
+         if cfg.smtp_security == "ssl":
+             server = smtplib.SMTP_SSL(cfg.smtp_host, cfg.smtp_port, timeout=20, context=ssl.create_default_context())
+@@ -84,10 +127,15 @@ def send(msg: EmailMessage) -> None:
+         with server:
+             if cfg.smtp_user:
+                 server.login(cfg.smtp_user, cfg.smtp_password.get_secret_value())
+-            server.send_message(msg)
+-    except (OSError, smtplib.SMTPException):
++            refused = server.send_message(msg)
++    except (OSError, smtplib.SMTPException) as exc:
+         # a failed e-mail must not fail the request (and must not reveal whether an account exists)
+-        log.exception("could not send e-mail to %s", msg["To"])
++        log.error("could not send e-mail to %s: %s: %s", msg["To"], type(exc).__name__, exc)
++        return False
++    if refused:
++        log.error("the mail server refused the recipient %s", msg["To"])
++        return False
++    return True
+ 
+ 
+ def configured() -> bool:
+diff --git a/server/akeno_server/web/account.py b/server/akeno_server/web/account.py
+index e5c8f3e..3bb3d28 100644
+--- a/server/akeno_server/web/account.py
++++ b/server/akeno_server/web/account.py
+@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Request
+ from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
++from akeno_server import mail
+ from akeno_server.admin.service import device_out, license_history, session_out
+ from akeno_server.api.deps import base_url, client_ip, limit
+ from akeno_server.auth import passwords, totp
+@@ -157,13 +158,18 @@ async def change_email(request: Request, db: Session = Depends(get_db)):
+     check_csrf(request, form)
+     try:
+         limit(request, "reset_email", f"email-change:{user.id}")
+-        auth.change_email(db, user, str(form.get("password", "")), str(form.get("email", "")),
+-                          base=base_url(request))
++        if not mail.deliverable():
++            raise auth.email_unavailable()
++        sent = auth.change_email(db, user, str(form.get("password", "")), str(form.get("email", "")),
++                                 base=base_url(request))
+         db.commit()
+     except ApiError as exc:
+         db.rollback()
+         return security_page(request, db, user, sess, "account/security.html", "account", exc.status,
+                              email_error=exc.message)
++    if not sent:
++        return redirect(request, "/account/security", "The confirmation e-mail could not be sent. Please try again "
++                        "later.", "error")
+     return redirect(request, "/account/security", "We sent a confirmation link to the new address. The change "
+                     "takes effect when you open it.")
+ 
+@@ -176,10 +182,15 @@ async def resend_verification(request: Request, db: Session = Depends(get_db)):
+     if user.email_verified_at is None:
+         try:
+             limit(request, "reset_email", f"verify:{user.id}")
++            if not mail.deliverable():
++                raise auth.email_unavailable()
+         except ApiError as exc:
+             return redirect(request, "/account", exc.message, "error")
+-        auth.send_verification(db, user, base=base_url(request))
++        sent = auth.send_verification(db, user, base=base_url(request))
+         db.commit()
++        if not sent:
++            return redirect(request, "/account", "The confirmation e-mail could not be sent. Please try again "
++                            "later.", "error")
+     return redirect(request, "/account", "We sent you a new confirmation e-mail.")
+ 
+ 
+diff --git a/server/akeno_server/web/de.json b/server/akeno_server/web/de.json
+index 39220b8..8c0c371 100644
+--- a/server/akeno_server/web/de.json
++++ b/server/akeno_server/web/de.json
+@@ -9,6 +9,7 @@
+ "AKENO is distributed through GitHub Releases. The app checks for updates itself and keeps your settings, mods and backups.": "AKENO wird über GitHub Releases verteilt. Die App sucht selbst nach Updates und behält deine Einstellungen, Mods und Backups.",
+ "AKENO version": "AKENO-Version",
+ "Account": "Konto",
++"Account created, but the confirmation e-mail could not be sent. Request a new one on this page later.": "Konto angelegt, aber die Bestätigungs-E-Mail konnte nicht versendet werden. Fordere sie später auf dieser Seite neu an.",
+ "Account created. We sent you an e-mail to confirm your address.": "Konto erstellt. Wir haben dir eine E-Mail zur Bestätigung deiner Adresse geschickt.",
+ "Accounts": "Konten",
+ "Action": "Aktion",
+@@ -87,6 +88,7 @@
+ "E-mail address confirmed.": "E-Mail-Adresse bestätigt.",
+ "E-mail address or password is wrong.": "E-Mail-Adresse oder Passwort ist falsch.",
+ "E-mail confirmed": "E-Mail bestätigt",
++"E-mails cannot be sent at the moment. Please try again later.": "E-Mails können gerade nicht versendet werden. Bitte versuche es später noch einmal.",
+ "Each trial length once per account": "Jede Testphasenlänge einmal pro Konto",
+ "Enable account": "Konto aktivieren",
+ "Enable license": "Lizenz aktivieren",
+@@ -288,10 +290,12 @@
+ "The PC was removed. It can sign in again while a slot is free.": "Der PC wurde entfernt. Er kann sich wieder anmelden, solange ein Platz frei ist.",
+ "The authenticator code is wrong or was already used.": "Der Authenticator-Code ist falsch oder wurde schon verwendet.",
+ "The community DLSS 5 manager for your games and FiveM, an FPS booster that only changes what it shows you first, benchmarks with real measurements and a desktop studio for wallpapers, dock and widgets.": "Der Community-DLSS-5-Manager für deine Spiele und FiveM, ein FPS Booster, der nur ändert, was er dir vorher zeigt, Benchmarks mit echten Messungen und ein Desktop Studio für Hintergründe, Dock und Widgets.",
++"The confirmation e-mail could not be sent. Please try again later.": "Die Bestätigungs-E-Mail konnte nicht versendet werden. Bitte versuche es später noch einmal.",
+ "The current password is wrong.": "Das aktuelle Passwort ist falsch.",
+ "The database does not answer.": "Die Datenbank antwortet nicht.",
+ "The device already belongs to this account.": "Das Gerät gehört bereits zu diesem Konto.",
+ "The device identifier must be a SHA-256 value.": "Die Gerätekennung muss ein SHA-256-Wert sein.",
++"The e-mail could not be sent. Please try again later.": "Die E-Mail konnte nicht versendet werden. Bitte versuche es später noch einmal.",
+ "The expiry needs a time zone.": "Der Ablauf braucht eine Zeitzone.",
+ "The form expired. Reload the page and try again.": "Das Formular ist abgelaufen. Lade die Seite neu und versuche es erneut.",
+ "The form was sent from another site.": "Das Formular wurde von einer anderen Website gesendet.",
+diff --git a/server/akeno_server/web/i18n.py b/server/akeno_server/web/i18n.py
+index 92249a9..c08e1ce 100644
+--- a/server/akeno_server/web/i18n.py
++++ b/server/akeno_server/web/i18n.py
+@@ -67,4 +67,5 @@ def needed() -> set[str]:
+ 
+ # shown through helpers the scan above does not follow
+ EXTRA = {"Account created. We sent you an e-mail to confirm your address.", "Choose a license type.", "expired",
+-         "day", "days", "unlimited"}
++         "day", "days", "unlimited",
++         "Account created, but the confirmation e-mail could not be sent. Request a new one on this page later."}
+diff --git a/server/akeno_server/web/public.py b/server/akeno_server/web/public.py
+index 9a175a0..f881f29 100644
+--- a/server/akeno_server/web/public.py
++++ b/server/akeno_server/web/public.py
+@@ -19,6 +19,9 @@ from akeno_server.web.render import (PENDING_COOKIE, SESSION_COOKIE, check_csrf,
+                                      redirect, render, safe_next, set_cookie)
+ 
+ auth_router = APIRouter(include_in_schema=False)
++REGISTERED = "Account created. We sent you an e-mail to confirm your address."
++REGISTERED_NO_MAIL = ("Account created, but the confirmation e-mail could not be sent. Request a new one on this "
++                      "page later.")
+ router = APIRouter(include_in_schema=False)
+ 
+ 
+@@ -130,13 +133,13 @@ async def register(request: Request, db: Session = Depends(get_db)):
+             raise ApiError(400, "password_mismatch", "The passwords do not match.")
+         user = auth.create_user(db, values["email"], values["password"], values["display_name"],
+                                 values["language"])
+-        auth.send_verification(db, user, base=base_url(request))
++        sent = auth.delivery(auth.send_verification(db, user, base=base_url(request))) == "sent"
+         user.last_login_at = user.created_at
+     except ApiError as exc:
+         return render(request, "auth/register.html", status=exc.status, error=exc.message, registration=allowed,
+                       form={"display_name": values["display_name"], "email": values["email"]})
+     return _signed_in(request, db, user, mfa=False, target="/account",
+-                      flash="Account created. We sent you an e-mail to confirm your address.")
++                      flash=REGISTERED if sent else REGISTERED_NO_MAIL)
+ 
+ 
+ @router.get("/forgot-password")
