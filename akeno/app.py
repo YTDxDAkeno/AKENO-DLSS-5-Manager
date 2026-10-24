@@ -47,9 +47,9 @@ def main(argv: list[str] | None = None) -> int:
         except (AttributeError, OSError):
             pass
 
-    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtCore import Qt
     from PySide6.QtGui import QGuiApplication, QIcon
-    from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+    from PySide6.QtWidgets import QApplication
 
     if args.screenshot and args.screenshot_scale:
         os.environ["QT_SCALE_FACTOR"] = str(args.screenshot_scale)
@@ -60,29 +60,74 @@ def main(argv: list[str] | None = None) -> int:
     app.setOrganizationName("AKENO")
 
     from akeno import i18n
-    from akeno.services import AppServices
+    from akeno.core.db import Database
+    from akeno.core.settings import Settings
+    from akeno.licensing import manager as license_manager
+    from akeno.paths import db_path
     from akeno.ui import art, theme, widgets
+
+    # Only what the welcome screen needs is read before the license check: language, theme and animations.
+    prefs = Settings(Database(db_path()))
+    setup_logging(bool(prefs.get("debug_logging")))
+    logging.getLogger(__name__).info("%s %s starting", APP_NAME, __version__)
+    i18n.set_language(prefs.get("language"))
+    widgets.ANIMATIONS["on"] = bool(prefs.get("animations"))
+    app.setFont(theme.ui_font(10))
+    app.setStyleSheet(theme.stylesheet(prefs.get("theme_accent")))
+    app.setWindowIcon(QIcon(art.app_icon_pixmap(256)))
+    lic = license_manager()
+
+    if args.smoke_test or args.screenshot:
+        # CI checks of a build: every window is created, nothing stays open (no use without a license)
+        ctl, win = build_suite(app, args, lic)
+        from akeno.ui.license_gate import LicenseGate
+        gate = LicenseGate(lic)
+        if args.smoke_test:
+            return smoke_test(app, ctl, win, gate)
+        return screenshots(app, ctl, win, args.screenshot, args.screenshot_size, gate)
+
+    from akeno.ui.shell import SuiteShell
+    holder: dict = {}
+
+    def build():
+        ctl, win = build_suite(app, args, lic)
+        holder["ctl"] = ctl
+        return win
+
+    def language(lang: str) -> None:
+        prefs.set("language", lang)
+        i18n.set_language(lang)
+
+    shell = SuiteShell(lic, build, language, busy=lambda: bool(holder.get("ctl") and holder["ctl"].busy))
+    shell.minimized = args.minimized
+    shell.start()
+    return app.exec()
+
+
+def build_suite(app, args, lic):
+    """Everything behind the license: services (database, game library, mod engine), controller, main window,
+    tray icon and the start-up scans."""
+    from PySide6.QtCore import QTimer
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QSystemTrayIcon
+
+    from akeno import i18n
+    from akeno.services import AppServices
+    from akeno.ui import art, widgets
     from akeno.ui.controller import Controller
     from akeno.ui.main_window import MainWindow
 
     services = AppServices()
-    setup_logging(bool(services.settings.get("debug_logging")))
-    logging.getLogger(__name__).info("%s %s starting", APP_NAME, __version__)
-    i18n.set_language(services.settings.get("language"))
-    widgets.ANIMATIONS["on"] = bool(services.settings.get("animations"))
-    app.setFont(theme.ui_font(10))
-    app.setStyleSheet(theme.stylesheet(services.settings.get("theme_accent")))
-    app.setWindowIcon(QIcon(art.app_icon_pixmap(256)))
-
     ctl = Controller(services)
-    win = MainWindow(ctl)
+    win = MainWindow(ctl, lic)
 
     tray = None
     if QSystemTrayIcon.isSystemTrayAvailable() and not args.smoke_test and not args.screenshot:
         tray = QSystemTrayIcon(QIcon(art.app_icon_pixmap(64)), app)
         tray.setToolTip(APP_NAME)
-        tray.activated.connect(lambda reason: (win.showNormal(), win.activateWindow()))
+        tray.activated.connect(lambda reason: (win.showNormal(), win.activateWindow()) if win.isEnabled() else None)
         tray.show()
+    win.tray = tray
 
     labels = {"install": "Installation finished.", "benchmark": "Benchmark finished.", "games": "Game scan finished.",
               "restore": "Restore finished."}
@@ -121,25 +166,23 @@ def main(argv: list[str] | None = None) -> int:
             win.pages["settings"].check_updates()
         win.pages["downloads"].auto_check()
 
-    if args.smoke_test:
-        return smoke_test(app, ctl, win)
-    if args.screenshot:
-        return screenshots(app, ctl, win, args.screenshot, args.screenshot_size)
-    if args.minimized:
-        win.showMinimized()
-    else:
-        win.show()
-    QTimer.singleShot(200, startup)
-    return app.exec()
+    if not args.smoke_test and not args.screenshot:
+        QTimer.singleShot(200, startup)
+    return ctl, win
 
 
-def smoke_test(app, ctl, win) -> int:
+def smoke_test(app, ctl, win, gate=None) -> int:
     """Non-interactive check used by CI on a real Windows runner: real hardware scan, real library scan,
     every page built and shown. Prints what was found; exits non-zero on any exception."""
     from akeno.ui import workers
     from PySide6.QtCore import QEventLoop, QTimer
     from akeno.ui import assets
     s = ctl.s
+    if gate is not None:
+        gate.show()
+        app.processEvents()
+        gate_status = gate.m.view().status.value
+        gate.close()
     info = s.scan_hardware()
     games = s.library.scan()
     reports = s.discover_dependencies()
@@ -154,6 +197,7 @@ def smoke_test(app, ctl, win) -> int:
         loop.exec()
     workers.drain(30000)
     lines = [f"AKENO {__version__} smoke test OK",
+             f"License: {gate_status if gate is not None else 'not checked'} (welcome screen built)",
              f"OS: {info.os_name} {info.os_display_version or ''} build {info.os_build}"]
     for g in info.gpus:
         lines.append(f"GPU: {g.name} vendor={g.vendor.value} dev=0x{(g.device_id or 0):04X} arch={g.architecture} "
@@ -180,11 +224,17 @@ def smoke_test(app, ctl, win) -> int:
     return 3 if problems else 0
 
 
-def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009") -> int:
+def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009", gate=None) -> int:
     from PySide6.QtCore import QEventLoop, QTimer
     from akeno.ui import workers
     os.makedirs(out_dir, exist_ok=True)
     w, h = (int(x) for x in size.lower().split("x"))
+    if gate is not None:
+        gate.resize(min(w, 1400), min(h, 860))
+        gate.show()
+        app.processEvents()
+        gate.grab().save(os.path.join(out_dir, "license-gate.png"))
+        gate.close()
     win.setMinimumSize(min(w, 1100), min(h, 680))
     win.resize(w, h)
     win.show()

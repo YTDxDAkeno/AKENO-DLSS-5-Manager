@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ t("Two-factor sign-in") }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ t("Two-factor sign-in") }}</h1>
+  <p class="dim">{{ t("Enter the 6-digit code from your authenticator app, or one of your recovery codes.") }}</p>
+  {% if error %}<div class="flash error" role="alert">{{ t(error) }}</div>{% endif %}
+  <form method="post" action="/login/verify">
+    {{ m.csrf_field() }}
+    {{ m.field("code", t("Code"), "text", "", True, "one-time-code", maxlength=20, extra='inputmode="numeric" autofocus') }}
+    <div class="row" style="margin-top:16px"><button class="primary" type="submit">{{ t("Continue") }}</button>
+      <a href="/login">{{ t("Cancel") }}</a></div>
+  </form>
+</div>
+{% endblock %}

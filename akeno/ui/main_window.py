@@ -20,9 +20,32 @@ from akeno.i18n import t
 from akeno.ui import art, assets, icons, theme
 from akeno.ui.widgets import StatusPill, confirm, info, label
 
-NAV = [("library", "My Games", "gamepad"), ("fivem", "FiveM Legacy", "fivem"), ("installed", "Installed Mods", "layers"),
-       ("downloads", "Downloads", "download"), ("backups", "Restore / Backups", "restore"),
-       ("hardware", "Hardware", "chip"), ("advanced", "Advanced", "gauge"), ("settings", "Settings", "gear")]
+# The navigation: sections, each with pages; a group (like "DLSS 5 Manager") holds pages shown indented when it is
+# open. NAV is the flat list of every page in display order (its index is the page's place in the stack).
+SECTIONS = [
+    ("HOME", [("library", "My Games", "gamepad")]),
+    ("GAMING", [("group", "dlss", "DLSS 5 Manager", "sparkle", [
+        ("fivem", "FiveM Legacy", "fivem"), ("downloads", "Downloads", "download"),
+        ("backups", "Restore / Backups", "restore"), ("hardware", "Hardware", "chip"),
+        ("advanced", "Advanced", "gauge")]),
+        ("installed", "Installed Mods", "layers")]),
+    ("ACCOUNT", [("account", "My Account", "user"), ("license", "License", "key"), ("settings", "Settings", "gear")]),
+]
+
+
+def _flatten() -> list[tuple[str, str, str]]:
+    out = []
+    for _, items in SECTIONS:
+        for item in items:
+            if item[0] == "group":
+                out.extend(item[4])
+            else:
+                out.append(item)
+    return out
+
+
+NAV = _flatten()
+GROUPS = {item[1]: [k for k, _, _ in item[4]] for _, items in SECTIONS for item in items if item[0] == "group"}
 # Pages shown as tabs of "Advanced" (diagnostics and the v1 per-backend installer).
 ADVANCED = ("dashboard", "benchmark", "profiles", "install")
 
@@ -177,16 +200,16 @@ class Sidebar(QFrame):
         super().__init__()
         self.setObjectName("Sidebar")
         self.setFixedWidth(theme.SIDEBAR_WIDTH)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(14, 18, 14, 14)
-        lay.setSpacing(4)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(14, 18, 14, 14)
+        outer.setSpacing(4)
         self.logo = QLabel()
         self.logo.setAccessibleName("AKENO")
         word = art.wordmark(50)
         if not word.isNull():
             self.logo.setPixmap(word)
             self.logo.setContentsMargins(8, 0, 0, 0)
-            lay.addWidget(self.logo)
+            outer.addWidget(self.logo)
         else:   # asset missing: icon + text
             row = QHBoxLayout()
             self.logo.setPixmap(art.logo_mark(50))
@@ -194,47 +217,119 @@ class Sidebar(QFrame):
             name = QLabel("AKENO")
             name.setStyleSheet("font-size: 24pt; font-weight: 800; letter-spacing: 2px;")
             row.addWidget(name, 1)
-            lay.addLayout(row)
-        lay.addSpacing(18)
+            outer.addLayout(row)
+        outer.addSpacing(10)
         sep = QFrame()
         sep.setFixedHeight(1)
         sep.setStyleSheet(f"background: {theme.BORDER};")
-        lay.addWidget(sep)
-        lay.addSpacing(10)
+        outer.addWidget(sep)
+        # the navigation scrolls on its own when a short window cannot show every section
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        holder = QWidget()
+        lay = QVBoxLayout(holder)
+        lay.setContentsMargins(0, 4, 4, 4)
+        lay.setSpacing(2)
+        scroll.setWidget(holder)
+        outer.addWidget(scroll, 1)
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         self.buttons: dict[str, QPushButton] = {}
+        self.groups: dict[str, QPushButton] = {}
+        self.headers: dict[str, QLabel] = {}
         self._icons = {k: ic for k, _, ic in NAV}
-        for i, (key, text, ic) in enumerate(NAV):
-            b = QPushButton("  " + t(text))
-            b.setProperty("kind", "nav")
-            b.setCheckable(True)
-            b.setIcon(icons.icon(ic, theme.TEXT_DIM, 24))
-            b.setIconSize(QSize(24, 24))
-            b.setMinimumHeight(46)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setAccessibleName(t(text))
-            b.setToolTip(f"{t(text)}  (Ctrl+{i + 1})")
-            b.clicked.connect(lambda checked=False, k=key: on_nav(k))
-            self.group.addButton(b)
-            self.buttons[key] = b
-            lay.addWidget(b)
+        self._open: set[str] = set()
+        self._on_nav = on_nav
+        index = {k: i for i, (k, _, _) in enumerate(NAV)}
+        for section, items in SECTIONS:
+            head = QLabel(t(section))
+            head.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 8pt; font-weight: 700; letter-spacing: 1.5px;"
+                               " padding: 10px 0 2px 14px;")
+            self.headers[section] = head
+            lay.addWidget(head)
+            for item in items:
+                if item[0] == "group":
+                    _, gkey, gtext, gicon, children = item
+                    g = self._nav_button(gtext, gicon, None)
+                    g.setCheckable(False)
+                    g.setAccessibleName(t(gtext))
+                    g.clicked.connect(lambda _=False, k=gkey: self._toggle(k))
+                    self.groups[gkey] = g
+                    lay.addWidget(g)
+                    for key, text, ic in children:
+                        b = self._nav_button(text, ic, index[key], indent=True)
+                        b.clicked.connect(lambda checked=False, k=key: on_nav(k))
+                        self.buttons[key] = b
+                        lay.addWidget(b)
+                else:
+                    key, text, ic = item
+                    b = self._nav_button(text, ic, index[key])
+                    b.clicked.connect(lambda checked=False, k=key: on_nav(k))
+                    self.buttons[key] = b
+                    lay.addWidget(b)
         lay.addStretch(1)
+        self._apply_groups()
         self.promo = PromoCard()
-        lay.addWidget(self.promo)
-        lay.addSpacing(10)
+        outer.addWidget(self.promo)
+        outer.addSpacing(6)
         self.foot = label(f"{APP_NAME}\n" + t("Community driven.\nYour files, your choice."), "muted")
-        lay.addWidget(self.foot)
+        outer.addWidget(self.foot)
+
+    def _nav_button(self, text: str, ic: str, index: int | None, indent: bool = False) -> QPushButton:
+        b = QPushButton(("      " if indent else "  ") + t(text))
+        b.setProperty("kind", "nav")
+        b.setCheckable(True)
+        size = 20 if indent else 22
+        b.setIcon(icons.icon(ic, theme.TEXT_DIM, size))
+        b.setIconSize(QSize(size, size))
+        b.setMinimumHeight(36 if indent else 40)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        b.setAccessibleName(t(text))
+        b.setToolTip(t(text) + (f"  (Ctrl+{index + 1})" if index is not None and index < 9 else ""))
+        if indent:
+            b.setStyleSheet("font-size: 10pt;")
+        if index is not None:
+            self.group.addButton(b)
+        return b
+
+    def _toggle(self, group: str) -> None:
+        if group in self._open:
+            self._open.discard(group)
+            self._apply_groups()
+        else:
+            self._open.add(group)
+            self._apply_groups()
+            current = next((k for k, b in self.buttons.items() if b.isChecked()), None)
+            if current not in GROUPS[group]:
+                self._on_nav(GROUPS[group][0])
+
+    def _apply_groups(self) -> None:
+        for gkey, children in GROUPS.items():
+            opened = gkey in self._open
+            for key in children:
+                self.buttons[key].setVisible(opened)
+            arrow = "▾" if opened else "▸"
+            base = self.groups[gkey].accessibleName()
+            self.groups[gkey].setText(f"  {base}  {arrow}")
 
     def select(self, key: str) -> None:
+        for gkey, children in GROUPS.items():
+            if key in children and gkey not in self._open:
+                self._open.add(gkey)
+                self._apply_groups()
         for k, b in self.buttons.items():
             b.setChecked(k == key)
-            b.setIcon(icons.icon(self._icons[k], "#FFFFFF" if k == key else theme.TEXT_DIM, 24))
+            b.setIcon(icons.icon(self._icons[k], "#FFFFFF" if k == key else theme.TEXT_DIM, b.iconSize().width()))
+        for gkey, g in self.groups.items():
+            active = key in GROUPS[gkey]
+            g.setStyleSheet(f"color: {theme.TEXT};" if active else "")
 
     def set_compact(self, height: int) -> None:
         """Hide decoration first when the window is short, so navigation never needs scrolling."""
-        self.promo.setVisible(height >= 820)
-        self.foot.setVisible(height >= 700)
+        self.promo.setVisible(height >= 980)
+        self.foot.setVisible(height >= 820)
 
 
 class PageHost(QWidget):
@@ -278,10 +373,12 @@ class PageHost(QWidget):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self, controller):
+    def __init__(self, controller, license_manager=None):
         super().__init__()
         self.ctl = controller
         self.s = controller.s
+        from akeno.licensing import manager
+        self.license = license_manager or manager()
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(icons.QIcon(art.app_icon_pixmap(256)))
         self._initial_size()
@@ -293,7 +390,7 @@ class MainWindow(QMainWindow):
         controller.games_changed.connect(self._header_status)
         controller.installs_changed.connect(self._header_status)
         self._header_status()
-        for i, (key, _, _) in enumerate(NAV):
+        for i, (key, _, _) in enumerate(NAV[:9]):
             QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self, activated=lambda k=key: self.go(k))
         self.go("library")
 
@@ -310,6 +407,7 @@ class MainWindow(QMainWindow):
         self.resize(w, h)
 
     def _build(self) -> None:
+        from akeno.ui.pages.account import AccountPage, LicensePage
         from akeno.ui.pages.advanced import AdvancedPage
         from akeno.ui.pages.backups import BackupsPage
         from akeno.ui.pages.benchmark import BenchmarkPage
@@ -351,7 +449,8 @@ class MainWindow(QMainWindow):
             page.setObjectName(f"page_{key}")
             advanced[key] = page
         main = {"library": LibraryPage, "fivem": FiveMPage, "installed": InstalledPage, "downloads": DownloadsPage,
-                "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage}
+                "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage, "account": AccountPage,
+                "license": LicensePage}
         for key, _, _ in NAV:
             page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")

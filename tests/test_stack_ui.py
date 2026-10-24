@@ -47,8 +47,13 @@ def shot(qtbot, win, name):
 
 def test_navigation_has_the_product_pages_and_advanced_tabs(ui):
     svc, fx, ctl, win = ui
-    from akeno.ui.main_window import NAV
-    assert [k for k, _, _ in NAV][:5] == ["library", "fivem", "installed", "downloads", "backups"]
+    from akeno.ui.main_window import GROUPS, NAV, SECTIONS
+    assert [k for k, _, _ in NAV][0] == "library"
+    assert GROUPS["dlss"] == ["fivem", "downloads", "backups", "hardware", "advanced"]
+    assert [name for name, _ in SECTIONS] == ["HOME", "GAMING", "ACCOUNT"]
+    assert {"installed", "account", "license", "settings"} <= {k for k, _, _ in NAV}
+    win.go("fivem")                                  # a page in a group opens the group
+    assert win.sidebar.buttons["fivem"].isVisibleTo(win) and win.current_page() == "fivem"
     for key in ("dashboard", "benchmark", "profiles", "install"):
         win.go(key)
         assert win.current_page() == key

@@ -1,0 +1,18 @@
+{% macro field(name, label, type="text", value="", required=False, autocomplete="", hint="", maxlength=None, extra="") -%}
+<label for="f-{{ name }}">{{ label }}</label>
+<input id="f-{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ value }}"{% if required %} required{% endif %}{% if autocomplete %} autocomplete="{{ autocomplete }}"{% endif %}{% if maxlength %} maxlength="{{ maxlength }}"{% endif %} {{ extra|safe }}>
+{% if hint %}<div class="hint">{{ hint }}</div>{% endif %}
+{%- endmacro %}
+
+{% macro csrf_field() -%}<input type="hidden" name="csrf" value="{{ csrf }}">{%- endmacro %}
+
+{% macro when(value) -%}{% if value %}<time datetime="{{ value.isoformat() }}">{{ value.strftime('%Y-%m-%d %H:%M') }} UTC</time>{% else %}—{% endif %}{%- endmacro %}
+
+{% macro pager(page, per_page, total, base) -%}
+{% set pages = ((total + per_page - 1) // per_page) or 1 %}
+<div class="pager">
+  {% if page > 1 %}<a class="btn small" href="{{ base }}page={{ page - 1 }}">←</a>{% endif %}
+  <span class="muted">{{ page }} / {{ pages }} · {{ total }}</span>
+  {% if page < pages %}<a class="btn small" href="{{ base }}page={{ page + 1 }}">→</a>{% endif %}
+</div>
+{%- endmacro %}

@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block robots %}index{% endblock %}
+{% block title %}{{ t("Gaming Suite") }}{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <p class="badge info">{{ t("For Windows 10 and 11") }}</p>
+    <h1><span class="gradient-text">AKENO</span> Gaming Suite</h1>
+    <p class="lead">{{ t("The community DLSS 5 manager for your games and FiveM, an FPS booster that only changes what it shows you first, benchmarks with real measurements and a desktop studio for wallpapers, dock and widgets.") }}</p>
+    <div class="row">
+      {% if user %}<a class="btn primary" href="/account">{{ t("Open my account") }}</a>
+      {% else %}<a class="btn primary" href="/register">{{ t("Create account") }}</a><a class="btn" href="/login">{{ t("Sign in") }}</a>{% endif %}
+      <a class="btn" href="{{ download_url }}" rel="noopener">{{ t("Download AKENO") }}</a>
+    </div>
+  </div>
+  <div class="card">
+    <h2>{{ t("One license, every module") }}</h2>
+    <p class="dim">{{ t("An activation code unlocks the whole suite. Its type only decides how long it runs:") }}</p>
+    <dl class="kv">
+      <dt>{{ t("Trial") }}</dt><dd>{{ t("24 hours") }}</dd>
+      <dt>{{ t("Extended trial") }}</dt><dd>{{ t("72 hours") }}</dd>
+      <dt>{{ t("Monthly") }}</dt><dd>{{ t("30 days") }}</dd>
+      <dt>{{ t("Lifetime") }}</dt><dd>{{ t("Unlimited, also fully offline") }}</dd>
+    </dl>
+    <p class="muted" style="margin-top:12px">{{ t("Time starts when you redeem a code. Codes add up: a new code extends the time you have left.") }}</p>
+  </div>
+</section>
+<section class="grid">
+  <div class="card flat feature"><h3>{{ t("DLSS 5 Manager") }}</h3><p>{{ t("Installs, updates and removes community DLSS 5 neural rendering mods with verified downloads and restorable backups, including FiveM Legacy and 32-bit games.") }}</p></div>
+  <div class="card flat feature"><h3>{{ t("FPS Booster") }}</h3><p>{{ t("Real Windows settings per game, each with a preview, a backup and one-click undo. Nothing happens silently.") }}</p></div>
+  <div class="card flat feature"><h3>{{ t("Benchmarks") }}</h3><p>{{ t("Average, 1 % and 0.1 % lows and frame times measured with PresentMon. AKENO never invents gains.") }}</p></div>
+  <div class="card flat feature"><h3>{{ t("Desktop Studio") }}</h3><p>{{ t("Animated wallpapers that pause while you play, a dock and desktop widgets.") }}</p></div>
+</section>
+<section class="card flat" style="margin-top:22px">
+  <h2>{{ t("Your data") }}</h2>
+  <p class="dim">{{ t("This server only knows your account, your license and a pseudonymous ID for each PC. Your games, mods, wallpapers and settings stay on your PC.") }}</p>
+</section>
+{% endblock %}

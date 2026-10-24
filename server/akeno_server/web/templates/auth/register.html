@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ t("Create account") }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ t("Create account") }}</h1>
+  {% if not registration %}
+    <p class="dim">{{ t("New accounts cannot be created at the moment.") }}</p>
+  {% else %}
+  <p class="dim">{{ t("One account and one license for every AKENO module.") }}</p>
+  {% if error %}<div class="flash error" role="alert">{{ t(error) }}</div>{% endif %}
+  <form method="post" action="/register">
+    {{ m.csrf_field() }}
+    {{ m.field("display_name", t("Name (optional)"), "text", form.display_name or "", False, "nickname", maxlength=80) }}
+    {{ m.field("email", t("E-mail address"), "email", form.email or "", True, "email", maxlength=320) }}
+    {{ m.field("password", t("Password"), "password", "", True, "new-password", t("At least 10 characters."), 256) }}
+    {{ m.field("password2", t("Repeat the password"), "password", "", True, "new-password", maxlength=256) }}
+    <label for="f-language">{{ t("Language") }}</label>
+    <select id="f-language" name="language"><option value="en" {% if lang == 'en' %}selected{% endif %}>English</option><option value="de" {% if lang == 'de' %}selected{% endif %}>Deutsch</option></select>
+    <div class="row" style="margin-top:16px"><button class="primary" type="submit">{{ t("Create account") }}</button>
+      <a href="/login">{{ t("I already have an account") }}</a></div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

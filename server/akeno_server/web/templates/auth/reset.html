@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ t("Choose a new password") }}{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ t("Choose a new password") }}</h1>
+  {% if error %}<div class="flash error" role="alert">{{ t(error) }}</div>{% endif %}
+  <form method="post" action="/reset-password">
+    {{ m.csrf_field() }}
+    <input type="hidden" name="token" value="{{ token }}">
+    {{ m.field("password", t("New password"), "password", "", True, "new-password", t("At least 10 characters."), 256) }}
+    {{ m.field("password2", t("Repeat the password"), "password", "", True, "new-password", maxlength=256) }}
+    <p class="muted">{{ t("Every sign-in of your account ends when the password changes.") }}</p>
+    <button class="primary" type="submit">{{ t("Save password") }}</button>
+  </form>
+</div>
+{% endblock %}

@@ -63,6 +63,24 @@ def data_strings() -> set[str]:
             "measured", "estimated", "hardware only"}
     out |= {"Performance", "Balanced", "Quality", "Ultra", "Disabled"}
     out |= stack_strings()
+    out |= suite_strings()
+    return out
+
+
+def suite_strings() -> set[str]:
+    """Licensing and suite texts that reach t() through tables (status names, error codes, page titles)."""
+    from akeno.licensing.manager import STATUS_TEXT, TYPE_NAMES
+    from akeno.ui import account_ui, license_gate
+    from akeno.ui.main_window import SECTIONS
+    from akeno.ui.pages.account import EVENT_NAMES
+    out = set(STATUS_TEXT.values()) | set(TYPE_NAMES.values()) | set(account_ui.ERRORS.values())
+    out |= set(account_ui.STATUS_NAME.values()) | set(EVENT_NAMES.values())
+    out |= {x for pair in license_gate.LicenseGate.TITLES.values() for x in pair if x}
+    out |= {license_gate.SUITE_NAME, license_gate.ERR_SHORT} | set(license_gate.FEATURES)
+    for section, items in SECTIONS:
+        out.add(section)
+        out |= {item[2] for item in items if item[0] == "group"}
+    out |= {"The license server address must start with https://", "The license server address is incomplete."}
     return out
 
 
