@@ -12,7 +12,7 @@ from akeno.i18n import t
 from akeno.performance import tweaks
 from akeno.performance.profiles import PROFILES
 from akeno.ui import theme, workers
-from akeno.ui.widgets import Card, FlowLayout, KeyValueGrid, ResponsiveRow, StatusPill, button, confirm, info, label
+from akeno.ui.widgets import PageHeader, Card, EmptyAware, EmptyState, FlowLayout, KeyValueGrid, ResponsiveRow, StatusPill, button, confirm, info, label
 
 MODES = (("boost", "Standard Boost"), ("dlss5_boost", "DLSS 5 + Boost"))
 SCOPE = {"persistent": "Until you restore it", "session": "While the game runs"}
@@ -39,10 +39,9 @@ class BoosterPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(14)
-        root.addWidget(label(t("FPS Booster"), "h1"))
-        root.addWidget(label(t("Real Windows settings for one game, each shown before it is applied, saved with its "
+        root.addWidget(PageHeader(t("FPS Booster"), t("Real Windows settings for one game, each shown before it is applied, saved with its "
                                "previous value and restorable with one click. AKENO measures the effect with "
-                               "Benchmark and never claims a gain it did not measure."), "dim", shrink=True))
+                               "Benchmark and never claims a gain it did not measure.")))
         self.note = label("", shrink=True)
         self.note.setVisible(False)
         root.addWidget(self.note)
@@ -155,7 +154,9 @@ class BoosterPage(QWidget):
         self.bg_table.verticalHeader().setVisible(False)
         self.bg_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.bg_table.setMinimumHeight(150)
-        bg.body.addWidget(self.bg_table)
+        bg.body.addWidget(EmptyAware(self.bg_table, EmptyState("search", t("No programs listed yet"),
+                                                               t("Analyse lists the programs that run next to your "
+                                                                 "games.")), 150))
         line = FlowLayout(spacing=8)
         self.btn_analyse = button(t("Analyse"), "search", on_click=self._analyse)
         self.bg_action = QComboBox()

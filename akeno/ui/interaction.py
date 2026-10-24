@@ -1,4 +1,4 @@
-"""Mouse-wheel rules for every AKENO window.
+"""Mouse-wheel rules for every AKENO window, and the control polish that goes with them.
 
 By default Qt lets a spin box, combo box, slider or tab bar take the wheel, and keyboard focus, as soon as the
 pointer is over it. A page scrolled with the wheel then changes values on the way. AKENO's rules:
@@ -11,6 +11,9 @@ pointer is over it. A page scrolled with the wheel then changes values on the wa
 
 Nested scroll areas (lists, tables, logs) keep scrolling themselves. Qt hands the wheel on to the page when they
 reach their end, so they never trap the page.
+
+The same filter makes sure no spin box is ever narrower than its widest value with its unit, wherever a page puts
+it (``spin_min_width``).
 """
 
 from __future__ import annotations
@@ -36,6 +39,25 @@ def _guarded(w) -> bool:
 
 def _ptr(w) -> int:
     return shiboken6.getCppPointer(w)[0]
+
+
+def spin_text_width(w) -> int:
+    """Width of the widest text a spin box shows (lowest and highest value with prefix and unit, or its format)."""
+    fm = w.fontMetrics()
+    texts = [w.lineEdit().text() if w.lineEdit() else ""]
+    if hasattr(w, "textFromValue"):
+        for v in (w.minimum(), w.maximum()):
+            texts.append(w.prefix() + w.textFromValue(v) + w.suffix())
+        if w.specialValueText():
+            texts.append(w.specialValueText())
+    elif hasattr(w, "displayFormat"):
+        texts.append(w.displayFormat())
+    return max(fm.horizontalAdvance(x) for x in texts)
+
+
+def spin_min_width(w) -> int:
+    """Text, left padding, arrow buttons, frame and a little air (theme.py's QAbstractSpinBox rules)."""
+    return spin_text_width(w) + 9 + 4 + 24 + 2 + 12
 
 
 def control_under(widget: QWidget):
@@ -64,8 +86,13 @@ class WheelGuard(QObject):
         kind = event.type()
         if kind == _WHEEL:
             return self._wheel(obj, event)
-        if kind == _POLISH and obj.isWidgetType() and obj.focusPolicy() == _WHEEL_FOCUS:
-            obj.setFocusPolicy(_STRONG_FOCUS)
+        if kind == _POLISH and obj.isWidgetType():
+            if obj.focusPolicy() == _WHEEL_FOCUS:
+                obj.setFocusPolicy(_STRONG_FOCUS)
+            if isinstance(obj, QAbstractSpinBox) and obj.lineEdit() is not None:
+                need = spin_min_width(obj)
+                if obj.minimumWidth() < need:
+                    obj.setMinimumWidth(need)
         return False
 
     def _wheel(self, obj, event) -> bool:

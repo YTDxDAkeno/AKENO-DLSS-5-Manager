@@ -13,7 +13,7 @@ from akeno.licensing import manager as default_manager
 from akeno.licensing.manager import TYPE_NAMES
 from akeno.ui import workers
 from akeno.ui.account_ui import CodeEdit, LicenseSummary, error_text, when
-from akeno.ui.widgets import Card, ResponsiveRow, button, clear_layout, label
+from akeno.ui.widgets import Card, PageHeader, ResponsiveRow, button, clear_layout, label
 
 EVENT_NAMES = {"redeem": "Code redeemed", "extend": "Extended by support", "change_type": "License type changed",
                "grant_lifetime": "Lifetime granted", "status_disabled": "Disabled", "status_active": "Enabled again",
@@ -36,7 +36,7 @@ class _LicensePageBase(QWidget):
         self.m = manager or getattr(win, "license", None) or default_manager()
         self.root = QVBoxLayout(self)
         self.root.setContentsMargins(0, 0, 0, 0)
-        self.root.setSpacing(14)
+        self.root.setSpacing(16)
         self.note = label("", shrink=True)
         self.note.setVisible(False)
 
@@ -74,6 +74,7 @@ class _LicensePageBase(QWidget):
 class LicensePage(_LicensePageBase):
     def __init__(self, ctl, win, manager: LicenseManager | None = None):
         super().__init__(ctl, win, manager)
+        self.root.addWidget(PageHeader(t("License")))
         self.root.addWidget(self.note)
         row = ResponsiveRow(spacing=14)
         self.card = Card(t("License"), "shield")
@@ -153,6 +154,7 @@ class LicensePage(_LicensePageBase):
 class AccountPage(_LicensePageBase):
     def __init__(self, ctl, win, manager: LicenseManager | None = None):
         super().__init__(ctl, win, manager)
+        self.root.addWidget(PageHeader(t("My Account")))
         self.root.addWidget(self.note)
         row = ResponsiveRow(spacing=14)
         acct = Card(t("Account"), "shield")

@@ -252,7 +252,7 @@ QComboBox::down-arrow:disabled {{ image: url("{down_off}"); }}
 QComboBox QAbstractItemView {{ background: {SURFACE_2}; border: 1px solid {BORDER_BTN}; padding: 4px; outline: none;
         selection-background-color: {soft_hi}; selection-color: {TEXT}; }}
 QComboBox QAbstractItemView::item {{ min-height: 26px; padding: 0 8px; }}
-QAbstractSpinBox {{ padding-right: 28px; min-height: 20px; }}
+QAbstractSpinBox {{ padding-right: 4px; min-height: 20px; }}     /* the arrow buttons take their own room */
 QAbstractSpinBox::up-button, QAbstractSpinBox::down-button {{ subcontrol-origin: border; width: 24px; border: none;
         border-left: 1px solid {BORDER}; background: transparent; }}
 QAbstractSpinBox::up-button {{ subcontrol-position: top right; border-top-right-radius: {RADIUS_BUTTON}px; }}

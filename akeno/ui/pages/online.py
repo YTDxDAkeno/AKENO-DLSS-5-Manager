@@ -18,7 +18,7 @@ from akeno.packages import index as cindex
 from akeno.packages import packs
 from akeno.sync import engine as sync
 from akeno.ui import theme, workers
-from akeno.ui.widgets import (Card, FlowLayout, KeyValueGrid, ResponsiveRow, StatusPill, SubCard, button,
+from akeno.ui.widgets import (PageHeader, EmptyAware, EmptyState, Card, FlowLayout, KeyValueGrid, ResponsiveRow, StatusPill, SubCard, button,
                               clear_layout, confirm, info, label)
 
 KIND_TEXT = {**packs.KINDS, "theme": "Theme"}
@@ -43,10 +43,9 @@ class CommunityPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(14)
-        root.addWidget(label(t("Community"), "h1"))
-        root.addWidget(label(t("Presets and themes other players share: DLSS 5 presets, FPS Booster profiles, widget "
+        root.addWidget(PageHeader(t("Community"), t("Presets and themes other players share: DLSS 5 presets, FPS Booster profiles, widget "
                                "layouts and desktop themes. Packages are data only; nothing in them is ever run, "
-                               "and using one changes nothing until you apply it yourself."), "dim", shrink=True))
+                               "and using one changes nothing until you apply it yourself.")))
         row = ResponsiveRow(spacing=14)
         mine = Card(t("My packages"), "layers", theme.VIOLET)
         self.mine = QVBoxLayout()
@@ -69,7 +68,9 @@ class CommunityPage(QWidget):
         self.index_list = QListWidget()
         self.index_list.setAccessibleName(t("Community index"))
         self.index_list.setMinimumHeight(220)
-        idx.body.addWidget(self.index_list)
+        idx.body.addWidget(EmptyAware(self.index_list, EmptyState("globe", t("No community packages listed"),
+                                                                  t("Refresh asks the public release repository for "
+                                                                    "the reviewed list.")), 220))
         idx.body.addWidget(_row(button(t("Refresh"), "refresh", on_click=self.refresh_index),
                                 button(t("Download and import"), "download", on_click=self._download),
                                 button(t("Report…"), "warn", on_click=self._report_entry)))
@@ -280,11 +281,10 @@ class CloudSyncPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(14)
-        root.addWidget(label(t("Cloud Sync"), "h1"))
-        root.addWidget(label(t("Your AKENO data on all your PCs: choose a folder that your cloud drive (OneDrive, "
+        root.addWidget(PageHeader(t("Cloud Sync"), t("Your AKENO data on all your PCs: choose a folder that your cloud drive (OneDrive, "
                                "Dropbox, Google Drive) or NAS already syncs. AKENO writes small files there and merges "
                                "what your other PCs wrote. Licenses, tokens, passwords, program files, DLLs and game "
-                               "files are never synced."), "dim", shrink=True))
+                               "files are never synced.")))
         row = ResponsiveRow(spacing=14)
         setup = Card(t("Sync folder"), "folder")
         self.chk = QCheckBox(t("Sync this PC"))
@@ -343,7 +343,9 @@ class CloudSyncPage(QWidget):
         self.conflicts = QListWidget()
         self.conflicts.setAccessibleName(t("Conflicts"))
         self.conflicts.setMinimumHeight(140)
-        conf.body.addWidget(self.conflicts)
+        conf.body.addWidget(EmptyAware(self.conflicts, EmptyState("check", t("No conflicts"),
+                                                                  t("Everything from your other PCs was merged.")),
+                                       140))
         conf.body.addWidget(_row(button(t("Keep this PC's"), "check", on_click=lambda: self._resolve("local")),
                                  button(t("Use the other PC's"), "download", on_click=lambda: self._resolve("remote"))))
         row2.add(conf, 3)

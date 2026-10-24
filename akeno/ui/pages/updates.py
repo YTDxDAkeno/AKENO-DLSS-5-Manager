@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QComboBox, QHBoxLayout, QProgressBar
 from akeno import __version__
 from akeno.i18n import t
 from akeno.ui import theme, workers
-from akeno.ui.widgets import Card, KeyValueGrid, ResponsiveRow, StatusPill, button, confirm, info, label
+from akeno.ui.widgets import PageHeader, Card, KeyValueGrid, ResponsiveRow, StatusPill, button, confirm, info, label
 from akeno.updater import manifest
 from akeno.updater.service import UpdateService
 
@@ -28,11 +28,10 @@ class UpdatesPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(14)
-        root.addWidget(label(t("Updates"), "h1"))
-        root.addWidget(label(t("New versions come from AKENO's public release page, need no GitHub account and are "
+        root.addWidget(PageHeader(t("Updates"), t("New versions come from AKENO's public release page, need no GitHub account and are "
                                "installed only when their release signature and every checksum match. Your "
                                "license, settings, games, mods and backups stay as they are; the previous version "
-                               "is kept for a rollback."), "dim", shrink=True))
+                               "is kept for a rollback.")))
         row = ResponsiveRow(spacing=14)
         now = Card(t("This PC"), "download")
         self.kv = KeyValueGrid(170)

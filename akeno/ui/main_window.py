@@ -79,7 +79,7 @@ class NavButton(QPushButton):
         self._hover = False
         self.setCheckable(not group)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.setMinimumHeight(30 if child else 34)
+        self.setMinimumHeight(29 if child else 33)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setAccessibleName(text)
         self.active = False                 # a group whose page is open
@@ -383,7 +383,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(icons.QIcon(art.app_icon_pixmap(256)))
         self._initial_size()
-        self.setMinimumSize(1100, 680)
+        self.setMinimumSize(self._minimum())
         self._build()
         controller.navigate.connect(self.go)
         controller.status.connect(lambda m: self.statusBar().showMessage(m, 8000))
@@ -394,6 +394,16 @@ class MainWindow(QMainWindow):
         for i, (key, _, _) in enumerate(NAV[:9]):
             QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self, activated=lambda k=key: self.go(k))
         self.go("home")
+
+    @staticmethod
+    def _minimum() -> QSize:
+        """1100 x 680, but never more than the screen offers (200 % scaling on a small screen)."""
+        from PySide6.QtGui import QGuiApplication
+        scr = QGuiApplication.primaryScreen()
+        if scr is None:
+            return QSize(1100, 680)
+        avail = scr.availableGeometry()
+        return QSize(min(1100, avail.width()), min(680, avail.height()))
 
     def _initial_size(self) -> None:
         """Open at a size that fits the screen's available area (taskbar and scaling respected)."""

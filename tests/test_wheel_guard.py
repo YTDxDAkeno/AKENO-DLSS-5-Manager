@@ -25,12 +25,17 @@ class Clock:
 
 @pytest.fixture
 def guard(qapp):
+    installed = getattr(qapp, "_akeno_wheel_guard", None)   # the app-wide guard runs on the real clock: set aside
+    if installed is not None and shiboken6.isValid(installed):
+        qapp.removeEventFilter(installed)
     clock = Clock()
     g = interaction.WheelGuard(qapp, clock=clock)
     qapp.installEventFilter(g)
     yield g, clock
     qapp.removeEventFilter(g)
     g.deleteLater()
+    if installed is not None and shiboken6.isValid(installed):
+        qapp.installEventFilter(installed)
 
 
 @pytest.fixture

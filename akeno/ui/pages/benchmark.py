@@ -17,7 +17,7 @@ from akeno.performance.compare import MODES
 VERDICTS = {"gpu": "GPU", "cpu": "CPU", "limiter": "Frame cap / V-Sync", "mixed": "Mixed", "unknown": "Unknown"}
 from akeno.security.downloads import CancelToken
 from akeno.ui import theme
-from akeno.ui.widgets import (Card, EmptyState, FrameTimeChart, KeyValueGrid, Spinner, button, clear_layout, confirm,
+from akeno.ui.widgets import (PageHeader, Card, EmptyState, FrameTimeChart, KeyValueGrid, Spinner, button, clear_layout, confirm,
                               info, label)
 
 
@@ -30,10 +30,9 @@ class BenchmarkPage(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(14)
-        lay.addWidget(label(t("Benchmark"), "h1"))
-        lay.addWidget(label(t("Measurements come from Intel PresentMon (MIT licensed, downloaded from its official "
+        lay.addWidget(PageHeader(t("Benchmark"), t("Measurements come from Intel PresentMon (MIT licensed, downloaded from its official "
                               "GitHub release and hash-verified on first use). Start the game, go to a repeatable "
-                              "scene, then start the capture. Nothing here is simulated."), "dim", wrap=True))
+                              "scene, then start the capture. Nothing here is simulated.")))
         run = Card(t("New measurement"), "play", theme.GREEN)
         row = QHBoxLayout()
         self.game_combo = QComboBox()

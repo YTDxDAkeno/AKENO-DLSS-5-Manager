@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLineEdit, QVBoxLayout, 
 from akeno.i18n import t
 from akeno.ui import theme
 from akeno.ui.stack_panel import GamePanel, error_text
-from akeno.ui.widgets import Card, EmptyState, KeyValueGrid, StatusPill, button, clear_layout, info, label
+from akeno.ui.widgets import PageHeader, Card, EmptyState, KeyValueGrid, StatusPill, button, clear_layout, info, label
 
 KIND_TEXT = {"graphics_hook": "Graphics hook", "reshade_addon": "ReShade add-on", "neural_consumer": "DLSS 5 add-on",
              "asi_plugin": "ASI plug-in", "plugin_file": "Plug-in file", "reshade_config": "ReShade settings"}
@@ -24,16 +24,15 @@ class FiveMPage(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
-        top = QHBoxLayout()
-        top.addWidget(label(t("FiveM Legacy"), "h1"))
-        top.addStretch(1)
-        top.addWidget(button(t("Locate FiveM…"), "folder", on_click=self._locate))
-        lay.addLayout(top)
-        lay.addWidget(label(t("DLSS 5 for FiveM installs only into FiveM.app\\plugins (the folder FiveM loads graphics "
-                              "mods from). Your GTA V installation is never changed."), "dim", wrap=True))
+        lay.setSpacing(theme.CARD_GAP)
+        lay.addWidget(PageHeader(t("FiveM Legacy"), t("DLSS 5 for FiveM installs only into FiveM.app\\plugins (the folder "
+                                                     "FiveM loads graphics mods from). Your GTA V installation is never "
+                                                     "changed."),
+                                 (button(t("Locate FiveM…"), "folder", on_click=self._locate),)))
         self.body = QVBoxLayout()
-        self.body.setSpacing(12)
+        self.body.setSpacing(theme.CARD_GAP)
         lay.addLayout(self.body)
+        lay.addStretch(1)
         ctl.games_changed.connect(self.refresh)
         ctl.installs_changed.connect(self._client)
         self.refresh()

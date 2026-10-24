@@ -454,7 +454,11 @@ class EmptyState(QWidget):
         tx = label(text, "dim", wrap=True)
         tx.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tx.setMaximumWidth(460)
-        lay.addWidget(tx, 0, Qt.AlignmentFlag.AlignCenter)
+        line = QHBoxLayout()                    # centred by stretches: an aligned word-wrapped label loses lines
+        line.addStretch(1)
+        line.addWidget(tx, 100)
+        line.addStretch(1)
+        lay.addLayout(line)
         if action:
             lay.addSpacing(6)
             lay.addWidget(action, 0, Qt.AlignmentFlag.AlignCenter)
@@ -1001,7 +1005,8 @@ def fit_control(w: QWidget) -> QWidget:
                            (QLineEdit, TEXT_WIDTH)):
         if isinstance(w, kind):
             if kind is QAbstractSpinBox:            # the widest value with its unit, plus the arrow buttons
-                lo = max(lo, _spin_text_width(w) + 9 + 28 + 14)
+                from akeno.ui.interaction import spin_min_width
+                lo = max(lo, spin_min_width(w))
                 hi = max(hi, lo)
             w.setMinimumWidth(lo)
             w.setMaximumWidth(hi)
@@ -1009,17 +1014,6 @@ def fit_control(w: QWidget) -> QWidget:
                             QSizePolicy.Policy.Fixed)
             break
     return w
-
-
-def _spin_text_width(w) -> int:
-    fm = w.fontMetrics()
-    texts = [w.lineEdit().text() if w.lineEdit() else ""]
-    if hasattr(w, "textFromValue"):
-        for v in (w.minimum(), w.maximum()):
-            texts.append(w.prefix() + w.textFromValue(v) + w.suffix())
-    elif hasattr(w, "displayFormat"):
-        texts.append(w.displayFormat())
-    return max(fm.horizontalAdvance(x) for x in texts)
 
 
 def game_cover(game, width: int, height: int, radius: int = 6) -> QPixmap:
@@ -1106,3 +1100,43 @@ class StatTile(QWidget):
     def set(self, value: str) -> None:
         self.value.setText(value)
         self.setAccessibleDescription(value)
+
+
+class EmptyAware(QWidget):
+    """A list or table that shows an EmptyState instead of an empty box, switching by itself as rows come and go."""
+
+    def __init__(self, view, empty: QWidget, min_height: int = 0):
+        super().__init__()
+        from PySide6.QtWidgets import QStackedLayout
+        self.view, self.empty = view, empty
+        self._stack = QStackedLayout(self)
+        self._stack.setContentsMargins(0, 0, 0, 0)
+        self._stack.addWidget(view)
+        self._stack.addWidget(empty)
+        if min_height:
+            self.setMinimumHeight(min_height)
+        model = view.model()
+        for sig in (model.rowsInserted, model.rowsRemoved, model.modelReset, model.layoutChanged):
+            sig.connect(self._update)
+        self._update()
+
+    def _update(self, *_) -> None:
+        self._stack.setCurrentWidget(self.view if self.view.model().rowCount() else self.empty)
+
+
+def form_grid(rows, label_width: int = 150, field_width: int = 560) -> QGridLayout:
+    """A form to fill in (a theme's name, author, licence...): labels in one column, fields next to them, left-aligned
+    and no wider than ``field_width``, so name and field stay together however wide the card is."""
+    grid = QGridLayout()
+    grid.setContentsMargins(0, 0, 0, 0)
+    grid.setHorizontalSpacing(16)
+    grid.setVerticalSpacing(10)
+    grid.setColumnMinimumWidth(0, label_width)
+    grid.setColumnStretch(2, 1)
+    for i, (text, field) in enumerate(rows):
+        name = label(text, "key")
+        grid.addWidget(name, i, 0, Qt.AlignmentFlag.AlignVCenter if not hasattr(field, "toPlainText")
+                       else Qt.AlignmentFlag.AlignTop)
+        field.setMaximumWidth(field_width)
+        grid.addWidget(field, i, 1)
+    return grid

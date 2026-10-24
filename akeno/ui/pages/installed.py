@@ -8,7 +8,7 @@ from akeno.i18n import t
 from akeno.stack import configs
 from akeno.ui import theme
 from akeno.ui.stack_panel import error_text
-from akeno.ui.widgets import Card, EmptyState, KeyValueGrid, StatusPill, button, clear_layout, confirm, label
+from akeno.ui.widgets import PageHeader, Card, EmptyState, KeyValueGrid, StatusPill, button, clear_layout, confirm, label
 
 
 class InstalledPage(QWidget):
@@ -18,9 +18,8 @@ class InstalledPage(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
-        lay.addWidget(label(t("Installed Mods"), "h1"))
-        lay.addWidget(label(t("Every installation is one reversible transaction chain: removing a mod puts back the "
-                              "exact original files."), "dim", wrap=True))
+        lay.addWidget(PageHeader(t("Installed Mods"), t("Every installation is one reversible transaction chain: removing a mod puts back the "
+                              "exact original files.")))
         self.body = QVBoxLayout()
         self.body.setSpacing(10)
         lay.addLayout(self.body)

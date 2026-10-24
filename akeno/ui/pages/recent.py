@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QHBoxLayout, QVBoxLayout, QWidget
 from akeno.i18n import t
 from akeno.ui.account_ui import when
 from akeno.ui.game_hub import playtime_text
-from akeno.ui.widgets import Card, EmptyState, button, clear_layout, label
+from akeno.ui.widgets import PageHeader, Card, EmptyState, button, clear_layout, label
 
 
 def _ts(iso):
@@ -26,9 +26,7 @@ class RecentPage(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(14)
-        root.addWidget(label(t("Recently Played"), "h1"))
-        root.addWidget(label(t("AKENO counts playtime while it runs and notices your games (intelligent game mode)."),
-                             "dim", shrink=True))
+        root.addWidget(PageHeader(t("Recently Played"), t("AKENO counts playtime while it runs and notices your games (intelligent game mode).")))
         self.list = QVBoxLayout()
         self.list.setSpacing(10)
         root.addLayout(self.list)

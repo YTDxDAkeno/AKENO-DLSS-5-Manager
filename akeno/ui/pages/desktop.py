@@ -9,17 +9,19 @@ from pathlib import Path
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt, QTime, QTimer
 from PySide6.QtGui import QColor, QGuiApplication, QIcon, QImage, QLinearGradient, QPainter, QPixmap
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QHBoxLayout, QInputDialog,
-                               QLineEdit, QListWidget, QListWidgetItem, QPlainTextEdit, QSlider, QSpinBox, QTimeEdit,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel,
+                               QLineEdit, QListWidget, QListWidgetItem, QPlainTextEdit, QSizePolicy, QSlider, QSpinBox,
+                               QStackedWidget, QTabBar, QTimeEdit, QVBoxLayout, QWidget)
+
+from shiboken6 import isValid
 
 from akeno.desktop import config as cfgmod
 from akeno.desktop import media, themes, winapi
 from akeno.desktop import widgets as dwidgets
 from akeno.i18n import t
 from akeno.ui import icons, theme
-from akeno.ui.widgets import (Card, FlowLayout, KeyValueGrid, ResponsiveRow, StatusPill, button, clear_layout,
-                              confirm, info, label)
+from akeno.ui.widgets import (Card, ElidedLabel, EmptyAware, EmptyState, FlowLayout, KeyValueGrid, PageHeader, ResponsiveRow,
+                              StatusPill, button, clear_layout, confirm, fit_control, form_grid, info, label)
 
 KIND_TEXT = {"image": "Picture", "gif": "GIF animation", "video": "Video", "web": "Web wallpaper"}
 MODE_TEXT = {"single": "One wallpaper", "rotate": "Change every few minutes", "schedule": "By time of day"}
@@ -47,9 +49,13 @@ def _row(*widgets) -> QWidget:
 
 
 def _line(text: str, widget: QWidget) -> QHBoxLayout:
+    """A setting: its name on the left, the control right-aligned at a width that suits it (design system)."""
     line = QHBoxLayout()
-    line.addWidget(label(text, "key"), 1)
-    line.addWidget(widget, 1)
+    line.setSpacing(16)
+    name = label(text)
+    name.setWordWrap(True)
+    line.addWidget(name, 1)
+    line.addWidget(fit_control(widget), 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
     return line
 
 
@@ -103,9 +109,8 @@ class DesktopPage(QWidget):
 
     def header(self, root: QVBoxLayout, title: str, text: str) -> None:
         root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(14)
-        root.addWidget(label(t(title), "h1"))
-        root.addWidget(label(t(text), "dim", shrink=True))
+        root.setSpacing(theme.CARD_GAP)
+        root.addWidget(PageHeader(t(title), t(text)))
 
 
 class WallpapersPage(DesktopPage):
@@ -115,8 +120,23 @@ class WallpapersPage(DesktopPage):
         self.header(root, "Wallpapers", "Animated wallpapers behind your desktop icons: pictures, GIFs, videos and web "
                     "wallpapers (HTML, WebGL). Each monitor's wallpaper runs in its own process; when you stop, "
                     "Windows shows its own wallpaper again. Nothing of Explorer is replaced.")
+        self.tabs = QTabBar()
+        self.tabs.setExpanding(False)
+        self.tabs.setDrawBase(False)
+        self.tabs.addTab(t("My wallpapers"))
+        self.tabs.addTab(t("Find wallpapers"))
+        root.addWidget(self.tabs)
+        self.views = QStackedWidget()
+        root.addWidget(self.views)
+        mine = QWidget()
+        root = QVBoxLayout(mine)                      # the existing wallpaper settings live on the first tab
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(theme.CARD_GAP)
+        self.views.addWidget(mine)
+        self.sources: SourcesPanel | None = None
+        self.tabs.currentChanged.connect(self._show_tab)
 
-        top = ResponsiveRow(spacing=14)
+        top = ResponsiveRow(spacing=theme.CARD_GAP)
         status = Card(t("Desktop Studio"), "monitor")
         self.pill = StatusPill(t("Not running"), "pending")
         status.body.addWidget(self.pill)
@@ -140,17 +160,26 @@ class WallpapersPage(DesktopPage):
         top.add(mon, 2)
         root.addWidget(top)
 
-        lists = ResponsiveRow(spacing=14)
-        pl = Card(t("Playlist"), "image", theme.VIOLET)
+        lists = ResponsiveRow(spacing=theme.CARD_GAP)
+        pl = Card(t("Playlist"), "image")
         self.mode = _combo(MODE_TEXT, t("Playlist mode"))
         self.mode.currentIndexChanged.connect(lambda _: self._set("mode", self.mode.currentData()))
         pl.body.addLayout(_line(t("Mode"), self.mode))
         self.list = QListWidget()
         self.list.setAccessibleName(t("Playlist"))
         self.list.setIconSize(QSize(96, 54))
+        self.list.setSpacing(2)
         self.list.setMinimumHeight(200)
         self.list.currentRowChanged.connect(self._load_item)
-        pl.body.addWidget(self.list)
+        self.list_empty = EmptyState("image", t("No wallpaper on this monitor yet"),
+                                     t("Add pictures, GIFs, videos or a web wallpaper folder, or find one on the "
+                                       "Find wallpapers tab."),
+                                     button(t("Add files…"), "plus", "primary", on_click=self._add_files))
+        self.list_stack = QStackedWidget()
+        self.list_stack.addWidget(self.list)
+        self.list_stack.addWidget(self.list_empty)
+        self.list_stack.setMinimumHeight(200)
+        pl.body.addWidget(self.list_stack)
         pl.body.addWidget(_row(button(t("Add files…"), "plus", on_click=self._add_files),
                                button(t("Add web wallpaper folder…"), "folder", on_click=self._add_folder),
                                button(t("Remove"), "trash", on_click=self._remove),
@@ -177,7 +206,7 @@ class WallpapersPage(DesktopPage):
         side = QWidget()
         side_lay = QVBoxLayout(side)
         side_lay.setContentsMargins(0, 0, 0, 0)
-        side_lay.setSpacing(14)
+        side_lay.setSpacing(theme.CARD_GAP)
         opts = Card(t("Playback"), "sliders")
         self.fit = _combo(FIT_TEXT, t("Picture fit"))
         self.fit.currentIndexChanged.connect(lambda _: self._set("fit", self.fit.currentData()))
@@ -242,6 +271,19 @@ class WallpapersPage(DesktopPage):
         self.timer.timeout.connect(self.refresh_status)
         self._fill_monitors()
 
+    def _show_tab(self, index: int) -> None:
+        if index == 1 and self.sources is None:          # built on first use: nothing goes online before that
+            self.sources = SourcesPanel(self)
+            self.views.addWidget(self.sources)
+        for i in range(self.views.count()):               # only the shown tab counts for the page height
+            w = self.views.widget(i)
+            on = i == index
+            w.setSizePolicy(QSizePolicy.Policy.Preferred if on else QSizePolicy.Policy.Ignored,
+                            QSizePolicy.Policy.Preferred if on else QSizePolicy.Policy.Ignored)
+        self.views.setCurrentIndex(index)
+        if index == 1:
+            self.sources.on_show()
+
     # -- loading -------------------------------------------------------------------------------------------------
     def _fill_monitors(self) -> None:
         self.monitor.blockSignals(True)
@@ -290,6 +332,7 @@ class WallpapersPage(DesktopPage):
                 entry.setToolTip(t("The file is missing: {p}", p=str(path)))
             self.list.addItem(entry)
         self.list.blockSignals(False)
+        self.list_stack.setCurrentWidget(self.list if self.list.count() else self.list_empty)
         if self.list.count():
             self.list.setCurrentRow(min(select, self.list.count() - 1))
         else:
@@ -562,7 +605,9 @@ class DockPage(DesktopPage):
         self.list.setMinimumHeight(240)
         self.list.setSpacing(3)
         self.list.setIconSize(QSize(28, 28))
-        items.body.addWidget(self.list)
+        items.body.addWidget(EmptyAware(self.list, EmptyState("dock", t("Nothing pinned yet"),
+                                                              t("Add programs, folders or groups with the buttons "
+                                                                "below.")), 240))
         items.body.addWidget(_row(button(t("Add program…"), "plus", on_click=self._add_program),
                                   button(t("Add folder…"), "folder", on_click=self._add_folder),
                                   button(t("New group…"), "layers", on_click=self._add_group),
@@ -681,7 +726,8 @@ class WidgetsPage(DesktopPage):
         self.list.setSpacing(3)
         self.list.setIconSize(QSize(22, 22))
         self.list.currentRowChanged.connect(self._load_item)
-        lst.body.addWidget(self.list)
+        lst.body.addWidget(EmptyAware(self.list, EmptyState("grid", t("No widgets on the desktop yet"),
+                                                            t("Pick a widget below and add it to a monitor.")), 240))
         self.kind = QComboBox()
         self.kind.setAccessibleName(t("Widget"))
         for key in cfgmod.WIDGET_TYPES:
@@ -699,7 +745,7 @@ class WidgetsPage(DesktopPage):
         side = QWidget()
         side_lay = QVBoxLayout(side)
         side_lay.setContentsMargins(0, 0, 0, 0)
-        side_lay.setSpacing(14)
+        side_lay.setSpacing(theme.CARD_GAP)
         opt = Card(t("Selected widget"), "sliders")
         self.sel = KeyValueGrid(130)
         opt.body.addWidget(self.sel)
@@ -940,11 +986,8 @@ class ThemesPage(DesktopPage):
         self.description.setMaximumHeight(80)
         self.source = QComboBox()
         self.source.setAccessibleName(t("Wallpapers of"))
-        for text, value in ((t("Name"), self.name), (t("Author"), self.author), (t("License"), self.license),
-                            (t("Wallpapers of"), self.source)):
-            exp.body.addLayout(_line(text, value))
-        exp.body.addWidget(label(t("Description"), "key"))
-        exp.body.addWidget(self.description)
+        exp.body.addLayout(form_grid([(t("Name"), self.name), (t("Author"), self.author), (t("License"), self.license),
+                                      (t("Wallpapers of"), self.source), (t("Description"), self.description)]))
         self.chk_widgets = QCheckBox(t("Include the widget layout"))
         self.chk_widgets.setChecked(True)
         self.chk_dock = QCheckBox(t("Include the dock style (never your pinned programs)"))
@@ -1063,3 +1106,388 @@ class ThemesPage(DesktopPage):
     def on_show(self) -> None:
         self.reload_cfg()
         self.load()
+
+
+# -- Find wallpapers (akeno/desktop/sources.py) ------------------------------------------------------------------
+class VideoTile(QFrame):
+    """One Pixabay result: preview, what it shows, length and size, its creator, and the two actions."""
+
+    WIDTH = 236
+
+    def __init__(self, video, quality: str, on_add, on_page):
+        super().__init__()
+        self.video = video
+        self.setObjectName("VideoTile")
+        self.setFixedWidth(self.WIDTH)
+        self.setStyleSheet(f"#VideoTile {{ background: {theme.SURFACE_2}; border: 1px solid {theme.BORDER};"
+                           f" border-radius: 8px; }} #VideoTile:hover {{ border-color: {theme.BORDER_BTN}; }}")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(8, 8, 8, 10)
+        lay.setSpacing(4)
+        self.thumb = QLabel()
+        self.thumb.setFixedSize(self.WIDTH - 16, round((self.WIDTH - 16) * 9 / 16))
+        self.thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.thumb.setStyleSheet(f"background: {theme.INPUT}; border-radius: 6px;")
+        self.thumb.setPixmap(icons.pixmap("film", theme.TEXT_MUTED, 28))
+        lay.addWidget(self.thumb)
+        title = ElidedLabel(video.title)
+        title.setStyleSheet("font-weight: 600;")
+        lay.addWidget(title)
+        chosen = video.best(quality)
+        minutes, seconds = divmod(max(0, video.duration), 60)
+        meta = f"{minutes}:{seconds:02d}"
+        if chosen:
+            meta += f" · {chosen.label}"
+            if chosen.bytes:
+                meta += f" · {chosen.bytes / 1e6:.0f} MB"
+        lay.addWidget(ElidedLabel(meta, "muted"))
+        if video.user:
+            lay.addWidget(ElidedLabel(t("by {name} on Pixabay", name=video.user), "muted"))
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        self.btn_add = button(t("Add"), "plus", "primary", on_click=lambda: on_add(self))
+        self.btn_add.setEnabled(chosen is not None)
+        row.addWidget(self.btn_add)
+        row.addStretch(1)
+        row.addWidget(button(t("Page"), "external", "link", tip=video.page_url, on_click=lambda: on_page(video)))
+        lay.addLayout(row)
+        self.setAccessibleName(video.title)
+
+    def set_preview(self, data: bytes) -> None:
+        img = QImage.fromData(data)
+        if img.isNull():
+            return
+        size = self.thumb.size()
+        ratio = self.devicePixelRatioF() or 1.0
+        pm = QPixmap.fromImage(img.scaled(round(size.width() * ratio), round(size.height() * ratio),
+                                          Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                          Qt.TransformationMode.SmoothTransformation))
+        pm = pm.copy((pm.width() - round(size.width() * ratio)) // 2, (pm.height() - round(size.height() * ratio)) // 2,
+                     round(size.width() * ratio), round(size.height() * ratio))
+        pm.setDevicePixelRatio(ratio)
+        self.thumb.setPixmap(pm)
+
+
+class SourcesPanel(QWidget):
+    """Wallpapers → Find wallpapers: Pixabay through its API, the other sites in the browser, and recent downloads."""
+
+    def __init__(self, page):
+        super().__init__()
+        from akeno.desktop import sources
+        self.src = sources
+        self.page, self.ctl = page, page.ctl
+        self.keys = sources.KeyStore()
+        self.results = None
+        self.page_no = 1
+        self.query = ""
+        self.epoch = 0
+        self.tiles: list[VideoTile] = []
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(theme.CARD_GAP)
+
+        # Pixabay
+        px = Card("Pixabay", "film", right=button("pixabay.com", "external", "link",
+                                                 on_click=lambda: self._open("https://pixabay.com/videos/")))
+        self.key_box = QWidget()
+        kl = QVBoxLayout(self.key_box)
+        kl.setContentsMargins(0, 0, 0, 0)
+        kl.setSpacing(8)
+        kl.addWidget(label(t("Pixabay offers free videos for wallpapers through an official interface. Searching it "
+                             "needs your own free Pixabay API key: sign in on Pixabay, open the API documentation and "
+                             "copy the key shown there."), "dim", wrap=True))
+        krow = QHBoxLayout()
+        krow.setSpacing(8)
+        self.key_edit = QLineEdit()
+        self.key_edit.setEchoMode(QLineEdit.EchoMode.Password)
+        self.key_edit.setPlaceholderText(t("Pixabay API key"))
+        self.key_edit.setAccessibleName(t("Pixabay API key"))
+        self.key_edit.returnPressed.connect(self._save_key)
+        krow.addWidget(self.key_edit, 1)
+        krow.addWidget(button(t("Save key"), "check", "primary", on_click=self._save_key))
+        krow.addWidget(button(t("Get a free API key"), "external", on_click=lambda: self._open(
+            "https://pixabay.com/api/docs/")))
+        kl.addLayout(krow)
+        kl.addWidget(label(t("The key is stored encrypted for your Windows account and is only sent to Pixabay."),
+                           "muted", wrap=True))
+        px.body.addWidget(self.key_box)
+
+        self.search_box = QWidget()
+        sl = QVBoxLayout(self.search_box)
+        sl.setContentsMargins(0, 0, 0, 0)
+        sl.setSpacing(10)
+        srow = QHBoxLayout()
+        srow.setSpacing(8)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText(t("Search animated wallpapers…"))
+        self.search.setAccessibleName(t("Search animated wallpapers"))
+        self.search.setClearButtonEnabled(True)
+        self.search.addAction(icons.icon("search", theme.TEXT_MUTED, 16), QLineEdit.ActionPosition.LeadingPosition)
+        self.search.returnPressed.connect(lambda: self.run_search(1))
+        srow.addWidget(self.search, 1)
+        self.kind = _combo(sources.KIND_TEXT, t("Kind of video"))
+        self.kind.setMaximumWidth(170)
+        srow.addWidget(self.kind)
+        self.quality = _combo(sources.QUALITY_TEXT, t("Quality"))
+        self.quality.setCurrentIndex(self.quality.findData("1080p"))
+        self.quality.setMaximumWidth(140)
+        self.quality.setToolTip(t("4K when Pixabay has it, otherwise the best size there is."))
+        srow.addWidget(self.quality)
+        self.btn_search = button(t("Search"), "search", "primary", on_click=lambda: self.run_search(1))
+        srow.addWidget(self.btn_search)
+        sl.addLayout(srow)
+        topics = FlowLayout(spacing=6)
+        for word, text in sources.TOPICS.items():
+            topics.addWidget(button(t(text), kind="chip", on_click=lambda _=False, w=word: self._topic(w)))
+        sl.addLayout(topics)
+        self.status = label("", "muted", wrap=True)
+        sl.addWidget(self.status)
+        self.grid_holder = QWidget()
+        self.grid = FlowLayout(self.grid_holder, spacing=12)
+        sl.addWidget(self.grid_holder)
+        self.empty = EmptyState("film", t("Search Pixabay"), t("Type what you want to see, or pick a topic above."))
+        sl.addWidget(self.empty)
+        nav = QHBoxLayout()
+        self.pager = label("", "muted")
+        nav.addWidget(self.pager)
+        nav.addStretch(1)
+        self.btn_prev = button(t("Previous"), on_click=lambda: self.run_search(self.page_no - 1))
+        self.btn_next = button(t("Next"), on_click=lambda: self.run_search(self.page_no + 1))
+        nav.addWidget(self.btn_prev)
+        nav.addWidget(self.btn_next)
+        sl.addLayout(nav)
+        foot = QHBoxLayout()
+        foot.addWidget(label(t("Videos from Pixabay, free to use under the Pixabay Content License. Each result names "
+                               "its creator; added videos keep a note of where they came from."), "muted", wrap=True), 1)
+        foot.addWidget(button(t("Forget API key"), kind="link", on_click=self._forget_key))
+        sl.addLayout(foot)
+        px.body.addWidget(self.search_box)
+        lay.addWidget(px)
+
+        # Sites without an interface for apps
+        ext = Card(t("Other wallpaper sites"), "globe")
+        ext.body.addWidget(label(t("These sites offer no interface for apps. Open one in your browser, download a "
+                                   "wallpaper there under the site's own terms, then add the file from Recent downloads. "
+                                   "AKENO does not download from them or show their content."),
+                                 "dim", wrap=True))
+        for site in sources.SITES:
+            row = QHBoxLayout()
+            row.setSpacing(12)
+            col = QVBoxLayout()
+            col.setSpacing(1)
+            col.addWidget(label(site.name, "h3"))
+            col.addWidget(label(t(site.about), "muted", wrap=True))
+            row.addLayout(col, 1)
+            row.addWidget(button(t("Open website"), "external", on_click=lambda _=False, u=site.url: self._open(u)))
+            ext.body.addLayout(row)
+
+        # Recent downloads
+        self.imp = Card(t("Recent downloads"), "download",
+                        right=button(t("Choose a file…"), "folder", on_click=self._choose))
+        self.imp_list = QVBoxLayout()
+        self.imp_list.setSpacing(4)
+        self.imp.body.addLayout(self.imp_list)
+        self.imp.body.addWidget(label(t("Video files (MP4, WebM, MKV, MOV) and GIFs from your Downloads folder of the "
+                                        "last two weeks. Adding one copies it into AKENO's wallpaper library, so it "
+                                        "stays when you tidy the folder."), "muted", wrap=True))
+        side = ResponsiveRow(theme.CARD_GAP)
+        side.add(ext, 1)
+        side.add(self.imp, 1)
+        lay.addWidget(side)
+        lay.addStretch(1)
+        self._update_mode()
+
+    # -- state ---------------------------------------------------------------------------------------------------
+    def on_show(self) -> None:
+        self._update_mode()
+        self.refresh_downloads()
+
+    def _update_mode(self) -> None:
+        has_key = bool(self.keys.get())
+        self.key_box.setVisible(not has_key)
+        self.search_box.setVisible(has_key)
+        self._paging()
+
+    def _paging(self) -> None:
+        res = self.results
+        show = res is not None and bool(res.videos)
+        self.empty.setVisible(not show)
+        self.grid_holder.setVisible(show)
+        self.btn_prev.setVisible(show and res.pages > 1)
+        self.btn_next.setVisible(show and res.pages > 1)
+        self.btn_prev.setEnabled(show and self.page_no > 1)
+        self.btn_next.setEnabled(show and self.page_no < res.pages)
+        self.pager.setText(t("Page {p} of {n}", p=self.page_no, n=res.pages) if show else "")
+
+    def _open(self, url: str) -> None:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QDesktopServices
+        QDesktopServices.openUrl(QUrl(url))
+
+    def _save_key(self) -> None:
+        try:
+            self.keys.set(self.key_edit.text())
+        except self.src.SourceError as exc:
+            info(self, "Pixabay", exc.text(), error=True)
+            return
+        self.key_edit.clear()
+        self._update_mode()
+        self.search.setFocus()
+
+    def _forget_key(self) -> None:
+        if confirm(self, t("Forget API key"), t("Remove the Pixabay API key from this PC? Wallpapers you added stay.")):
+            self.keys.clear()
+            self.results = None
+            clear_layout(self.grid)
+            self._update_mode()
+
+    def _topic(self, word: str) -> None:
+        self.search.setText(word)
+        self.run_search(1)
+
+    # -- search --------------------------------------------------------------------------------------------------
+    def run_search(self, page: int) -> None:
+        query = self.search.text().strip()
+        if not query:
+            self.search.setFocus()
+            return
+        key, kind, quality = self.keys.get(), self.kind.currentData(), self.quality.currentData()
+        self.epoch += 1
+        epoch = self.epoch
+        self.status.setText(t("Searching Pixabay…"))
+        self.btn_search.setEnabled(False)
+
+        def work():
+            return self.src.Pixabay(key).search(query, kind, page, 24, quality)
+
+        def done(res):
+            if epoch != self.epoch or not isValid(self):
+                return
+            self.btn_search.setEnabled(True)
+            self.results, self.page_no, self.query = res, page, query
+            self._show_results(quality)
+
+        def fail(exc):
+            if epoch != self.epoch or not isValid(self):
+                return
+            self.btn_search.setEnabled(True)
+            self.status.setText(exc.text() if isinstance(exc, self.src.SourceError) else str(exc))
+        self.ctl.run("pixabay-search", work, done, fail, silent=True)
+
+    def _show_results(self, quality: str) -> None:
+        clear_layout(self.grid)
+        self.tiles = []
+        res = self.results
+        if not res.videos:
+            self.status.setText(t("Pixabay has no video for “{q}”.", q=self.query))
+        else:
+            self.status.setText(t("{n} videos on Pixabay", n=res.total) + (" · " + t("from the last 24 hours' results")
+                                                                           if res.from_cache else ""))
+        for video in res.videos:
+            tile = VideoTile(video, quality, self._add, lambda v: self._open(v.page_url))
+            self.tiles.append(tile)
+            self.grid.addWidget(tile)
+        self._paging()
+        self._load_previews()
+
+    def _load_previews(self) -> None:
+        key = self.keys.get()
+        epoch = self.epoch
+        wanted = [(tile, tile.video.thumbnail) for tile in self.tiles if tile.video.thumbnail]
+
+        def work(emit):
+            client = self.src.Pixabay(key)
+            for i, (_, url) in enumerate(wanted):
+                try:
+                    emit((i, client.thumbnail(url)))
+                except self.src.SourceError:
+                    continue
+
+        def preview(item):
+            i, data = item
+            if epoch == self.epoch and isValid(self) and i < len(wanted) and isValid(wanted[i][0]):
+                wanted[i][0].set_preview(data)
+        if wanted:
+            self.ctl.run("pixabay-previews", work, None, None, on_progress=preview, silent=True)
+
+    def _add(self, tile: VideoTile) -> None:
+        video, quality = tile.video, self.quality.currentData()
+        key = self.keys.get()
+        tile.btn_add.setEnabled(False)
+        tile.btn_add.setText(t("Downloading…"))
+
+        def work(emit):
+            return self.src.Pixabay(key).download(video, quality, self.src.library_dir(),
+                                                  lambda got, total: emit((got, total)))
+
+        def progress(value):
+            got, total = value
+            if isValid(tile):
+                tile.btn_add.setText(f"{got / 1e6:.0f} / {total / 1e6:.0f} MB" if total else f"{got / 1e6:.0f} MB")
+
+        def done(path):
+            if isValid(tile):
+                tile.btn_add.setText(t("Added"))
+            if isValid(self.page):
+                self._added(self.page.add_paths([str(path)]), video.title)
+
+        def fail(exc):
+            if isValid(tile):
+                tile.btn_add.setEnabled(True)
+                tile.btn_add.setText(t("Add"))
+            info(self, "Pixabay", exc.text() if isinstance(exc, self.src.SourceError) else str(exc), error=True)
+        if not self.ctl.run(f"pixabay-download-{video.id}", work, done, fail, on_progress=progress, silent=True):
+            tile.btn_add.setEnabled(True)
+            tile.btn_add.setText(t("Add"))
+
+    def _added(self, problems: list[str], name: str) -> None:
+        if problems:
+            info(self, t("Wallpapers"), t("Some files were not added."), "\n".join(problems), error=True)
+        else:
+            self.ctl.status.emit(t("Added to the playlist of this monitor: {name}", name=name))
+
+    # -- recent downloads ----------------------------------------------------------------------------------------
+    def refresh_downloads(self) -> None:
+        clear_layout(self.imp_list)
+        files = self.src.recent_downloads()
+        if not files:
+            self.imp_list.addWidget(label(t("No video files from the last two weeks in your Downloads folder."), "dim",
+                                          wrap=True))
+            return
+        from datetime import datetime
+        for path in files:
+            row = QHBoxLayout()
+            row.setSpacing(10)
+            ic = QLabel()
+            ic.setPixmap(icons.pixmap("film", theme.ACCENT_TEXT, 18))
+            row.addWidget(ic)
+            col = QVBoxLayout()
+            col.setSpacing(0)
+            col.addWidget(ElidedLabel(path.name))
+            try:
+                st = path.stat()
+                col.addWidget(label(f"{st.st_size / 1e6:.0f} MB · " + datetime.fromtimestamp(st.st_mtime)
+                                    .strftime("%d.%m.%Y %H:%M"), "muted"))
+            except OSError:
+                pass
+            row.addLayout(col, 1)
+            row.addWidget(button(t("Add"), "plus", on_click=lambda _=False, p=path: self._import(p)))
+            self.imp_list.addLayout(row)
+
+    def _choose(self) -> None:
+        from akeno.desktop.sensors import downloads_dir
+        path, _ = QFileDialog.getOpenFileName(self, t("Choose a downloaded wallpaper"), str(downloads_dir()),
+                                              t("Videos and GIFs") + " (*.mp4 *.webm *.mkv *.mov *.m4v *.gif)")
+        if path:
+            self._import(Path(path))
+
+    def _import(self, path: Path) -> None:
+        def done(dest):
+            if isValid(self.page):
+                self._added(self.page.add_paths([str(dest)]), Path(dest).name)
+
+        def fail(exc):
+            info(self, t("Recent downloads"), exc.text() if isinstance(exc, self.src.SourceError) else str(exc),
+                 error=True)
+        self.ctl.run("wallpaper-import", lambda: self.src.import_file(path, self.src.library_dir()), done, fail,
+                     silent=True)
