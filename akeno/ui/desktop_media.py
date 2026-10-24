@@ -23,10 +23,10 @@ from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QHBoxLayout, QLa
 
 from akeno.desktop import thumbs as thumbsmod
 from akeno.desktop.library import Item
-from akeno.i18n import t
+from akeno.i18n import msg, t
 from akeno.ui import icons, theme
 
-KIND_BADGE = {"image": "Picture", "gif": "GIF", "video": "Video", "web": "Web"}
+KIND_BADGE = {"image": msg("Picture"), "gif": msg("GIF"), "video": msg("Video"), "web": msg("Web")}
 KIND_ICON = {"image": "image", "gif": "film", "video": "film", "web": "globe"}
 CARD_MIN = 236                         # narrowest card; wider windows get more columns, never stretched cards
 TEXT_H = 58                            # title and facts below the picture

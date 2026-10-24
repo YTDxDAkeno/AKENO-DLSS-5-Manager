@@ -19,7 +19,7 @@ from shiboken6 import isValid
 from akeno.desktop import config as cfgmod
 from akeno.desktop import media, themes, winapi
 from akeno.desktop import widgets as dwidgets
-from akeno.i18n import t
+from akeno.i18n import msg, t
 from akeno.ui import icons, theme
 from akeno.ui.widgets import (Card, ElidedLabel, EmptyAware, EmptyState, FlowLayout, KeyValueGrid, PageHeader, ResponsiveRow,
                               StatusPill, button, clear_layout, confirm, fit_control, form_grid, info, label)
@@ -124,10 +124,12 @@ def _scroll(widget: QWidget) -> QScrollArea:
     return area
 
 
-FILTERS = {"all": "All", "video": "Videos", "image": "Pictures", "gif": "GIFs", "web": "Web", "favorites": "Favourites"}
-SORT_TEXT = {"recent": "Recently added", "name": "Name", "favorites": "Favourites first", "kind": "Type",
-             "size": "Size"}
-TABS = ("Library", "Discover", "Playback & performance", "Playlists & schedule", "Desktop Runtime")
+FILTERS = {"all": msg("All"), "video": msg("Videos"), "image": msg("Pictures"), "gif": msg("GIFs"), "web": msg("Web"),
+           "favorites": msg("Favourites")}
+SORT_TEXT = {"recent": msg("Recently added"), "name": msg("Name"), "favorites": msg("Favourites first"),
+             "kind": msg("Type"), "size": msg("Size")}
+TABS = (msg("Library"), msg("Discover"), msg("Playback & performance"), msg("Playlists & schedule"),
+        msg("Desktop Runtime"))
 
 
 class WallpapersPage(DesktopPage):
@@ -471,8 +473,8 @@ class WallpapersPage(DesktopPage):
         self.chk_tray = QCheckBox(t("Tray icon for wallpapers, dock and widgets"))
         self.chk_tray.toggled.connect(lambda v: self._set_runtime("tray", bool(v)))
         start.body.addWidget(self.chk_tray)
-        self.layering = _combo({"auto": "Automatic (recommended)", "workerw": "Inside Windows' wallpaper window"},
-                               t("Desktop layer"))
+        self.layering = _combo({"auto": msg("Automatic (recommended)"),
+                                "workerw": msg("Inside Windows' wallpaper window")}, t("Desktop layer"))
         self.layering.currentIndexChanged.connect(lambda _: self._set_runtime("layering", self.layering.currentData()))
         start.body.addLayout(_line(t("Desktop layer"), self.layering))
         start.body.addWidget(label(t("Change it only if a wallpaper stays invisible on this PC. AKENO never shows a "
