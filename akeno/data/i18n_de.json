@@ -2789,7 +2789,7 @@
  "Windows Game Mode": "Windows-Spielmodus",
  "Windows build {b} · {layer}": "Windows-Build {b} · {layer}",
  "Windows denied access to a file: {file}": "Windows hat den Zugriff auf eine Datei verweigert: {file}",
- "Windows reports no temperature here without a vendor tool.": "Windows meldet hier ohne Herstellerprogramm keine Temperatur.",
+ "No temperature without a vendor tool.": "Keine Temperatur ohne Herstellertool.",
  "Windows reports no virtual desktop here.": "Windows meldet hier keinen virtuellen Desktop.",
  "With path tracing and Ray Reconstruction, OptiScaler DLSS 5 runs after the upscaler automatically (no pre-SR).": "Mit Pathtracing und Ray Reconstruction läuft OptiScaler DLSS 5 automatisch nach dem Upscaler (kein Pre-SR).",
  "With the mod: not measured yet.": "Mit der Mod: noch nicht gemessen.",

@@ -339,6 +339,11 @@ def still_attached(hwnd: int, layer: Layer, api=None) -> bool:
     return api is not None and api.is_window(hwnd) and api.is_window(layer.parent) and api.parent(hwnd) == layer.parent
 
 
+def is_visible(hwnd: int, api=None) -> bool:
+    api = _api(api)
+    return api is not None and api.is_window(hwnd) and api.visible(hwnd)
+
+
 def hide(hwnd: int, api=None) -> None:
     """Hide before closing. The window is never detached into a top-level window (that would cover the desktop)."""
     api = _api(api)
@@ -462,10 +467,25 @@ def native_rect(screen) -> tuple[int, int, int, int]:
     return g.x(), g.y(), round(g.width() * dpr), round(g.height() * dpr)
 
 
+def screen_key(screen, screens) -> str:
+    """How the configuration, the host and the renderers name a monitor: Qt's screen name, and where two monitors of
+    the same model share that name, the name plus the monitor's position ("DELL U2720Q @2560,0")."""
+    name = screen.name()
+    if sum(1 for s in screens if s.name() == name) < 2:
+        return name
+    g = screen.geometry()
+    return f"{name} @{g.x()},{g.y()}"
+
+
+def screen_of(key: str, screens):
+    """The QScreen a screen key names, None when that monitor is gone."""
+    return next((s for s in screens if screen_key(s, screens) == key), None)
+
+
 def monitor_of(name: str, screens, mons: list[Monitor] | None = None) -> Monitor | None:
-    """The Win32 monitor of the Qt screen called ``name`` (what the configuration uses), None when it is gone."""
-    screen = next((s for s in screens if s.name() == name), None)
-    return None if screen is None else match_monitor(name, native_rect(screen), mons)
+    """The Win32 monitor of the Qt screen with the key ``name`` (what the configuration uses), None when it is gone."""
+    screen = screen_of(name, screens)
+    return None if screen is None else match_monitor(screen.name(), native_rect(screen), mons)
 
 
 def fullscreen_app() -> bool:

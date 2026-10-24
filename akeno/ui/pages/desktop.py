@@ -70,16 +70,17 @@ def _combo(choices: dict, accessible: str) -> QComboBox:
 
 
 def screens() -> list[tuple[str, str]]:
-    """(QScreen name, readable label) of each monitor."""
+    """(screen key, readable label) of each monitor (the key is Qt's screen name; see winapi.screen_key)."""
     out = []
     primary = QGuiApplication.primaryScreen()
-    for i, s in enumerate(QGuiApplication.screens()):
+    all_screens = QGuiApplication.screens()
+    for i, s in enumerate(all_screens):
         g = s.geometry()
         text = t("Monitor {n}", n=i + 1) + f" · {round(g.width() * s.devicePixelRatio())}×" \
             f"{round(g.height() * s.devicePixelRatio())}"
         if s is primary:
             text += " · " + t("main monitor")
-        out.append((s.name(), text))
+        out.append((winapi.screen_key(s, all_screens), text))
     return out
 
 
@@ -613,7 +614,7 @@ class WallpapersPage(DesktopPage):
         self._monitors_changed()
 
     def _monitors_changed(self) -> None:
-        names = [s.name() for s in QGuiApplication.screens()]
+        names = [name for name, _ in screens()]
         chosen = [n + 1 for n, name in enumerate(names) if name in self.monitor_map.selected]
         if len(names) > 1 and len(chosen) == len(names):
             text = t("All {n} monitors", n=len(names))
