@@ -23,7 +23,8 @@ from akeno.ui.widgets import StatusPill, confirm, info, label
 # The navigation: sections, each with pages; a group (like "DLSS 5 Manager") holds pages shown indented when it is
 # open. NAV is the flat list of every page in display order (its index is the page's place in the stack).
 SECTIONS = [
-    ("HOME", [("library", "My Games", "gamepad"), ("recent", "Recently Played", "clock")]),
+    ("HOME", [("home", "Dashboard", "home"), ("library", "My Games", "gamepad"),
+              ("recent", "Recently Played", "clock")]),
     ("GAMING", [("group", "dlss", "DLSS 5 Manager", "sparkle", [
         ("fivem", "FiveM Legacy", "fivem"), ("downloads", "Downloads", "download"),
         ("backups", "Restore / Backups", "restore"), ("hardware", "Hardware", "chip"),
@@ -73,7 +74,7 @@ class Header(QWidget):
         self.title = label(APP_NAME, "h1")
         col.addStretch(1)
         col.addWidget(self.title)
-        self.sub = label(t("Community DLSS 5 mod manager · Install · Versions · Restore"), "dim")
+        self.sub = label(t("DLSS 5 Manager · FPS Booster · Desktop Studio · Community"), "dim")
         col.addWidget(self.sub)
         col.addStretch(1)
         lay.addLayout(col, 1)
@@ -334,6 +335,8 @@ class Sidebar(QFrame):
         for gkey, g in self.groups.items():
             active = key in GROUPS[gkey]
             g.setStyleSheet(f"color: {theme.TEXT};" if active else "")
+        if key in self.buttons:                       # the chosen page stays visible in a scrolled navigation
+            QTimer.singleShot(0, lambda b=self.buttons[key]: self.scroll.ensureWidgetVisible(b, 0, 8))
 
     def set_compact(self, height: int) -> None:
         """Hide decoration first when the window is short, so navigation never needs scrolling."""
@@ -429,7 +432,7 @@ class MainWindow(QMainWindow):
         self._header_status()
         for i, (key, _, _) in enumerate(NAV[:9]):
             QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self, activated=lambda k=key: self.go(k))
-        self.go("library")
+        self.go("home")
 
     def _initial_size(self) -> None:
         """Open at a size that fits the screen's available area (taskbar and scaling respected)."""
@@ -451,6 +454,7 @@ class MainWindow(QMainWindow):
         from akeno.ui.pages.desktop import DockPage, ThemesPage, WallpapersPage, WidgetsPage
         from akeno.ui.pages.online import CloudSyncPage, CommunityPage
         from akeno.ui.pages.updates import UpdatesPage
+        from akeno.ui.pages.home import HomePage
         from akeno.ui.pages.recent import RecentPage
         from akeno.ui.pages.benchmark import BenchmarkPage
         from akeno.ui.pages.dashboard import DashboardPage
@@ -493,7 +497,7 @@ class MainWindow(QMainWindow):
                 "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage, "account": AccountPage,
                 "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
                 "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage,
-                "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage}
+                "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage, "home": HomePage}
         for key, _, _ in NAV:
             page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")

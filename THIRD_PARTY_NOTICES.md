@@ -10,6 +10,16 @@ This file lists every third-party component AKENO bundles, downloads or interact
 | Python runtime | 3.12 | PSF License | Interpreter embedded by PyInstaller |
 | Qt for Python (PySide6, shiboken6) and Qt 6 libraries | 6.8.1 | LGPL-3.0 (Qt and PySide6 open-source licence) | User interface. Shipped as separate, replaceable DLLs in the one-folder build, as the LGPL requires. Source: https://code.qt.io/cgit/pyside/pyside-setup.git |
 | PyInstaller bootloader | 6.11.1 | GPL-2.0 with bootloader exception | Starts the bundled application |
+| Qt WebEngine (part of PySide6 6.8.1; Chromium) | 6.8.1 | LGPL-3.0 (Qt); Chromium's BSD-style and other licenses listed in `QtWebEngineCore`'s license files | Web wallpapers (3.0), sandboxed, no network |
+| Qt Multimedia with its FFmpeg backend (part of PySide6 6.8.1) | 6.8.1 | LGPL-3.0; FFmpeg LGPL-2.1-or-later build | Video wallpapers (3.0) |
+| cryptography | 44.0.0 | Apache-2.0 or BSD-3-Clause | Ed25519 verification of licenses and release manifests, Cloud Sync encryption (3.0) |
+| psutil | 6.1.1 | BSD-3-Clause | Game detection, priorities, widgets (3.0) |
+
+The license server (`server/`, runs on the VPS only, never in the Windows build) uses FastAPI, Starlette, Pydantic,
+SQLAlchemy, Alembic, psycopg, argon2-cffi, cryptography, pyotp, segno, Jinja2 and Uvicorn (MIT, BSD, Apache-2.0 or
+LGPL-3.0 for psycopg), pinned in `server/requirements.txt`.
+
+Weather data in the optional weather widget: Open-Meteo.com, CC BY 4.0 (attribution shown in the widget).
 
 ### Versioned community dependencies (v2 Windows CI)
 
@@ -72,6 +82,9 @@ upstream repositories above; the OptiScaler package also contains its own `Licen
 * Skynizz/optiscaler-dlss5 `deploy/install.py` (GPL-3.0) — installation layout and the "never overwrite
   a file you did not install" rule. AKENO's installer is an independent implementation.
 * ShyVortex/dlss-unlocked (MIT) — feature separation of Neural Rendering, Frame Generation and MFG.
+* rocksdanister/lively (GPL-3.0) — wallpaper behind the desktop icons (the documented `Progman`/`WorkerW`
+  behaviour of Windows), one process per wallpaper, the `livelyAudioListener` web API name. Desktop Studio is an
+  independent implementation in Python/Qt; no Lively code was copied.
 
 ## Python packages used only for development and CI
 

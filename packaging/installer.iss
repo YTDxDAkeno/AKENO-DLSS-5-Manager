@@ -1,4 +1,4 @@
-; Inno Setup script for AKENO DLSS 5 Manager.
+; Inno Setup script for AKENO Gaming Suite (the same AppId as AKENO DLSS 5 Manager: it upgrades 2.x in place).
 ; Per-user installation (no administrator rights). User data in %LOCALAPPDATA%\AKENO (settings, install
 ; records and BACKUPS of game files) is deliberately NOT removed on uninstall, so mods installed by AKENO
 ; can still be restored with a later AKENO installation.
@@ -16,19 +16,19 @@
 
 [Setup]
 AppId={{6B1C7E64-5A3E-4D0B-9C2B-3F0A6E1D5C21}
-AppName=AKENO DLSS 5 Manager
+AppName=AKENO Gaming Suite
 AppVersion={#AppVersion}
 AppPublisher=AKENO community project
-AppPublisherURL=https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager
-DefaultDirName={localappdata}\Programs\AKENO DLSS 5 Manager
-DefaultGroupName=AKENO DLSS 5 Manager
+AppPublisherURL=https://github.com/YTDxDAkeno/AKENO-Releases
+DefaultDirName={localappdata}\Programs\AKENO Gaming Suite
+DefaultGroupName=AKENO Gaming Suite
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0
 OutputDir={#ArtifactDir}
-OutputBaseFilename=AKENO-DLSS5-Manager-{#AppVersion}-Setup-x64
+OutputBaseFilename=AKENO-Gaming-Suite-{#AppVersion}-Setup-x64
 SetupIconFile=akeno.ico
 UninstallDisplayIcon={app}\AKENO.exe
 Compression=lzma2
@@ -50,12 +50,12 @@ Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\AKENO DLSS 5 Manager"; Filename: "{app}\AKENO.exe"
-Name: "{group}\{cm:UninstallProgram,AKENO DLSS 5 Manager}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\AKENO DLSS 5 Manager"; Filename: "{app}\AKENO.exe"; Tasks: desktopicon
+Name: "{group}\AKENO Gaming Suite"; Filename: "{app}\AKENO.exe"
+Name: "{group}\{cm:UninstallProgram,AKENO Gaming Suite}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\AKENO Gaming Suite"; Filename: "{app}\AKENO.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\AKENO.exe"; Description: "{cm:LaunchProgram,AKENO DLSS 5 Manager}"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\AKENO.exe"; Description: "{cm:LaunchProgram,AKENO Gaming Suite}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 ; Remove the optional "Launch with Windows" entry if the user enabled it.

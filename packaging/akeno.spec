@@ -1,4 +1,4 @@
-# PyInstaller spec for AKENO DLSS 5 Manager (Windows x64, one-folder build).
+# PyInstaller spec for AKENO Gaming Suite (Windows x64, one-folder build).
 # Build:  pyinstaller --noconfirm packaging/akeno.spec
 import re
 from pathlib import Path
@@ -14,12 +14,12 @@ VSVersionInfo(
   kids=[
     StringFileInfo([StringTable('040904B0', [
       StringStruct('CompanyName', 'AKENO community project'),
-      StringStruct('FileDescription', 'AKENO DLSS 5 Manager'),
+      StringStruct('FileDescription', 'AKENO Gaming Suite'),
       StringStruct('FileVersion', '{version}'),
       StringStruct('InternalName', 'AKENO'),
       StringStruct('LegalCopyright', 'GPL-3.0-or-later'),
       StringStruct('OriginalFilename', 'AKENO.exe'),
-      StringStruct('ProductName', 'AKENO DLSS 5 Manager'),
+      StringStruct('ProductName', 'AKENO Gaming Suite'),
       StringStruct('ProductVersion', '{version}')])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])])
   ]

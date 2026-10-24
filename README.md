@@ -1,6 +1,26 @@
-# AKENO DLSS 5 Manager
+# AKENO Gaming Suite
 
-**2.1:** a community mod manager for DLSS 5 Neural Rendering. Open **My Games**, pick a game, and AKENO
+**3.0** extends AKENO DLSS 5 Manager into a suite. One account and one license (24 hours, 72 hours, 30 days or Lifetime; codes stack) unlock every module:
+
+| Section | Pages |
+|---|---|
+| HOME | Dashboard, My Games (with the Game Hub: favourites, categories, notes, launch options, playtime), Recently Played |
+| GAMING | DLSS 5 Manager (everything of 2.1, unchanged), FPS Booster, Benchmark (baseline / boost / DLSS 5 comparison), Installed Mods |
+| DESKTOP | Wallpapers (pictures, GIFs, videos, HTML/WebGL behind the desktop icons), AKENO Dock, Widgets, Theme Workshop |
+| ONLINE | Community (presets and themes, data only, reviewed index), Cloud Sync (through a folder you choose) |
+| ACCOUNT | My Account, License, Updates (signed, verified, with rollback), Settings |
+
+Where each part runs:
+- **Your PC:** everything, including the downloads from AKENO's **public release repository**, which need no GitHub account.
+- **The license server (VPS):** accounts, licenses and the admin website, nothing else ([deploy/README.md](deploy/README.md)).
+
+Licenses are Ed25519-signed by that server, bound to the PC and checked against the public key built into the app. A Lifetime license keeps working offline for good ([license trust model](docs/SECURITY_LICENSING.md)).
+
+More: [Desktop Studio](docs/DESKTOP_STUDIO.md), [Cloud Sync and Community](docs/CLOUD_SYNC_AND_COMMUNITY.md), [distribution and updates](docs/DISTRIBUTION_AND_UPDATES.md), [3.0 release notes](docs/AKENO_V3_RELEASE_NOTES.md).
+
+## DLSS 5 Manager
+
+**Since 2.1:** a community mod manager for DLSS 5 Neural Rendering. Open **My Games**, pick a game, and AKENO
 recommends the method and versions that fit it, downloads the original release files, verifies them,
 installs and configures the complete stack, and takes it all back byte for byte when you remove it. Presets
 (Performance, Balanced, Quality, Ultra, Custom) map to the mods' real settings. FiveM Legacy has its own page.

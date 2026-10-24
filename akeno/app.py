@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     if sys.platform == "win32":
         try:
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AKENO.DLSS5Manager")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AKENO.GamingSuite")
         except (AttributeError, OSError):
             pass
 
