@@ -1,11 +1,16 @@
 """Checking, downloading and starting an update of AKENO itself.
 
-* The channel manifest comes from the public release repository: no GitHub account, login or token.
+* The channel manifest comes from the build's distribution (the public release repository on GitHub, or AKENO's
+  own release server on akeno.online): no account, login or token. Only HTTPS hosts of that distribution are
+  contacted, redirects included.
 * It must carry AKENO's release signature (see manifest.py); every download must match the SHA-256 it lists.
 * The portable package is unpacked into ``%LOCALAPPDATA%\\AKENO\\updates\\staging`` and its own AKENO.exe applies it
   (apply.py), for installed and portable copies alike (the installer installs per user, without administrator
   rights). Licenses, settings, game records and backups stay where they are and keep working with the new version.
 * The previous version is kept for a rollback.
+* When the running AKENO.exe carries a valid Authenticode signature, the new one must carry a valid signature of the
+  same signer (an unsigned build relies on the release signature and the checksums alone).
+* Automatic checks run at most every ``CHECK_HOURS``; "Later" keeps a version from being announced again.
 """
 
 from __future__ import annotations
@@ -24,10 +29,15 @@ from akeno.paths import app_home, sub
 from akeno.updater import manifest
 
 MAX_MANIFEST = 1 * 2 ** 20
+CHECK_HOURS = 6                      # automatic checks: at most this often (a manual check always runs)
 
 
 class UpdateError(Exception):
     pass
+
+
+class ServiceUnavailable(UpdateError):
+    """The update service could not be reached (offline, timeout, server error): nothing is wrong with AKENO."""
 
 
 def frozen() -> bool:
@@ -38,12 +48,54 @@ def install_dir() -> Path:
     return Path(sys.executable).resolve().parent
 
 
-def fetch_json(url: str) -> dict:
-    from akeno.packages.index import _get
+def fetch_json(url: str, trusted=None) -> dict:
+    """A channel manifest over verified HTTPS from a trusted host (redirects only to trusted hosts)."""
+    import ssl
+    import urllib.error
+    import urllib.request
+    trusted = trusted or distribution.load().trusted
+    if not trusted(url):
+        raise UpdateError(f"refusing {url}: not an official AKENO release address")
+
+    class Redirects(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, req, fp, code, msg_, headers, newurl):
+            if not trusted(newurl):
+                raise UpdateError("refused a redirect away from the official release addresses")
+            return super().redirect_request(req, fp, code, msg_, headers, newurl)
+    opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=ssl.create_default_context()),
+                                         Redirects)
+    req = urllib.request.Request(url, headers={"User-Agent": f"AKENO/{__version__}", "Accept": "application/json"})
     try:
-        return json.loads(_get(url, MAX_MANIFEST).decode("utf-8"))
+        with opener.open(req, timeout=20) as r:
+            data = r.read(MAX_MANIFEST + 1)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            raise UpdateError("no release has been published on this channel yet") from exc
+        raise ServiceUnavailable(f"the update service answered {exc.code}") from exc
+    except (urllib.error.URLError, OSError) as exc:
+        raise ServiceUnavailable(f"the update service cannot be reached ({getattr(exc, 'reason', exc)})") from exc
+    if len(data) > MAX_MANIFEST:
+        raise UpdateError("the release manifest is larger than allowed")
+    try:
+        return json.loads(data.decode("utf-8"))
     except ValueError as exc:
         raise UpdateError(f"the release manifest is not readable: {exc}") from exc
+
+
+def signature_check(new_exe: Path, running_exe: Path | None = None) -> str:
+    """The Authenticode rule for the new AKENO.exe. Returns a note for the log, raises UpdateError on a mismatch."""
+    from akeno.security import authenticode
+    running = authenticode.verify(str(running_exe or sys.executable))
+    if not running.checked:
+        return "Authenticode not checked (not Windows)"
+    if not running.valid:
+        return "this build is not code-signed: release signature and SHA-256 only"
+    new = authenticode.verify(str(new_exe))
+    if not new.valid:
+        raise UpdateError("the new AKENO.exe has no valid code signature, although this version has one")
+    if " ".join((new.signer or "").casefold().split()) != " ".join((running.signer or "").casefold().split()):
+        raise UpdateError(f"the new AKENO.exe is signed by {new.signer!r}, not by {running.signer!r}")
+    return f"code signature valid ({new.signer})"
 
 
 class UpdateService:
@@ -52,7 +104,7 @@ class UpdateService:
         self.settings = settings
         self.dist = dist or distribution.load()
         self.keys = manifest.release_keys() if keys is None else keys
-        self.fetch = fetch
+        self.fetch = fetch if fetch is not fetch_json else (lambda url: fetch_json(url, self.dist.trusted))
         self.version = version
         self.folder = Path(folder or sub("updates"))
         self._downloads = downloads
@@ -96,10 +148,23 @@ class UpdateService:
         return True, ""
 
     # -- check -------------------------------------------------------------------------------------------------------
+    def due(self, hours: float = CHECK_HOURS, now: float | None = None) -> bool:
+        """An automatic check is due: the last one (successful or not) is at least ``hours`` old."""
+        last = max(self.state().get("last_check") or 0, self.state().get("last_attempt") or 0)
+        return (time.time() if now is None else now) - last >= hours * 3600
+
+    def snooze(self, version: str) -> None:
+        """"Later": this version is not announced again (the Updates page still shows it)."""
+        self._store(snoozed=version)
+
+    def snoozed(self, version: str) -> bool:
+        return self.state().get("snoozed") == version
+
     def check(self) -> manifest.Release | None:
         """The newer release of the chosen channel, or None. Raises UpdateError / ManifestError."""
+        self._store(last_attempt=time.time())
         doc = self.fetch(self.dist.channel_manifest(self.channel))
-        release = manifest.parse(doc, self.keys, self.channel)
+        release = manifest.parse(doc, self.keys, self.channel, self.dist)
         key = f"highest_seen_{self.channel}"
         seen = self.state().get(key)
         # a manifest older than one already seen is a replay or a freeze attempt: not offered
@@ -117,7 +182,7 @@ class UpdateService:
     def downloads(self):
         if self._downloads is None:
             from akeno.security.downloads import DownloadManager
-            self._downloads = DownloadManager(sorted(distribution.HOSTS), cache=self.folder / "downloads")
+            self._downloads = DownloadManager(sorted(self.dist.hosts), cache=self.folder / "downloads")
         return self._downloads
 
     def download(self, release: manifest.Release, progress=None, token=None) -> Path:
@@ -145,7 +210,20 @@ class UpdateService:
             root = entries[0]                              # the package has one top folder
         if not (root / "AKENO.exe").is_file() and not (root / "AKENO").is_file():
             raise UpdateError("the package has no AKENO.exe")
+        if frozen() and sys.platform == "win32":
+            self._store(signature=signature_check(root / "AKENO.exe"))
         return root
+
+    def prepare(self, release: manifest.Release, emit=None, token=None) -> dict:
+        """Download, verify and unpack ``release``; returns the plan for :meth:`launch`. ``emit`` receives the
+        phases: ``("download", done, total)``, ``("verified",)``, ``("unpack",)``, ``("signature", note)``."""
+        emit = emit or (lambda *a: None)
+        archive = self.download(release, lambda done, total: emit("download", done, total), token)
+        emit("verified")                    # the download manager accepted it only with the manifest's SHA-256
+        emit("unpack")
+        staged = self.stage(archive, release)
+        emit("signature", self.state().get("signature") or "")
+        return self.plan(release, staged)
 
     def plan(self, release: manifest.Release, staged: Path, target: Path | None = None) -> dict:
         target = Path(target or install_dir())

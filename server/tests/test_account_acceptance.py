@@ -95,3 +95,27 @@ def test_check_reports_a_server_without_email(site, monkeypatch, capsys):
                          "--links-via-api"])
     out = capsys.readouterr().out
     assert code == 1 and "[FAIL] registration: confirmation e-mail: unavailable" in out
+
+
+def test_check_probes_every_endpoint_and_compares_license_keys(site, tmp_path, capsys):
+    import json
+    from akeno_server import db as dbmod
+    from akeno_server.licensing import signing
+    url, _ = site
+    with dbmod.session() as db:
+        server_keys = [{"kid": k.kid, "public_key": k.public_key} for k in signing.public_keys(db)]
+    good = tmp_path / "licensing.json"
+    good.write_text(json.dumps({"server_url": url, "keys": server_keys}))
+    assert _tool().main(["--api", url, "--website", url, "check", "--license-keys", str(good)]) == 0
+    out = capsys.readouterr().out
+    assert "[OK  ] endpoint POST /auth/change-email" in out and "[OK  ] endpoint POST /devices/register" in out
+    assert f"[OK  ] server key {server_keys[0]['kid']}: embedded in the build" in out
+    assert "[FAIL]" not in out
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from akeno_server.licensing.signing import kid_for, raw_public
+    from akeno_server.auth.tokens import b64e
+    raw = raw_public(Ed25519PrivateKey.generate().public_key())
+    wrong = tmp_path / "wrong.json"
+    wrong.write_text(json.dumps({"keys": [{"kid": kid_for(raw), "public_key": b64e(raw)}]}))
+    assert _tool().main(["--api", url, "--website", url, "check", "--license-keys", str(wrong)]) == 1
+    assert "NOT trusted by this build" in capsys.readouterr().out

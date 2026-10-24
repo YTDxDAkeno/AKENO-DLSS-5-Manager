@@ -12,10 +12,12 @@ The token's payload::
      "files": [{"kind": "portable", "name": "...zip", "url": "...", "sha256": "...", "size": 123},
                {"kind": "installer", ...}, {"kind": "source", ...}, {"kind": "checksums", ...}]}
 
-It is signed in CI with the release key (a GitHub Actions secret of the private source repository); the app
-holds only the public half (``akeno/data/release-keys.json``, written at build time). A manifest that does not
-verify, belongs to another app or channel, or would go back to an older version is ignored. Release keys are
-separate from license keys: neither can stand in for the other.
+It is signed with the release key, outside any web server (CI secret or the maintainer's PC); the app holds only
+the public half (``akeno/data/release-keys.json``, written at build time). A manifest that does not verify,
+belongs to another app or channel, would go back to an older version, or is past its signed ``expires`` time
+(optional: a frozen or replayed manifest stops being offered) is ignored. File and notes addresses must be HTTPS
+on a host of the build's distribution (GitHub's release hosts, or ``akeno.online``). Release keys are separate from
+license keys: neither can stand in for the other.
 """
 
 from __future__ import annotations
@@ -101,7 +103,18 @@ def _https_github(url: str) -> bool:
     return u.scheme == "https" and (u.hostname or "").lower() in HOSTS
 
 
-def parse(channel_doc, keys: dict, channel: str) -> Release:
+def _timestamp(text: str) -> float | None:
+    from datetime import datetime
+    try:
+        return datetime.fromisoformat(str(text).replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def parse(channel_doc, keys: dict, channel: str, dist=None, now: float | None = None) -> Release:
+    """``dist``: the build's distribution (trusted hosts); ``now``: the time for the ``expires`` check."""
+    import time
+    trusted = dist.trusted if dist is not None else _https_github
     if not keys:
         raise ManifestError("this build has no release verification key")
     if not isinstance(channel_doc, dict) or channel_doc.get("format") != "akeno-release-channel":
@@ -115,18 +128,22 @@ def parse(channel_doc, keys: dict, channel: str) -> Release:
     if m.get("channel") != channel:
         raise ManifestError("the manifest is for another channel")
     version_key(m.get("release", ""))
+    if m.get("expires"):
+        expires = _timestamp(m["expires"])
+        if expires is None or expires < (time.time() if now is None else now):
+            raise ManifestError("the release manifest has expired (it is not offered again until it is re-signed)")
     files = []
     for f in m.get("files") or []:
         if not isinstance(f, dict) or f.get("kind") not in KINDS:
             continue
-        if not (isinstance(f.get("url"), str) and _https_github(f["url"]) and isinstance(f.get("sha256"), str)
+        if not (isinstance(f.get("url"), str) and trusted(f["url"]) and isinstance(f.get("sha256"), str)
                 and SHA.match(f["sha256"]) and isinstance(f.get("size"), int) and f["size"] > 0
                 and isinstance(f.get("name"), str) and re.fullmatch(r"[A-Za-z0-9._-]{1,120}", f["name"])):
             raise ManifestError(f"a file entry of the manifest is not valid: {f.get('name')}")
         files.append(File(f["kind"], f["name"], f["url"], f["sha256"], f["size"]))
     text = {k: str(m.get(k) or "")[:limit] for k, limit in (("tag", 40), ("published", 30), ("notes", 4000),
                                                               ("notes_url", 300))}
-    if text["notes_url"] and not _https_github(text["notes_url"]):
+    if text["notes_url"] and not trusted(text["notes_url"]):
         text["notes_url"] = ""
     return Release(channel, m["release"], text["tag"], text["published"], text["notes"], text["notes_url"], files,
                    kid)

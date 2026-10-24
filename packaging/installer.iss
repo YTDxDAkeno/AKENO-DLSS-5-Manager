@@ -4,7 +4,7 @@
 ; can still be restored with a later AKENO installation.
 
 #ifndef AppVersion
-  #define AppVersion "1.6.0"
+  #define AppVersion "3.0.0"
 #endif
 
 #ifndef SourceDir
@@ -19,7 +19,12 @@ AppId={{6B1C7E64-5A3E-4D0B-9C2B-3F0A6E1D5C21}
 AppName=AKENO Gaming Suite
 AppVersion={#AppVersion}
 AppPublisher=AKENO community project
-AppPublisherURL=https://github.com/YTDxDAkeno/AKENO-Releases
+AppPublisherURL=https://akeno.online
+AppSupportURL=https://akeno.online
+AppUpdatesURL=https://akeno.online
+; AKENO must not run while its files are replaced (the in-app updater handles running copies itself)
+CloseApplications=yes
+RestartApplications=no
 DefaultDirName={localappdata}\Programs\AKENO Gaming Suite
 DefaultGroupName=AKENO Gaming Suite
 PrivilegesRequired=lowest

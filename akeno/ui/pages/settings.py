@@ -119,7 +119,7 @@ class SettingsPage(QWidget):
 
         # Updates
         upd = Card(t("Updates"), "refresh")
-        upd.body.addWidget(self._check("check_app_updates", t("Check for AKENO updates on start")))
+        upd.body.addWidget(self._check("check_app_updates", t("Check for AKENO updates automatically (on start and every few hours)")))
         upd.body.addWidget(self._check("auto_update_compat_db", t("Update the compatibility database automatically")))
         mods = self._check("check_mod_updates", t("Check for new mod versions once a day"))
         mods.setToolTip(t("Asks GitHub for new releases of the mods. Nothing is installed by itself."))

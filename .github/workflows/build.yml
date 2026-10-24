@@ -249,13 +249,21 @@ jobs:
         env:
           RELEASE_PUBLIC_KEYS: ${{ vars.AKENO_RELEASE_PUBLIC_KEYS }}
           RELEASE_REPO: ${{ vars.AKENO_RELEASE_REPO }}
+          UPDATE_SOURCE: ${{ vars.AKENO_UPDATE_SOURCE }}
+          RELEASE_BASE: ${{ vars.AKENO_RELEASE_BASE }}
+          RELEASE_PAGE: ${{ vars.AKENO_RELEASE_PAGE }}
+          DOWNLOAD_HOSTS: ${{ vars.AKENO_DOWNLOAD_HOSTS }}
           RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
         run: |
           $require = @(); if ($env:RELEASE_BUILD -eq 'true') { $require = @('--require') }
           python tools/release_manifest.py embed --keys "$env:RELEASE_PUBLIC_KEYS" @require
           if ($LASTEXITCODE -ne 0) { throw "release key configuration failed" }
-          if ($env:RELEASE_REPO) {
-            @{ release_repo = $env:RELEASE_REPO } | ConvertTo-Json | Set-Content akeno/data/distribution.json -Encoding utf8
+          if ($env:UPDATE_SOURCE -eq 'akeno') {
+            python tools/release_manifest.py distribution --source akeno --repo="$env:RELEASE_REPO" --release-base="$env:RELEASE_BASE" --release-page="$env:RELEASE_PAGE" --download-hosts="$env:DOWNLOAD_HOSTS"
+            if ($LASTEXITCODE -ne 0) { throw "release source configuration failed" }
+          } elseif ($env:RELEASE_REPO) {
+            python tools/release_manifest.py distribution --repo="$env:RELEASE_REPO"
+            if ($LASTEXITCODE -ne 0) { throw "release source configuration failed" }
           }
       - name: PyInstaller build
         run: pyinstaller --noconfirm --distpath dist --workpath build packaging\akeno.spec

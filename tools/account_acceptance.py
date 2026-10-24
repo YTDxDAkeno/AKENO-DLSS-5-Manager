@@ -3,7 +3,7 @@
     python tools/account_acceptance.py check [--api https://api.akeno.online] [--website https://akeno.online]
     python tools/account_acceptance.py flow --email test-mailbox@akeno.online --confirm-real-account
 
-``check`` only reads:
+``check`` only reads (and probes every endpoint the app uses without credentials, see ``ENDPOINTS``):
 - the API answers over verified HTTPS and is not in maintenance;
 - whether this branch's account changes are deployed (``require_email_verification`` in ``/system/version``);
 - the website serves the pages e-mail links open (``/verify-email``, ``/reset-password``, ``/forgot-password``).
@@ -105,7 +105,94 @@ def check(api_url: str, website: str, report: Report) -> dict:
     for path, expected in (("/forgot-password", (200,)), ("/reset-password", (200,)), ("/verify-email", (200, 400))):
         status = _get_page(website + path)
         (report.ok if status in expected else report.fail)(f"website serves {path}", f"HTTP {status}")
+    probe_endpoints(api, report)
     return info
+
+
+# The app's endpoints, probed without credentials and with an empty body. A request like that never reaches the
+# endpoint's code: the server answers 401 (sign-in required) or 422 (fields missing) when the route exists, and 404 or
+# 405 when it does not. No account, session, e-mail or license is created or changed.
+ENDPOINTS = [
+    ("POST", "/auth/register", "registration", True), ("POST", "/auth/login", "sign-in", True),
+    ("POST", "/auth/refresh", "session renewal", True), ("POST", "/auth/logout", "sign-out", True),
+    ("GET", "/auth/me", "account information", True), ("PATCH", "/auth/me", "display name", True),
+    ("POST", "/auth/verify-email", "e-mail confirmation", True),
+    ("POST", "/auth/verify-email/resend", "resend confirmation", True),
+    ("POST", "/auth/password-reset/request", "forgot password", True),
+    ("POST", "/auth/password-reset/confirm", "password reset", True),
+    ("POST", "/auth/change-password", "change password", True),
+    ("POST", "/auth/change-email", "change e-mail (PR #14)", False),
+    ("POST", "/auth/sessions/revoke-others", "sign out other devices (PR #14)", False),
+    ("GET", "/licenses/current", "license status", True), ("POST", "/licenses/validate", "license check", True),
+    ("POST", "/licenses/redeem", "redeem code", True), ("POST", "/licenses/offline-certificate", "offline license", True),
+    ("GET", "/devices", "devices", True), ("POST", "/devices/register", "device activation", True),
+    ("GET", "/system/keys", "license keys", True),
+]
+
+
+def probe(api_url: str, method: str, path: str, timeout: float = 20) -> int:
+    ctx = ssl.create_default_context()
+    opener = urllib.request.build_opener(_NoRedirects, urllib.request.HTTPSHandler(context=ctx))
+    data = b"{}" if method in ("POST", "PATCH") else None
+    req = urllib.request.Request(f"{api_url}/api/v1{path}", data=data, method=method,
+                                 headers={"User-Agent": "AKENO-acceptance", "Content-Type": "application/json"})
+    try:
+        with opener.open(req, timeout=timeout) as resp:
+            return resp.status
+    except urllib.error.HTTPError as exc:
+        return exc.code
+
+
+def probe_endpoints(api: LicenseApi, report: Report) -> dict:
+    found = {}
+    for method, path, what, required in ENDPOINTS:
+        status = probe(api.base, method, path)
+        exists = status not in (404, 405) and status < 500
+        found[path] = exists
+        if exists:
+            report.ok(f"endpoint {method} {path} ({what})", f"present, HTTP {status} without credentials")
+        elif required:
+            report.fail(f"endpoint {method} {path} ({what})", f"missing, HTTP {status}")
+        else:
+            report.info(f"endpoint {method} {path} ({what})", f"not deployed yet, HTTP {status}: the app says "
+                                                              "'not offered yet'")
+    return found
+
+
+def check_license_keys(api: LicenseApi, licensing_file: Path, report: Report) -> None:
+    """Every key the server signs with must be trusted by the build: embedded, or endorsed by an embedded key."""
+    import json
+    from akeno.licensing import LicenseManager
+    from akeno.licensing import config as cfgmod
+    built = json.loads(licensing_file.read_text(encoding="utf-8"))
+    embedded = {k["kid"]: k["public_key"] for k in built.get("keys", []) if k.get("kid")}
+    report.info("license keys in the build", ", ".join(sorted(embedded)) or "none")
+    if not embedded:
+        report.fail("license keys in the build", "none: a build without keys accepts no license")
+        return
+    doc = api.call("GET", "/system/keys")
+    server = [k for k in doc.get("keys", []) if isinstance(k, dict) and k.get("kid")]
+    m = LicenseManager(cfgmod.LicensingConfig(api.base, embedded), store=_NullStore())
+    trusted = m.trusted_keys()
+    for k in server:
+        if k["kid"] in trusted and embedded.get(k["kid"], k["public_key"]) == k["public_key"]:
+            report.ok(f"server key {k['kid']}", "embedded in the build")
+        elif k.get("endorsement") and m._endorsed(k, trusted):
+            report.ok(f"server key {k['kid']}", "endorsed by an embedded key (rotation)")
+        elif k.get("retired_at") or k.get("retired"):
+            report.info(f"server key {k['kid']}", "retired and not trusted by this build")
+        else:
+            report.fail(f"server key {k['kid']}", "NOT trusted by this build: licenses signed with it are refused")
+    for kid in sorted(set(embedded) - {k["kid"] for k in server}):
+        report.info(f"build key {kid}", "not published by the server (an old key, or another server)")
+
+
+class _NullStore:
+    def load(self):
+        return {}
+
+    def save(self, state):
+        pass
 
 
 # -- the flow -----------------------------------------------------------------------------------------------------
@@ -218,7 +305,8 @@ def main(argv=None) -> int:
     ap.add_argument("--api", default=OFFICIAL_SERVER)
     ap.add_argument("--website", default="", help="default: derived from --api (api.<domain> → https://<domain>)")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("check", help="read-only checks")
+    ck = sub.add_parser("check", help="read-only checks")
+    ck.add_argument("--license-keys", type=Path, help="the build's licensing.json: compare with the server's keys")
     fl = sub.add_parser("flow", help="register, confirm, reset and sign in with a real test account")
     fl.add_argument("--email", required=True)
     fl.add_argument("--confirm-real-account", action="store_true",
@@ -231,6 +319,8 @@ def main(argv=None) -> int:
     website = (args.website or website_for(args.api)).rstrip("/")
     report = Report()
     info = check(args.api.rstrip("/"), website, report)
+    if args.cmd == "check" and info and args.license_keys:
+        check_license_keys(LicenseApi(args.api.rstrip("/")), args.license_keys, report)
     if args.cmd == "flow" and info:
         if not args.confirm_real_account:
             print("flow creates or uses a real account: add --confirm-real-account", file=sys.stderr)
