@@ -88,6 +88,8 @@ def main(argv: list[str] | None = None) -> int:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(__version__)
     app.setOrganizationName("AKENO")
+    from akeno.ui import interaction
+    interaction.install(app)           # the wheel scrolls pages; it never changes a control by passing over it
 
     from akeno import i18n
     from akeno.core.db import Database
