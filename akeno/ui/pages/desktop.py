@@ -1976,11 +1976,13 @@ class ThemesPage(DesktopPage):
 
     def contents(self, th: themes.Theme) -> str:
         m = th.manifest
-        parts = [t("{n} wallpaper(s)", n=th.files)]
+        n = th.files
+        parts = [t("1 wallpaper") if n == 1 else t("{n} wallpapers", n=n)]
         if m.get("dock"):
             parts.append(t("Dock"))
         if m.get("widgets"):
-            parts.append(t("{n} widget(s)", n=len(m["widgets"])))
+            n = len(m["widgets"])
+            parts.append(t("1 widget") if n == 1 else t("{n} widgets", n=n))
         return " · ".join(parts)
 
     def load(self) -> None:

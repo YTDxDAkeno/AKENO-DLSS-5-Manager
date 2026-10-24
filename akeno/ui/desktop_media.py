@@ -268,7 +268,9 @@ class Gallery(QListView):
         self._columns()
 
     def _columns(self) -> None:
-        width = max(CARD_MIN, self.viewport().width() - 2)
+        # the width QListView wraps at: it keeps room for a scroll bar that may appear
+        bar = self.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent, None, self.verticalScrollBar())
+        width = max(CARD_MIN, self.maximumViewportSize().width() - bar - 2)
         cols = max(1, width // CARD_MIN)
         card_w = width // cols
         thumb_h = round((card_w - 2 * MARGIN - 12) * 9 / 16)

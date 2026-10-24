@@ -909,6 +909,13 @@ class FlowLayout(QLayout):
         m = self.contentsMargins()
         return size + QSize(m.left() + m.right(), m.top() + m.bottom())
 
+    @staticmethod
+    def _hint(it) -> QSize:
+        hint = it.sizeHint()
+        if it.hasHeightForWidth():         # wrapped text inside: the height its width needs
+            hint.setHeight(max(hint.height(), it.heightForWidth(hint.width())))
+        return hint
+
     def _arrange(self, rect, apply: bool) -> int:
         m = self.contentsMargins()
         area = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom())
@@ -923,10 +930,10 @@ class FlowLayout(QLayout):
             x += w + self._gap
         y = area.y()
         for row in lines:
-            height = max((it.sizeHint().height() for it in row), default=0)
+            height = max((self._hint(it).height() for it in row), default=0)
             x = area.x()
             for it in row:                 # items of different heights share the line's vertical centre
-                hint = it.sizeHint()
+                hint = self._hint(it)
                 if apply:
                     it.setGeometry(QRect(QPoint(x, y + (height - hint.height()) // 2), hint))
                 x += hint.width() + self._gap
