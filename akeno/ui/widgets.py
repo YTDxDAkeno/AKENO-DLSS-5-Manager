@@ -123,11 +123,14 @@ class StatusPill(QLabel):
         # a sentence-long pill wraps instead of forcing the page wider than the window, and then grows in height
         wrap = len(text) > 48
         self.setWordWrap(wrap)
-        self.setSizePolicy(QSizePolicy.Policy.Maximum,
+        self.setSizePolicy(QSizePolicy.Policy.Preferred if wrap else QSizePolicy.Policy.Maximum,
                            QSizePolicy.Policy.Minimum if wrap else QSizePolicy.Policy.Fixed)
-        self.setStyleSheet(f"QLabel {{ background: rgba(255,255,255,0.045); border: 1px solid {theme.BORDER};"
-                           f" border-radius: {theme.RADIUS_PILL}px; padding: 2px 10px; color: {theme.TEXT_DIM};"
-                           f" font-size: {theme.FONT_SMALL}pt; font-weight: 600; }}")
+        if wrap:          # a sentence is a status line (dot and text), not a pill
+            self.setStyleSheet(f"QLabel {{ background: transparent; border: none; padding: 0; color: {theme.TEXT_DIM}; }}")
+        else:
+            self.setStyleSheet(f"QLabel {{ background: rgba(255,255,255,0.045); border: 1px solid {theme.BORDER};"
+                               f" border-radius: {theme.RADIUS_PILL}px; padding: 2px 10px; color: {theme.TEXT_DIM};"
+                               f" font-size: {theme.FONT_SMALL}pt; font-weight: 600; }}")
         self.setAccessibleName(text)
 
 
@@ -238,7 +241,7 @@ class CheckRow(QWidget):
         col = QVBoxLayout()
         col.setSpacing(0)
         col.setContentsMargins(0, 1, 0, 0)
-        tl = label(title)
+        tl = label(title, shrink=True)          # one line when there is room, wrapped in a narrow column
         low = title.lower()
         if state == "fail":
             color = "#FF9FAC"
@@ -368,9 +371,8 @@ class ActionTile(QPushButton):
         lay.addWidget(self.ic)
         col = QVBoxLayout()
         col.setSpacing(1)
-        self.t = label(title)
-        self.s = label(subtitle)
-        self.s.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.t = ElidedLabel(title)
+        self.s = ElidedLabel(subtitle)             # a narrow tile shortens the text; the tooltip has all of it
         col.addStretch(1)
         col.addWidget(self.t)
         col.addWidget(self.s)
@@ -422,8 +424,9 @@ class KeyValueGrid(QWidget):
         for i, (k, v) in enumerate(rows):
             self.grid.addWidget(label(k, "key"), i, 0, Qt.AlignmentFlag.AlignTop)
             if isinstance(v, QWidget):
-                align = Qt.AlignmentFlag.AlignLeft if isinstance(v, StatusPill) else Qt.AlignmentFlag(0)
-                self.grid.addWidget(v, i, 1, align)
+                # a one-line pill hugs the left; anything that wraps gets the full cell (aligned labels lose lines)
+                short = isinstance(v, StatusPill) and not v.wordWrap()
+                self.grid.addWidget(v, i, 1, Qt.AlignmentFlag.AlignLeft if short else Qt.AlignmentFlag(0))
             elif elide:
                 lb = ElidedLabel(v, "value", Qt.TextElideMode.ElideMiddle)
                 lb.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)

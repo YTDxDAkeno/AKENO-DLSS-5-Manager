@@ -350,7 +350,8 @@ class GamePanel(QWidget):
                      preset=t(configs.PRESET_LABELS.get(p.get("preset"), "?")))
             if consumer:
                 text += f" · {consumer.display}"
-            col.addWidget(StatusPill(text, "ok"), 0, Qt.AlignmentFlag.AlignLeft)
+            pill = StatusPill(text, "ok")
+            col.addWidget(pill, 0, Qt.AlignmentFlag(0) if pill.wordWrap() else Qt.AlignmentFlag.AlignLeft)
         elif st.legacy:
             col.addWidget(StatusPill(t("Installed by an older AKENO version"), "warn"), 0, Qt.AlignmentFlag.AlignLeft)
         else:

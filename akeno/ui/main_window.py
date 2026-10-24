@@ -560,6 +560,8 @@ class MainWindow(QMainWindow):
                                          o=t(self.s.compat_db.origin)))
 
     def _setting_changed(self, key: str) -> None:
+        if key not in ("language", "*", "theme_accent"):
+            self.statusBar().showMessage(t("Saved."), 2000)     # every preference applies at once; say so
         if key in ("language", "*", "theme_accent"):
             # Rebuild every page so all texts and styles pick up the change.
             from akeno import i18n

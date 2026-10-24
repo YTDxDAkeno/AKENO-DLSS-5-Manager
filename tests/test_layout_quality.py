@@ -50,6 +50,9 @@ def _visible(w) -> bool:
 
 def _clipped_label(lb: QLabel) -> bool:
     text = lb.text()
+    if text and lb.wordWrap():                              # wrapped text must get the height of all its lines
+        need = lb.heightForWidth(lb.width())
+        return need > lb.height() + 2
     if not text or lb.wordWrap() or "<" in text or lb.textFormat() == Qt.TextFormat.RichText or "\n" in text or lb.pixmap() is not None \
             and not lb.pixmap().isNull():
         return False
@@ -59,29 +62,50 @@ def _clipped_label(lb: QLabel) -> bool:
     return QFontMetrics(lb.font()).horizontalAdvance(text) > lb.width() - m.left() - m.right() + 1
 
 
+def _scan(key, host, problems) -> None:
+    """Every scroll area of the page, one screen at a time: spin boxes and labels must show all their text."""
+    from PySide6.QtWidgets import QScrollArea
+    areas = [host.scroll] + [a for a in host.findChildren(QScrollArea) if _visible(a)]
+    for area in areas:
+        bar = area.verticalScrollBar()
+        step = max(200, area.viewport().height() - 40)
+        for pos in range(0, bar.maximum() + step, step):
+            bar.setValue(min(pos, bar.maximum()))
+            QApplication.processEvents()
+            for spin in host.findChildren(QAbstractSpinBox):
+                if _visible(spin) and spin.lineEdit() is not None:
+                    need = QFontMetrics(spin.font()).horizontalAdvance(spin.text())
+                    if need > spin.lineEdit().width():
+                        problems.append(f"{key}: spin box {spin.accessibleName() or spin.text()!r} shows "
+                                        f"{spin.lineEdit().width()} of {need} px")
+            for lb in host.findChildren(QLabel):
+                if _visible(lb) and _clipped_label(lb):
+                    problems.append(f"{key}: label {lb.text()[:60]!r} is {lb.width()}x{lb.height()} px")
+        bar.setValue(0)
+
+
 @pytest.mark.parametrize("size", SIZES, ids=[f"{w}x{h}" for w, h in SIZES])
 def test_no_page_is_wider_than_the_window_and_nothing_is_clipped(window, qtbot, size):
-    from akeno.ui.main_window import NAV
+    from akeno.ui.main_window import ADVANCED, NAV
     win = window
     win.setMinimumSize(1100 if size[0] > 1100 else size[0], 680)
     win.resize(*size)
     qtbot.wait(100)
     problems = []
-    for key, _, _ in NAV:
+    views = [(key, None) for key, _, _ in NAV] + [(tab, None) for tab in ADVANCED] + [("wallpapers", 1)]
+    for key, tab in views:
         win.go(key)
+        if tab is not None:
+            win.pages[key].tabs.setCurrentIndex(tab)
         qtbot.wait(60)
-        host = win.hosts[key]
+        name = f"{key}#{tab}" if tab is not None else key
+        host = win.hosts["advanced" if key in ADVANCED else key]
         content = host.scroll.widget()
         if content.minimumSizeHint().width() > host.scroll.viewport().width() + 1:
-            problems.append(f"{key}: page needs {content.minimumSizeHint().width()} px, has "
+            problems.append(f"{name}: page needs {content.minimumSizeHint().width()} px, has "
                             f"{host.scroll.viewport().width()}")
-        for spin in host.findChildren(QAbstractSpinBox):
-            if _visible(spin) and spin.lineEdit() is not None:
-                need = QFontMetrics(spin.font()).horizontalAdvance(spin.text())
-                if need > spin.lineEdit().width():
-                    problems.append(f"{key}: spin box {spin.accessibleName() or spin.text()!r} shows {spin.lineEdit().width()}"
-                                    f" of {need} px")
-        for lb in host.findChildren(QLabel):
-            if _visible(lb) and _clipped_label(lb):
-                problems.append(f"{key}: label {lb.text()[:60]!r} is {lb.width()} px wide")
+        _scan(name, host, problems)
+        if tab is not None:
+            win.pages[key].tabs.setCurrentIndex(0)
+    problems = list(dict.fromkeys(problems))
     assert not problems, "\n".join(problems[:40])
