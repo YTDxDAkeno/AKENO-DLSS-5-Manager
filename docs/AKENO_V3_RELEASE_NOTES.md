@@ -22,6 +22,11 @@ AKENO DLSS 5 Manager becomes the AKENO Gaming Suite. Everything of 2.1 stays as 
   - The AKENO Dock.
   - 19 widgets.
   - The Theme Workshop (`.akenotheme`).
+  - Find wallpapers:
+    - Pixabay videos searched inside AKENO through Pixabay's official API, with your own free key, previews and
+      4K/1080p/720p;
+    - links to MotionBGs, MyLiveWallpapers and DesktopHut, which AKENO does not download from;
+    - one-click import of videos from your Downloads folder.
 - **Community.** DLSS 5 presets, FPS Booster profiles and widget layouts as data-only `.akenopack` packages, and a reviewed index with SHA-256 checks, a block list and reporting.
 - **Cloud Sync.** Your AKENO data between your PCs through a folder you choose, with per-field merge, conflicts you decide, a quota and optional encryption. Never licenses, tokens, DLLs or game files.
 - **Updates.**
@@ -30,6 +35,15 @@ AKENO DLSS 5 Manager becomes the AKENO Gaming Suite. Everything of 2.1 stays as 
   - A separate updater process keeps the previous version and rolls back if the new one does not start.
   - Stable and Beta channels.
 - **Notifications** in categories you can switch off.
+- **Interface.** One design system for every page (`docs/DESIGN_SYSTEM.md`):
+  - calmer surfaces and a single accent colour;
+  - readable type sizes with AA contrast;
+  - controls sized for their values, visible arrows, check marks and focus rings;
+  - empty states instead of empty boxes;
+  - a Dashboard of real data instead of repeated cards.
+  My Games keeps its list and game page. Pages fit 100–200 % display scaling without clipped text.
+- **Mouse wheel.** Scrolling a page never changes a number field, a choice, a slider or a tab by passing over it.
+  A control takes the wheel only after you click into it and start scrolling on it.
 
 ## Security
 

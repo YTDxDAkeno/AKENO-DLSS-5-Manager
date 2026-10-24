@@ -53,6 +53,33 @@ Windows then redraws its own wallpaper.
   - It is passed to `livelyAudioListener(array)` and `akenoAudio(array)`, so Lively audio wallpapers react, but to the level only.
 - **Interactive:** while the desktop has the focus, web wallpapers get `mousemove` events and `akenoMouse(x, y)`.
 
+### Find wallpapers
+
+Wallpapers → **Find wallpapers** (`akeno/desktop/sources.py`) finds animated wallpapers.
+
+| Source | How AKENO uses it | Why |
+|---|---|---|
+| **Pixabay** | Search inside AKENO through Pixabay's official API (https://pixabay.com/api/docs/), with your own free API key. You get topics (gaming, anime, neon, space…), the kind (animations or filmed) and the quality (4K when available, 1080p, 720p). Each result shows a preview, its length, size and creator, and **Add** downloads it into the wallpaper library and the monitor's playlist. | Pixabay offers free videos under the Pixabay Content License through an interface meant for apps. |
+| **MotionBGs, MyLiveWallpapers, DesktopHut** | **Open website** in the browser. You download there under the site's own terms, then add the file from **Recent downloads**. | These sites offer no interface for apps, and much of their content shows third-party characters whose rights AKENO cannot check. AKENO does not download from them, scrape them, show their content or redistribute it. |
+| **Recent downloads** | Lists video files (MP4, WebM, MKV, MOV) and GIFs from your Downloads folder of the last two weeks. **Add** copies the file into AKENO's wallpaper library (`%LOCALAPPDATA%\AKENO\wallpapers`), so tidying the Downloads folder keeps the wallpaper. | |
+
+How AKENO handles Pixabay:
+- **The API key** is stored encrypted for your Windows account (DPAPI), never in settings or in the program, and is only sent to `pixabay.com`. Forget API key removes it.
+- **Network:** only HTTPS, only `pixabay.com` (search) and `cdn.pixabay.com` (previews and videos). A redirect anywhere else is refused.
+- **Requests** are cached for 24 hours and kept under Pixabay's limit of 100 a minute. Nothing is downloaded until you choose a video, and never in bulk.
+- **Downloads:**
+  - A file larger than Pixabay announced is refused.
+  - A file that does not start like an MP4 is refused.
+  - Next to each video, a `.json` note records where it came from, its creator and its license.
+- **Credit:** results say that they come from Pixabay and name each creator, as Pixabay's API documentation asks.
+
+**Testing.** The Pixabay client is tested against answers in the documented format through a fake transport (`tests/test_wallpaper_sources.py`). It was not tested against the live Pixabay service, because the development environment cannot reach it.
+
+**Playback.** Added videos play like any other:
+- looped by Qt Multimedia (FFmpeg backend);
+- one renderer process per monitor;
+- paused, with no CPU or GPU time, by the pause rules above (a game, a fullscreen program in front, a covered monitor, battery, remote desktop, CPU load).
+
 ### Web wallpaper sandbox
 
 A web wallpaper is served from its own folder through the `akeno-wallpaper://wallpaper/` scheme (a Qt WebEngine URL scheme handler):
