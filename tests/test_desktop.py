@@ -553,19 +553,31 @@ def test_desktop_pages_edit_the_configuration(desktop_window, tmp_path, qapp):
     img = picture(tmp_path / "pics" / "one.png")
     problems = page.add_paths([str(img), str(tmp_path / "pics" / "notes.txt")])
     assert len(problems) == 1
+    item = page.lib.by_path(img)
+    assert item is not None and page.gallery.current_item().id == item.id, "the new wallpaper is selected"
+    assert not cfgmod.wallpaper(cfgmod.load(), page.name())["enabled"], "importing alone changes no monitor"
+    assert page.apply()
     w = cfgmod.wallpaper(cfgmod.load(), page.name())
     assert w["enabled"] and [Path(i["path"]).name for i in w["playlist"]] == ["one.png"]
-    assert started, "switching a wallpaper on starts the desktop host"
+    assert started, "applying a wallpaper starts the desktop runtime"
+    assert page.gallery.model_.active, "the gallery marks the wallpaper that runs"
+    page.tabs.setCurrentIndex(3)
     page.chk_scheduled.setChecked(True)
     assert cfgmod.wallpaper(cfgmod.load(), page.name())["schedule"] == [{"from": "08:00", "index": 0}]
+    page.tabs.setCurrentIndex(2)
     page.rule_checks["battery"].setChecked(False)
     assert cfgmod.load()["pause"]["battery"] is False
+    page.tabs.setCurrentIndex(3)
     page._remove()
     assert not cfgmod.wallpaper(cfgmod.load(), page.name())["enabled"]
+    page.apply(item)
+    page.stop_wallpaper()
+    cfg = cfgmod.load()
+    assert not cfgmod.wallpapers_on(cfg) and cfg["enabled"], "stop wallpaper is not quit runtime"
     page._stop()
     assert cfgmod.load()["enabled"] is False
-    page.add_paths([str(img)])
-    assert cfgmod.load()["enabled"] is True, "switching a wallpaper on ends the Stop"
+    page.apply(item)
+    assert cfgmod.load()["enabled"] is True, "applying a wallpaper starts the runtime again"
 
     dock = win.pages["dock"]
     dock.chk_enabled.setChecked(True)
@@ -597,6 +609,7 @@ def test_theme_workshop_export_and_import(desktop_window, tmp_path, qapp, monkey
     win, _ = desktop_window
     wp = win.pages["wallpapers"]
     wp.add_paths([str(picture(tmp_path / "p" / "dawn.png", "#123456"))])
+    assert wp.apply()
     page = win.pages["themes"]
     page.on_show()
     page.name.setText("Dawn")
