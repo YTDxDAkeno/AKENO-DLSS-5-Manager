@@ -29,7 +29,6 @@ DEFAULTS: dict[str, Any] = {
     "block_unknown_conflicts": True,    # stop install when an unknown proxy DLL is present
     "selected_game_id": None,
     "intelligent_game_mode": True,      # notice running library games: session boost, playtime, pause wallpapers
-    "pause_wallpaper_in_games": True,
     "selected_gpu_index": None,
 }
 

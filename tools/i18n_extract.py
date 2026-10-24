@@ -89,6 +89,20 @@ def suite_strings() -> set[str]:
         out.add(section)
         out |= {item[2] for item in items if item[0] == "group"}
     out |= {"The license server address must start with https://", "The license server address is incomplete."}
+    out |= desktop_strings()
+    return out
+
+
+def desktop_strings() -> set[str]:
+    """Desktop Studio texts that reach t() through tables (widget names, weather, days, page choices)."""
+    from akeno.desktop import widgets
+    from akeno.ui.pages import desktop
+    out = set(widgets.TITLES.values()) | set(widgets.WEATHER.values()) | {"Weather"}
+    out |= set(widgets.WEEKDAYS) | set(widgets.DAY_SHORT) | set(widgets.MONTHS)
+    for table in (desktop.KIND_TEXT, desktop.MODE_TEXT, desktop.FIT_TEXT, desktop.EDGE_TEXT, desktop.STATE_TEXT,
+                  desktop.PAUSE_TEXT):
+        out |= set(table.values())
+    out.add(desktop.MEDIA_FILTER)
     return out
 
 

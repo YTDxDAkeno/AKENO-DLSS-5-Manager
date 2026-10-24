@@ -108,10 +108,11 @@ QPushButton[kind="chip"] {{ border-radius: 14px; padding: 5px 12px; }}
 QPushButton[kind="chip"]:checked {{ background: {a1}; border-color: {a1}; }}
 QPushButton[kind="link"] {{ background: transparent; border: none; color: {a2}; padding: 2px 4px; font-weight: 600; }}
 QPushButton[kind="link"]:hover {{ color: {TEXT}; text-decoration: underline; }}
-QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPlainTextEdit, QTextEdit {{
+QLineEdit, QComboBox, QAbstractSpinBox, QPlainTextEdit, QTextEdit {{
     background: #091427; border: 1px solid {BORDER_HI}; border-radius: 8px; padding: 6px 8px; color: {TEXT};
     selection-background-color: {a1}; }}
-QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {{ border-color: {a1}; }}
+QAbstractSpinBox {{ min-height: 20px; }}
+QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus {{ border-color: {a1}; }}
 QComboBox QAbstractItemView {{ background: {CARD_2}; border: 1px solid {BORDER_BTN}; selection-background-color: {a1}; }}
 QComboBox::drop-down {{ border: none; width: 22px; }}
 QCheckBox {{ spacing: 8px; }}

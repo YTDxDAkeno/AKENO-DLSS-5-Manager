@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComboBox, QHBoxLayout, QHeaderView,
                                QPushButton, QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
+from akeno.desktop import config as desktop_config
 from akeno.i18n import t
 from akeno.performance import tweaks
 from akeno.performance.profiles import PROFILES
@@ -179,8 +180,8 @@ class BoosterPage(QWidget):
         self.chk_auto.toggled.connect(lambda v: self.s.settings.set("intelligent_game_mode", bool(v)))
         auto.body.addWidget(self.chk_auto)
         self.chk_wall = QCheckBox(t("Pause animated wallpapers while a game runs"))
-        self.chk_wall.setChecked(bool(self.s.settings.get("pause_wallpaper_in_games")))
-        self.chk_wall.toggled.connect(lambda v: self.s.settings.set("pause_wallpaper_in_games", bool(v)))
+        self.chk_wall.setChecked(bool(desktop_config.load()["pause"].get("game", True)))
+        self.chk_wall.toggled.connect(self._pause_wallpapers)
         auto.body.addWidget(self.chk_wall)
         self.running = label("", "muted", shrink=True)
         auto.body.addWidget(self.running)
@@ -202,6 +203,12 @@ class BoosterPage(QWidget):
         ctl.selection_changed.connect(self._follow_selection)
         self._set_profile(self.profile, refresh=False)
         self.refresh()
+
+    def _pause_wallpapers(self, on: bool) -> None:
+        """The same rule as on the Wallpapers page (Desktop Studio's configuration)."""
+        cfg = desktop_config.load()
+        cfg["pause"]["game"] = bool(on)
+        desktop_config.save(cfg)
 
     def _follow_selection(self) -> None:
         """A game chosen elsewhere (My Games, Game Hub) is the one shown here."""

@@ -26,16 +26,18 @@ VSVersionInfo(
 )
 """, encoding="utf-8")
 
-EXCLUDES = ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtWebEngineQuick", "PySide6.QtPdf",
-            "PySide6.QtPdfWidgets", "PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtQuick3D", "PySide6.Qt3DCore",
-            "PySide6.QtMultimedia", "PySide6.QtCharts", "PySide6.QtDataVisualization", "PySide6.QtBluetooth",
-            "PySide6.QtNetwork", "PySide6.QtSql", "PySide6.QtTest", "tkinter", "unittest", "pytest"]
+# Desktop Studio needs Qt Multimedia (video wallpapers, FFmpeg backend), Qt WebEngine (HTML/WebGL wallpapers; it
+# brings Qml, Quick, WebChannel and Positioning) and Qt Network (the local socket between suite, host and renderers).
+EXCLUDES = ["PySide6.QtWebEngineQuick", "PySide6.QtPdf", "PySide6.QtPdfWidgets", "PySide6.QtQuick3D",
+            "PySide6.Qt3DCore", "PySide6.QtCharts", "PySide6.QtDataVisualization", "PySide6.QtBluetooth",
+            "PySide6.QtSql", "PySide6.QtTest", "tkinter", "unittest", "pytest"]
 
 a = Analysis(
     [str(ROOT / "akeno" / "__main__.py")],
     pathex=[str(ROOT)],
     datas=[(str(ROOT / "akeno" / "data"), "akeno/data")],
-    hiddenimports=["PySide6.QtSvg"],
+    hiddenimports=["PySide6.QtSvg", "PySide6.QtNetwork", "PySide6.QtMultimedia", "PySide6.QtMultimediaWidgets",
+                   "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"],
     excludes=EXCLUDES,
     noarchive=False,
 )

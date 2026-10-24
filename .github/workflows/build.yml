@@ -247,6 +247,11 @@ jobs:
           if ($assets.Count -lt 19) { throw "expected 19 design assets in the package, found $($assets.Count)" }
       - name: Audit public payload for proprietary NVIDIA runtimes
         run: python tools/check_public_payload.py dist/AKENO
+      - name: Desktop Studio on the runner desktop (packaged wallpaper renderers, picture and web)
+        shell: pwsh
+        run: |
+          $env:AKENO_HOME = "$env:RUNNER_TEMP\akeno-desktop"
+          python tools/desktop_check.py --exe dist\AKENO\AKENO.exe --out screenshots\desktop-studio
       - name: Packaged GUI starts normally and keeps running
         shell: pwsh
         run: |
@@ -309,6 +314,7 @@ jobs:
             screenshots/v16-150pct/*.png
             screenshots/windows-runner/*.png
             screenshots/windows-runner-150pct/*.png
+            screenshots/desktop-studio/*
             screenshots/fivem-fixture/*.png
             screenshots/fivem-fixture-150pct/*.png
             ${{ runner.temp }}/akeno-gui/logs/*

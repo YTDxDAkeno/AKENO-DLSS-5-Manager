@@ -11,13 +11,13 @@ import sys
 from akeno import APP_NAME, __version__
 
 
-def setup_logging(debug: bool) -> None:
+def setup_logging(debug: bool, name: str = "akeno.log") -> None:
     from akeno.paths import logs_dir
     root = logging.getLogger()
     root.setLevel(logging.DEBUG if debug else logging.INFO)
     for h in list(root.handlers):
         root.removeHandler(h)
-    fh = logging.handlers.RotatingFileHandler(logs_dir() / "akeno.log", maxBytes=2_000_000, backupCount=3,
+    fh = logging.handlers.RotatingFileHandler(logs_dir() / name, maxBytes=2_000_000, backupCount=3,
                                               encoding="utf-8")
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
     root.addHandler(fh)
@@ -27,7 +27,32 @@ def setup_logging(debug: bool) -> None:
         root.addHandler(sh)
 
 
+def desktop_process(argv: list[str]) -> int | None:
+    """Desktop Studio runs in processes of its own: the host (``--desktop``) and one wallpaper renderer per
+    monitor (``--wallpaper-renderer``). They start before anything of the suite's window is loaded."""
+    import re
+    if "--wallpaper-renderer" in argv:
+        monitor = argv[argv.index("--monitor") + 1] if "--monitor" in argv[:-1] else "monitor"
+        setup_logging(False, f"wallpaper-{re.sub(r'[^A-Za-z0-9]+', '', monitor)[-12:] or 'monitor'}.log")
+        from akeno.desktop import renderer
+        return renderer.main(argv)
+    if "--desktop" in argv:
+        setup_logging(False, "desktop.log")
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AKENO.Desktop")
+            except (AttributeError, OSError):
+                pass
+        from akeno.desktop import host
+        return host.main(argv)
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
+    child = desktop_process(sys.argv[1:] if argv is None else list(argv))
+    if child is not None:
+        return child
     parser = argparse.ArgumentParser(prog="akeno", description=APP_NAME)
     parser.add_argument("--minimized", action="store_true", help="start minimised (used by 'Launch with Windows')")
     parser.add_argument("--smoke-test", action="store_true",
@@ -165,6 +190,10 @@ def build_suite(app, args, lic):
         if services.settings.get("check_app_updates"):
             win.pages["settings"].check_updates()
         win.pages["downloads"].auto_check()
+        try:
+            win.desktop.ensure()                # wallpapers, dock and widgets come back with the suite
+        except Exception as exc:                # Desktop Studio must never keep the suite from starting
+            logging.getLogger(__name__).warning("desktop studio: %s", exc)
 
     if not args.smoke_test and not args.screenshot:
         QTimer.singleShot(200, startup)

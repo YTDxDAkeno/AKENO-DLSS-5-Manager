@@ -30,6 +30,8 @@ SECTIONS = [
         ("advanced", "Advanced", "gauge")]),
         ("booster", "FPS Booster", "gauge"), ("benchmark", "Benchmark", "chart"),
         ("installed", "Installed Mods", "layers")]),
+    ("DESKTOP", [("wallpapers", "Wallpapers", "image"), ("dock", "Dock", "dock"), ("widgets", "Widgets", "grid"),
+                 ("themes", "Theme Workshop", "palette")]),
     ("ACCOUNT", [("account", "My Account", "user"), ("license", "License", "key"), ("settings", "Settings", "gear")]),
 ]
 
@@ -235,6 +237,8 @@ class Sidebar(QFrame):
         lay.setSpacing(2)
         scroll.setWidget(holder)
         outer.addWidget(scroll, 1)
+        self.scroll, self.nav_holder = scroll, holder
+        self._tall = True
         self.group = QButtonGroup(self)
         self.group.setExclusive(True)
         self.buttons: dict[str, QPushButton] = {}
@@ -314,6 +318,8 @@ class Sidebar(QFrame):
             arrow = "▾" if opened else "▸"
             base = self.groups[gkey].accessibleName()
             self.groups[gkey].setText(f"  {base}  {arrow}")
+        if hasattr(self, "promo"):
+            QTimer.singleShot(0, self._fit_promo)
 
     def select(self, key: str) -> None:
         for gkey, children in GROUPS.items():
@@ -329,8 +335,19 @@ class Sidebar(QFrame):
 
     def set_compact(self, height: int) -> None:
         """Hide decoration first when the window is short, so navigation never needs scrolling."""
-        self.promo.setVisible(height >= 980)
+        self._tall = height >= 980
         self.foot.setVisible(height >= 820)
+        self._fit_promo()
+
+    def _fit_promo(self) -> None:
+        """The artwork card only shows while every navigation entry fits above it."""
+        need = self.nav_holder.sizeHint().height()
+        room = self.scroll.height() + (self.promo.height() + 6 if self.promo.isVisible() else 0)
+        self.promo.setVisible(self._tall and room - self.promo.height() - 6 >= need)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._fit_promo()
 
 
 class PageHost(QWidget):
@@ -380,8 +397,13 @@ class MainWindow(QMainWindow):
         self.s = controller.s
         from akeno.licensing import manager
         self.license = license_manager or manager()
+        from akeno.desktop.client import DesktopClient
         from akeno.ui.game_sessions import GameSessions
         self.sessions = GameSessions(self.s, self)
+        self.desktop = DesktopClient()
+        # Desktop Studio pauses wallpapers while a library game runs
+        self.sessions.started.connect(lambda *_: self.desktop.game(True))
+        self.sessions.stopped.connect(lambda *_: self.desktop.game(bool(self.sessions.running())))
         self.setWindowTitle(APP_NAME)
         self.setWindowIcon(icons.QIcon(art.app_icon_pixmap(256)))
         self._initial_size()
@@ -414,6 +436,7 @@ class MainWindow(QMainWindow):
         from akeno.ui.pages.advanced import AdvancedPage
         from akeno.ui.pages.backups import BackupsPage
         from akeno.ui.pages.booster import BoosterPage
+        from akeno.ui.pages.desktop import DockPage, ThemesPage, WallpapersPage, WidgetsPage
         from akeno.ui.pages.recent import RecentPage
         from akeno.ui.pages.benchmark import BenchmarkPage
         from akeno.ui.pages.dashboard import DashboardPage
@@ -454,7 +477,8 @@ class MainWindow(QMainWindow):
             advanced[key] = page
         main = {"library": LibraryPage, "fivem": FiveMPage, "installed": InstalledPage, "downloads": DownloadsPage,
                 "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage, "account": AccountPage,
-                "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage}
+                "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
+                "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage}
         for key, _, _ in NAV:
             page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")
