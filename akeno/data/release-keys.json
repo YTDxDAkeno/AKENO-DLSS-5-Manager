@@ -1,3 +1,8 @@
 {
-  "keys": []
+  "keys": [
+    {
+      "kid": "d6139235b220a4aa",
+      "public_key": "bpe9acmephsoZSYzy12R2XFy_lJZ_69MiV31ekehcdo"
+    }
+  ]
 }

@@ -119,3 +119,15 @@ def test_check_probes_every_endpoint_and_compares_license_keys(site, tmp_path, c
     wrong.write_text(json.dumps({"keys": [{"kid": kid_for(raw), "public_key": b64e(raw)}]}))
     assert _tool().main(["--api", url, "--website", url, "check", "--license-keys", str(wrong)]) == 1
     assert "NOT trusted by this build" in capsys.readouterr().out
+
+
+def test_api_contract_lists_the_published_endpoints(site, capsys):
+    url, _ = site
+    spec = importlib.util.spec_from_file_location("api_contract", REPO / "tools" / "api_contract.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.main(["--api", url]) == 0
+    out = capsys.readouterr().out
+    assert "GET /system/version: HTTP 200" in out and "server_version:" in out
+    assert "POST               /auth/change-email   [app]" in out
+    assert "Endpoints the app uses that are not published: 0" in out

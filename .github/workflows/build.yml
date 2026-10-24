@@ -233,7 +233,7 @@ jobs:
           QT_QPA_PLATFORM: offscreen
           AKENO_TEST_REAL_BUNDLE: '1'
       - name: License server address and public keys (repository variables)
-        if: ${{ vars.AKENO_LICENSE_SERVER_URL != '' || startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
+        # Every build: unset variables keep the committed values (official addresses, committed public keys).
         shell: pwsh
         env:
           LICENSE_SERVER_URL: ${{ vars.AKENO_LICENSE_SERVER_URL }}
@@ -242,7 +242,9 @@ jobs:
           RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
         run: |
           $require = @(); if ($env:RELEASE_BUILD -eq 'true') { $require = @('--require') }
-          python tools/configure-licensing.py --server-url "$env:LICENSE_SERVER_URL" --website-url="$env:WEBSITE_URL" --keys "$env:LICENSE_PUBLIC_KEYS" @require
+          $server = if ($env:LICENSE_SERVER_URL) { $env:LICENSE_SERVER_URL } else { 'https://api.akeno.online' }
+          $website = if ($env:WEBSITE_URL) { $env:WEBSITE_URL } else { 'https://akeno.online' }
+          python tools/configure-licensing.py --server-url "$server" --website-url="$website" --keys="$env:LICENSE_PUBLIC_KEYS" @require
           if ($LASTEXITCODE -ne 0) { throw "license configuration failed" }
       - name: Release verification key and public release repository (repository variables)
         shell: pwsh
@@ -255,9 +257,12 @@ jobs:
           DOWNLOAD_HOSTS: ${{ vars.AKENO_DOWNLOAD_HOSTS }}
           RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish_channel == 'stable' || inputs.publish_channel == 'beta' }}
         run: |
-          $require = @(); if ($env:RELEASE_BUILD -eq 'true') { $require = @('--require') }
-          python tools/release_manifest.py embed --keys "$env:RELEASE_PUBLIC_KEYS" @require
-          if ($LASTEXITCODE -ne 0) { throw "release key configuration failed" }
+          # Unset: the committed public release key stays (akeno/data/release-keys.json). Only public keys here;
+          # the signing key is a secret used by publish-release alone and never reaches the build.
+          if ($env:RELEASE_PUBLIC_KEYS) {
+            python tools/release_manifest.py embed --keys "$env:RELEASE_PUBLIC_KEYS" --require
+            if ($LASTEXITCODE -ne 0) { throw "release key configuration failed" }
+          }
           if ($env:UPDATE_SOURCE -eq 'akeno') {
             python tools/release_manifest.py distribution --source akeno --repo="$env:RELEASE_REPO" --release-base="$env:RELEASE_BASE" --release-page="$env:RELEASE_PAGE" --download-hosts="$env:DOWNLOAD_HOSTS"
             if ($LASTEXITCODE -ne 0) { throw "release source configuration failed" }
@@ -267,6 +272,22 @@ jobs:
           }
       - name: PyInstaller build
         run: pyinstaller --noconfirm --distpath dist --workpath build packaging\akeno.spec
+      - name: Packaged build trusts the official API and the public license and release keys
+        shell: pwsh
+        env:
+          LICENSE_SERVER_URL: ${{ vars.AKENO_LICENSE_SERVER_URL }}
+          WEBSITE_URL: ${{ vars.AKENO_WEBSITE_URL }}
+          AKENO_RELEASE_SIGNING_KEY: ${{ secrets.AKENO_RELEASE_SIGNING_KEY }}
+        run: |
+          $server = if ($env:LICENSE_SERVER_URL) { $env:LICENSE_SERVER_URL } else { 'https://api.akeno.online' }
+          $website = if ($env:WEBSITE_URL) { $env:WEBSITE_URL } else { 'https://akeno.online' }
+          python tools/check_build_config.py dist\AKENO --server "$server" --website "$website" | Tee-Object -Variable out
+          $code = $LASTEXITCODE
+          "### Build configuration (public values)" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $out | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          if ($code -ne 0) { throw "build configuration check failed" }
       - name: Smoke test the packaged executable
         shell: pwsh
         run: |
@@ -316,6 +337,17 @@ jobs:
           New-Item -ItemType Directory -Force packaging\out | Out-Null
           Copy-Item README.md, THIRD_PARTY_NOTICES.md, LICENSE dist\AKENO\
           Compress-Archive -Path dist\AKENO\* -DestinationPath "packaging\out\AKENO-Gaming-Suite-$v-portable-x64.zip"
+      - name: Portable ZIP (the updater's package) carries the same configuration
+        shell: pwsh
+        env:
+          LICENSE_SERVER_URL: ${{ vars.AKENO_LICENSE_SERVER_URL }}
+          WEBSITE_URL: ${{ vars.AKENO_WEBSITE_URL }}
+          AKENO_RELEASE_SIGNING_KEY: ${{ secrets.AKENO_RELEASE_SIGNING_KEY }}
+        run: |
+          $server = if ($env:LICENSE_SERVER_URL) { $env:LICENSE_SERVER_URL } else { 'https://api.akeno.online' }
+          $website = if ($env:WEBSITE_URL) { $env:WEBSITE_URL } else { 'https://akeno.online' }
+          python tools/check_build_config.py "packaging\out\AKENO-Gaming-Suite-$env:AKENO_VERSION-portable-x64.zip" --server "$server" --website "$website"
+          if ($LASTEXITCODE -ne 0) { throw "portable ZIP configuration check failed" }
       - name: Installer (Inno Setup)
         shell: pwsh
         run: |

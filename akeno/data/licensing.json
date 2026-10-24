@@ -1,5 +1,10 @@
 {
   "server_url": "https://api.akeno.online",
-  "website_url": "https://akeno.online",
-  "keys": []
+  "keys": [
+    {
+      "kid": "f382ecda000888b2",
+      "public_key": "XlXmRZo3Tf9PDNxjNd8AQUm5Oquz8W9DPZE8PwOVmVE"
+    }
+  ],
+  "website_url": "https://akeno.online"
 }

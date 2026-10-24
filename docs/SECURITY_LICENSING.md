@@ -12,9 +12,11 @@ That key exists on the VPS only (the `keys` volume, mode 0600). Nothing the serv
 | License server address | embedded at build time; **cannot be changed** in a built AKENO.exe | — |
 | Passwords, database credentials, GitHub tokens | never | database credentials in its own `.env`, never in Git |
 
-The release build writes `licensing.json` from the repository variables `AKENO_LICENSE_SERVER_URL` and `AKENO_LICENSE_PUBLIC_KEYS`:
-- `tools/configure-licensing.py --require` refuses to build without both.
+Every Windows build writes `licensing.json` from the repository variables `AKENO_LICENSE_SERVER_URL` (default `https://api.akeno.online`), `AKENO_WEBSITE_URL` (default `https://akeno.online`) and `AKENO_LICENSE_PUBLIC_KEYS` (`kid:public_key`, comma-separated):
+- The committed `licensing.json` already holds the production key `f382ecda000888b2` (the one `GET /api/v1/system/keys` publishes). An unset variable keeps the committed keys; a set one replaces them.
+- `tools/configure-licensing.py --require` refuses a release build without an address and at least one key.
 - It prints the key ids, to compare with `akeno-server keys list` on the VPS.
+- `tools/check_build_config.py` then checks the packaged `dist\AKENO` and the portable ZIP: official API and website, at least one license key and one release key, every key id matching its key, license and release keys not the same, no private key material, and (when the CI job has the secret) the release signing key nowhere in the build.
 
 Accounts (sign-up, e-mail confirmation, password reset, sessions and what the server must be configured with) are described in `docs/ACCOUNT_SYSTEM.md`.
 

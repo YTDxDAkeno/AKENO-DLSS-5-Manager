@@ -2,7 +2,11 @@
 
     python tools/configure-licensing.py --server-url https://api.akeno.online --fetch
     python tools/configure-licensing.py --server-url https://api.akeno.online --keys '{"keys": [...]}'
+    python tools/configure-licensing.py --server-url https://api.akeno.online --keys 'kid:public_key,kid:public_key'
 
+``--keys`` takes the server's document (JSON) or ``kid:public_key`` pairs separated by commas (the form of the
+repository variable, as ``tools/account_acceptance.py check`` prints it). Without ``--keys`` and ``--fetch`` the
+keys already in the output file are kept, so an unset variable never removes the committed keys.
 ``--fetch`` reads ``/api/v1/system/keys`` over HTTPS and keeps only keys whose id matches their public key. The
 Windows build in CI runs this with the repository variables AKENO_LICENSE_SERVER_URL, AKENO_WEBSITE_URL (optional:
 an API on ``api.<domain>`` means the website ``https://<domain>``) and AKENO_LICENSE_PUBLIC_KEYS.
@@ -40,11 +44,26 @@ def clean(keys: list) -> list[dict]:
     return out
 
 
+def parse_keys(text: str) -> list:
+    """``{"keys": [...]}``, a JSON list, or ``kid:public_key`` pairs separated by commas."""
+    text = text.strip()
+    if text.startswith("{") or text.startswith("["):
+        doc = json.loads(text)
+        return doc.get("keys", []) if isinstance(doc, dict) else doc
+    keys = []
+    for pair in text.split(","):
+        kid, sep, public = pair.strip().partition(":")
+        if not sep or not kid or not public:
+            raise SystemExit(f"not a kid:public_key pair: {pair.strip()!r}")
+        keys.append({"kid": kid.strip(), "public_key": public.strip()})
+    return keys
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--server-url", default="", help="https:// address of the license server (empty: none)")
     ap.add_argument("--website-url", default="", help="https:// address of the AKENO website (empty: derived)")
-    ap.add_argument("--keys", default="", help='JSON: {"keys": [{"kid", "public_key"}]} or a list of keys')
+    ap.add_argument("--keys", default="", help='"kid:public_key" pairs separated by commas, or JSON: {"keys": [{"kid", "public_key"}]}')
     ap.add_argument("--fetch", action="store_true", help="read the keys from the server's /api/v1/system/keys")
     ap.add_argument("--output", type=Path, default=TARGET)
     ap.add_argument("--require", action="store_true",
@@ -58,13 +77,17 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("the website address must start with https://")
     keys: list = []
     if args.keys.strip():
-        doc = json.loads(args.keys)
-        keys = doc.get("keys", []) if isinstance(doc, dict) else doc
+        keys = parse_keys(args.keys)
     elif args.fetch:
         if not url:
             raise SystemExit("--fetch needs --server-url")
         with urllib.request.urlopen(f"{url}/api/v1/system/keys", timeout=20) as resp:
             keys = json.load(resp).get("keys", [])
+    elif args.output.exists():
+        try:
+            keys = json.loads(args.output.read_text(encoding="utf-8")).get("keys", [])
+        except (OSError, ValueError, AttributeError):
+            keys = []
     keys = clean(keys)
     if args.require and not (url and keys):
         raise SystemExit("a release build needs AKENO_LICENSE_SERVER_URL and AKENO_LICENSE_PUBLIC_KEYS: without them "

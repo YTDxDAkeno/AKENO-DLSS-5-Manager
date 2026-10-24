@@ -28,13 +28,14 @@ One-time setup in the **private source repository**, under Settings → Secrets 
 | Kind | Name | Value |
 |---|---|---|
 | Variable | `AKENO_RELEASE_REPO` | `YTDxDAkeno/AKENO-Releases` |
-| Variable | `AKENO_RELEASE_PUBLIC_KEYS` | the `kid:public_key` line printed by `python tools/release_manifest.py keygen --private-out release.key` |
+| Variable | `AKENO_RELEASE_PUBLIC_KEYS` (optional) | the `kid:public_key` line printed by `python tools/release_manifest.py keygen --private-out release.key`. The committed `akeno/data/release-keys.json` already holds the production release key `d6139235b220a4aa:bpe9acmephsoZSYzy12R2XFy_lJZ_69MiV31ekehcdo`; set the variable only to replace it (key rotation) |
 | Secret | `AKENO_RELEASE_SIGNING_KEY` | the content of `release.key` (then delete the file; keep an offline copy in a password manager) |
 | Secret | `AKENO_RELEASE_REPO_TOKEN` | a fine-grained personal access token with **only** the release repository selected and **Contents: Read and write** (no other permission) |
-| Variable | `AKENO_LICENSE_SERVER_URL`, `AKENO_LICENSE_PUBLIC_KEYS` | as before (see `SECURITY_LICENSING.md`); the API is `https://api.akeno.online` |
+| Variable | `AKENO_LICENSE_PUBLIC_KEYS` | `f382ecda000888b2:XlXmRZo3Tf9PDNxjNd8AQUm5Oquz8W9DPZE8PwOVmVE` (from `GET /api/v1/system/keys`; see `SECURITY_LICENSING.md`) |
+| Variable | `AKENO_LICENSE_SERVER_URL` (optional) | default `https://api.akeno.online` |
 | Variable | `AKENO_WEBSITE_URL` (optional) | `https://akeno.online`; without it, an API on `api.<domain>` means the website `https://<domain>` (`ACCOUNT_SYSTEM.md`) |
 
-Release builds (tags and published channels) refuse to build without the license address, the license keys and the release keys.
+Release builds (tags and published channels) refuse to build without the license address, the license keys and the release keys. Every Windows build runs `tools/check_build_config.py` on the packaged folder and on the portable ZIP and prints the result in the job summary ("Build configuration").
 
 ## How the updater works
 
