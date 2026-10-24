@@ -491,6 +491,23 @@ def test_a_native_window_qt_replaces_goes_behind_the_icons_before_it_is_shown(qa
     assert renderer.DESKTOP_LOST not in codes
 
 
+def test_a_replaced_window_whose_style_qt_rewrites_on_showing_is_attached_again(qapp, tmp_path, monkeypatch):
+    """Windows runner, 2026-10-24 23:28:30: after the replacement Qt showed the window and dropped WS_CHILD again
+    ("the wallpaper is not a child window"); the check after showing attaches it again instead of giving up."""
+    shell, win = embedded_window(tmp_path, monkeypatch, "classic")
+    codes = []
+    win.lost = codes.append
+    new = replace_native_window(qapp, shell, win)
+    shell.wins[new].style = w.WS_POPUP                 # what Qt's show did to the style
+    assert "the wallpaper is not a child window" in w.verify(new, win.target(), win.layer, shell)
+    for _ in range(5):
+        qapp.processEvents()
+    assert codes == [] and win.embedded
+    assert shell.wins[new].style & w.WS_CHILD and shell.parent(new) == win.layer.parent
+    assert w.verify(new, win.target(), win.layer, shell) == []
+    win.close()
+
+
 def test_a_replaced_window_that_cannot_go_behind_the_icons_is_hidden_and_the_renderer_leaves(qapp, tmp_path,
                                                                                                monkeypatch):
     from akeno.desktop import renderer

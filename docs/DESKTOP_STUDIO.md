@@ -93,8 +93,10 @@ A new wallpaper for a monitor gives it a fresh start. The runtime also ends by i
    the first GPU-drawn widget joins it. The page of a web wallpaper does that a moment after it starts drawing, both
    after switching to a web wallpaper and in a renderer that starts with one. The new window is an ordinary
    top-level window. Qt reports it (`WinIdChange`) before it shows it; the renderer then attaches it behind the
-   icons at once and verifies it after Qt has shown it. If that fails, the window is hidden and the renderer exits
-   with `EMBED_FAILED`. See "The desktop window went away" below.
+   icons at once and verifies it after Qt has shown it. Showing it, Qt writes its own window style again (the
+   Windows runner measured `WS_CHILD` gone, parent kept); every check that finds a problem therefore attaches the
+   window once more, styles included, before it gives up. If that fails too, the window is hidden and the
+   renderer exits with `EMBED_FAILED`. See "The desktop window went away" below.
 8. **No `SPI_SETDESKWALLPAPER` on the raised desktop.** That call would destroy Explorer's `WorkerW`. On the classic
    layout it redraws Windows' own wallpaper after the last renderer stops.
 9. **Clicks go through.** The window is `WS_EX_TRANSPARENT` and never takes the focus. Desktop clicks reach the icon

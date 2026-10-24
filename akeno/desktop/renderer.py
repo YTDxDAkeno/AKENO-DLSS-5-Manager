@@ -431,8 +431,15 @@ class WallpaperWindow(QWidget):
             winapi.hide(hwnd)
             self.lost(DESKTOP_LOST)
             return
-        if winapi.verify(hwnd, monitor, self.layer):
-            winapi.place(hwnd, monitor, self.layer)        # z-order or size changed: put it back once
+        found = winapi.verify(hwnd, monitor, self.layer)
+        if found:
+            log.warning("wallpaper %s: %s; attaching it again", self.monitor, "; ".join(found))
+            # z-order, size or style changed (Qt rewrites the style of a window it replaced when it shows it):
+            # attach it again once, styles and all, and put it back
+            result = winapi.attach(hwnd, monitor, prefer=self.layering())
+            if result.ok:
+                self.layer = result.layer
+            winapi.place(hwnd, monitor, self.layer)
             problems = winapi.verify(hwnd, monitor, self.layer)
             if problems:
                 self.watch.stop()
