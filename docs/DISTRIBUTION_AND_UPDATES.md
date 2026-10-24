@@ -31,7 +31,8 @@ One-time setup in the **private source repository**, under Settings → Secrets 
 | Variable | `AKENO_RELEASE_PUBLIC_KEYS` | the `kid:public_key` line printed by `python tools/release_manifest.py keygen --private-out release.key` |
 | Secret | `AKENO_RELEASE_SIGNING_KEY` | the content of `release.key` (then delete the file; keep an offline copy in a password manager) |
 | Secret | `AKENO_RELEASE_REPO_TOKEN` | a fine-grained personal access token with **only** the release repository selected and **Contents: Read and write** (no other permission) |
-| Variable | `AKENO_LICENSE_SERVER_URL`, `AKENO_LICENSE_PUBLIC_KEYS` | as before (see `SECURITY_LICENSING.md`) |
+| Variable | `AKENO_LICENSE_SERVER_URL`, `AKENO_LICENSE_PUBLIC_KEYS` | as before (see `SECURITY_LICENSING.md`); the API is `https://api.akeno.online` |
+| Variable | `AKENO_WEBSITE_URL` (optional) | `https://akeno.online`; without it, an API on `api.<domain>` means the website `https://<domain>` (`ACCOUNT_SYSTEM.md`) |
 
 Release builds (tags and published channels) refuse to build without the license address, the license keys and the release keys.
 
