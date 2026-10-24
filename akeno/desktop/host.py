@@ -1,11 +1,20 @@
-"""The desktop host: ``AKENO.exe --desktop``, one per Windows user.
+"""The desktop runtime (host): ``AKENO.exe --desktop``, one per Windows user, independent of the suite's window.
 
 It starts a wallpaper renderer for each monitor that has a wallpaper, restarts one that crashes (after 2, 5, 15
 and 60 seconds; after five crashes in ten minutes that monitor stays on the Windows wallpaper and the suite shows
 the error), pauses and resumes them by the pause rules, and shows the dock and the widgets. It follows
-``desktop.json``: the suite edits that file and the host applies the change. It ends by itself when nothing is
-switched on, when the suite tells it to, or when the license no longer unlocks AKENO; Windows' own wallpaper then
-shows again.
+``desktop.json``: the suite (or the tray menu) edits that file and the host applies the change.
+
+* A renderer that cannot sit behind the desktop icons exits with ``EMBED_FAILED`` and is tried again after 3, 10
+  and 30 seconds (Explorer may still be starting); then that monitor keeps the Windows wallpaper and the suite shows
+  the reason. Nothing is ever shown in front of the desktop instead.
+* After an Explorer restart a renderer exits with ``DESKTOP_LOST`` and is started again two seconds later.
+* The dock steps aside while a game or a fullscreen program runs; widgets pause then, and come above the desktop
+  while it is in front (Win+D), the way Rainmeter keeps its skins on the desktop.
+* A tray icon offers pause, "stop wallpaper", dock, widgets, open AKENO and "quit Desktop Runtime".
+
+It ends by itself when nothing is switched on, when told to quit, or when the license no longer unlocks AKENO;
+Windows' own wallpaper then shows again.
 """
 
 from __future__ import annotations
@@ -33,6 +42,10 @@ log = logging.getLogger(__name__)
 RESTART_DELAYS = (2, 5, 15, 60)
 CRASH_WINDOW_S = 600
 GIVE_UP_AFTER = 5
+EMBED_RETRY_S = (3, 10, 30)          # a renderer that could not attach: Explorer may still be starting
+LOST_DELAY_S = 2                     # after an Explorer restart
+LOST_GIVE_UP = 8                     # Explorer restarts within CRASH_WINDOW_S before a monitor gives up
+NO_HOST, EMBED_FAILED, DESKTOP_LOST = 2, 3, 4      # renderer exit codes (renderer.py)
 
 
 def self_command(*args: str) -> tuple[str, list[str]]:
@@ -68,6 +81,11 @@ class Renderer(QObject):
         self.paused: bool | None = None
         self.config = ""
         self.stopping = False
+        self.embed_failures = 0
+        self.losses: list[float] = []
+        self.layer = ""                         # where the wallpaper sits (raised | workerw | ...)
+        self.embedded = False
+        self.hwnd = 0                           # the renderer's window (diagnostics, the CI desktop check)
 
     def start(self) -> None:
         if self.process is not None:
@@ -94,8 +112,27 @@ class Renderer(QObject):
     def _finished(self, code: int, _status) -> None:
         self.process = None
         self.channel = None
+        self.embedded = False
         if self.stopping:
             self.state = "stopped"
+            return
+        if code == EMBED_FAILED:
+            self.embed_failures += 1
+            if self.embed_failures > len(EMBED_RETRY_S):
+                self.state = "failed"
+                self.error = self.error or "the wallpaper could not be placed behind the desktop icons"
+                log.warning("wallpaper for %s gives up: %s", self.monitor, self.error)
+                return
+            self._again(EMBED_RETRY_S[self.embed_failures - 1])
+            return
+        if code == DESKTOP_LOST:
+            now = time.monotonic()
+            self.losses = [t for t in self.losses if now - t < CRASH_WINDOW_S] + [now]
+            if len(self.losses) >= LOST_GIVE_UP:
+                self.state = "failed"
+                self.error = "Explorer restarted too often; the wallpaper stays off until you try again"
+                return
+            self._again(LOST_DELAY_S)
             return
         delay = self.crashes.record()
         log.warning("wallpaper renderer for %s ended (exit %s)", self.monitor, code)
@@ -104,8 +141,21 @@ class Renderer(QObject):
             self.error = self.error or "the wallpaper renderer stopped repeatedly"
             winapi.refresh_wallpaper()
             return
+        self._again(delay)
+
+    def _again(self, delay: float) -> None:
         self.state = "waiting"
         QTimer.singleShot(int(delay * 1000), lambda: self.host.renderer_wanted(self.monitor) and self.start())
+
+    def retry(self) -> None:
+        """A fresh chance (the suite's "Try again"): counters back to zero."""
+        if self.state != "failed":
+            return
+        self.crashes = Crashes()
+        self.embed_failures = 0
+        self.losses = []
+        self.error = ""
+        self.start()
 
     def attach(self, channel: ipc.Channel) -> None:
         self.channel = channel
@@ -171,6 +221,10 @@ class DesktopHost(QObject):
         self.reasons: dict[str, list] = {}
         self.dock = None
         self.widgets = None
+        self.user_paused = False                    # the tray menu's "Pause wallpapers"
+        self.tray = None
+        self.started_at = time.time()
+        self._desktop_front = False
         self._written = ""
         self._mtime = 0.0
         self._games_cache: tuple[float, list] = (0.0, [])
@@ -181,7 +235,7 @@ class DesktopHost(QObject):
         self.watcher.directoryChanged.connect(lambda _: self.reload())
         self.timers = []
         for ms, fn in ((2000, self.evaluate), (1500, self._check_virtual_desktop), (2000, self._poll_config),
-                       (3000, self._scan_games), (10 * 60_000, self._check_license)):
+                       (3000, self._scan_games), (10 * 60_000, self._check_license), (500, self._desktop_focus)):
             timer = QTimer(self)
             timer.setInterval(ms)
             timer.timeout.connect(fn)
@@ -204,12 +258,31 @@ class DesktopHost(QObject):
             timer.start()
         app = QGuiApplication.instance()
         if app is not None:
-            app.screenAdded.connect(lambda _s: self.apply())
+            app.screenAdded.connect(self._screen_added)
             app.screenRemoved.connect(lambda _s: self.apply())
+            for screen in app.screens():
+                screen.geometryChanged.connect(self._screens_changed)
         self.apply()
         return True
 
+    def _screen_added(self, screen) -> None:
+        screen.geometryChanged.connect(self._screens_changed)
+        self.apply()
+
+    def _screens_changed(self, *_):
+        """Resolution or scaling changed: every wallpaper covers its monitor again, the dock and widgets move."""
+        for r in self.renderers.values():
+            r.send({"cmd": "place"})
+        if self.dock is not None:
+            self.dock.place()
+        if self.widgets is not None:
+            for win in self.widgets.windows.values():
+                win.place()
+
     def quit(self) -> None:
+        if getattr(self, "_quitting", False):
+            return
+        self._quitting = True
         for timer in self.timers:
             timer.stop()
         for r in self.renderers.values():
@@ -220,6 +293,8 @@ class DesktopHost(QObject):
         if self.widgets is not None:
             self.widgets.close()
             self.widgets = None
+        if self.tray is not None:
+            self.tray.hide()
         for ch in self.apps:
             ch.send({"cmd": "bye"})
         QTimer.singleShot(3500, self._finish)
@@ -236,7 +311,7 @@ class DesktopHost(QObject):
     def idle(self) -> bool:
         if not self.cfg.get("enabled", True):
             return True
-        return not (self.monitors_wanted() or self.cfg["dock"].get("enabled") or self.cfg.get("widgets"))
+        return not (self.monitors_wanted() or self.cfg["dock"].get("enabled") or cfgmod.widgets_on(self.cfg))
 
     # -- configuration -----------------------------------------------------------------------------------------------
     def _poll_config(self) -> None:
@@ -306,6 +381,8 @@ class DesktopHost(QObject):
         self._apply_dock()
         self._apply_widgets()
         self.evaluate()
+        if self.tray is not None:
+            self.tray.refresh()
 
     def _apply_dock(self) -> None:
         dcfg = self.cfg["dock"]
@@ -328,7 +405,7 @@ class DesktopHost(QObject):
             self.dock.rebuild()
 
     def _apply_widgets(self) -> None:
-        if not self.cfg.get("widgets"):
+        if not cfgmod.widgets_on(self.cfg):
             if self.widgets is not None:
                 self.widgets.sync([], False)
             return
@@ -378,11 +455,15 @@ class DesktopHost(QObject):
         return pause.State(game_running=self.game_running(), fullscreen_app=winapi.fullscreen_app(),
                            on_battery=winapi.on_battery(), remote_session=winapi.remote_session(),
                            covered=monitor in mons and winapi.covered(mons[monitor]),
-                           cpu_percent=psutil.cpu_percent(None))
+                           cpu_percent=psutil.cpu_percent(None), user_paused=self.user_paused)
 
     def evaluate(self) -> None:
         rules = self.cfg["pause"]
         any_paused = False
+        gaming = self.game_running() or winapi.fullscreen_app()
+        if self.dock is not None:
+            # a game or fullscreen program keeps the screen: the always-on-top dock steps aside meanwhile
+            self.dock.set_game_mode(gaming and bool(self.cfg["dock"].get("hide_in_games", True)))
         for monitor, r in self.renderers.items():
             decision = pause.decide(rules, self.state_for(monitor))
             self.reasons[monitor] = decision.reasons
@@ -393,6 +474,26 @@ class DesktopHost(QObject):
         if self.widgets is not None:
             # widgets keep still while a game or a fullscreen program runs (no wasted CPU time)
             self.widgets.set_paused(self.game_running() or winapi.fullscreen_app())
+
+    def _desktop_focus(self) -> None:
+        """Win+D or a click on the desktop: widgets come just above it; any other window: back to the bottom."""
+        front = winapi.desktop_in_front()
+        if front != self._desktop_front:
+            self._desktop_front = front
+            if self.widgets is not None:
+                self.widgets.desktop_in_front(front)
+
+    def set_user_paused(self, paused: bool) -> None:
+        self.user_paused = bool(paused)
+        self.evaluate()
+        if self.tray is not None:
+            self.tray.refresh()
+
+    def edit(self, change: Callable[[dict], None]) -> None:
+        """A change from the tray menu: written to desktop.json (the suite follows it) and applied."""
+        change(self.cfg)
+        self.save()
+        self.apply()
 
     def _check_virtual_desktop(self) -> None:
         current = winapi.virtual_desktop_id()
@@ -430,10 +531,19 @@ class DesktopHost(QObject):
         elif cmd == "ready":
             r = self.renderers.get(message.get("monitor"))
             if r is not None:
-                r.state = "running"
                 r.error = str(message.get("error") or "")[:300]
+                r.embedded = bool(message.get("embedded", True))
+                r.layer = str(message.get("layer") or "")[:40]
+                if str(message.get("hwnd", "")).isdigit():
+                    r.hwnd = int(message["hwnd"])
+                if r.embedded:
+                    r.state = "running"
+                    r.embed_failures = 0
                 r.paused = None
                 self.evaluate()
+        elif cmd == "retry":
+            for r in self.renderers.values():
+                r.retry()
         elif cmd == "reload":
             self.reload()
         elif cmd == "game":
@@ -447,7 +557,9 @@ class DesktopHost(QObject):
 
     def status(self) -> dict:
         return {"cmd": "status", "pid": os.getpid(), "game_running": self.game_running(),
+                "started": self.started_at, "user_paused": self.user_paused,
                 "renderers": {m: {"state": r.state, "error": r.error, "paused": bool(r.paused),
+                                  "embedded": r.embedded, "layer": r.layer, "hwnd": r.hwnd,
                                   "reasons": [str(x) for x in self.reasons.get(m, [])]}
                               for m, r in self.renderers.items()},
                 "dock": self.dock is not None,
@@ -470,7 +582,13 @@ def main(argv: list[str] | None = None) -> int:
             log.warning("license check failed: %s", exc)
             return False
     host = DesktopHost(license_ok=licensed)
-    code = app.exec() if host.start() else 0
+    code = 0
+    if host.start():
+        from akeno.desktop.tray import RuntimeTray
+        if host.cfg.get("runtime", {}).get("tray", True) and RuntimeTray.available():
+            host.tray = RuntimeTray(host)
+            host.tray.show()
+        code = app.exec()
     host.deleteLater()                  # Qt objects go before the application object (no crash on exit)
     app.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     return code

@@ -1,11 +1,17 @@
-"""Desktop Studio on a real Windows desktop (the CI runner, or any PC): runs the desktop host with a picture and then
-a web wallpaper, rendered by the given AKENO.exe (or the source), and reports what Windows reports.
+"""Desktop Studio on a real Windows desktop (the CI runner, or any PC): runs the desktop host with a picture, a video
+and a web wallpaper, rendered by the given AKENO.exe (or the source), and measures from outside how each wallpaper
+window sits in Explorer's window tree (winapi.inspect).
 
     python tools/desktop_check.py --exe dist/AKENO/AKENO.exe --out screenshots/desktop-studio
 
-It fails when a renderer does not start or reports an error (a missing Qt module in the build, for example).
-Whether the wallpaper really sits behind the desktop icons is reported, not required: a CI runner may have no
-Explorer shell. Nothing here measures or claims GPU performance.
+It fails when a renderer does not start or reports an error, and, when Windows offers a desktop layer (Explorer
+runs), when a wallpaper window
+* is not a child behind the desktop icons (winapi.verify),
+* is a top-level window (it would show in Alt+Tab and could cover the desktop), or
+* receives clicks at any of 25 points of the monitor (the icon view or programs must get them).
+Without an Explorer shell the renderer must refuse to show anything, and that is what is checked then.
+A CI runner is Windows Server with the classic desktop layout; Windows 11 24H2's raised desktop is not covered here.
+Nothing here measures or claims GPU performance.
 """
 
 from __future__ import annotations
@@ -55,9 +61,12 @@ def main() -> int:
                                     encoding="utf-8")
     (web / "app.js").write_text("var g=document.getElementById('c').getContext('webgl');"
                                 "document.title=g?'webgl':'no-webgl';", encoding="utf-8")
+    video = ROOT / "tests" / "fixtures" / "media" / "sample.mp4"
     screen = QGuiApplication.primaryScreen()
     name = screen.name()
-    report: dict = {"monitor": name, "platform": sys.platform, "exe": args.exe or "source"}
+    report: dict = {"monitor": name, "platform": sys.platform, "exe": args.exe or "source",
+                    "desktop": winapi.describe()}
+    shell = report["desktop"].get("layer") is not None
 
     def configure(item: dict) -> None:
         cfg = cfgmod.load()
@@ -82,37 +91,54 @@ def main() -> int:
     failures = [] if ok else ["the desktop host did not start"]
     phases = {}
     try:
-        for phase, item in (("picture", {"path": str(picture), "kind": "image"}),
-                            ("web", {"path": str(web), "kind": "web"})):
-            if phase == "web":
+        for phase, item, colour in (("picture", {"path": str(picture), "kind": "image"}, "#4E31D5"),
+                                    ("video", {"path": str(video), "kind": "video"}, None),
+                                    ("web", {"path": str(web), "kind": "web"}, "#12C7FF")):
+            if phase != "picture":
                 renderer = host.renderers.get(name)
                 if renderer is not None:
                     renderer.state = "starting"
                 configure(item)
                 host.reload()
             renderer = host.renderers.get(name)
-            running = renderer is not None and wait(lambda: renderer.state == "running", args.timeout)
+            settled = renderer is not None and wait(lambda: renderer.state in ("running", "failed"), args.timeout)
+            running = settled and renderer.state == "running"
             wait(lambda: False, 3)                           # let the first frames draw
             shot = screen.grabWindow(0)
             shot.save(str(out / f"desktop-{phase}.png"))
-            image = shot.toImage()
-            target = QColor("#4E31D5" if phase == "picture" else "#12C7FF")
-            samples = [(x, y) for x in range(5, 100, 10) for y in range(5, 100, 10)]
-            hits = 0
-            for fx, fy in samples:
-                c = image.pixelColor(int(image.width() * fx / 100), int(image.height() * fy / 100))
-                if abs(c.red() - target.red()) + abs(c.green() - target.green()) + abs(c.blue() - target.blue()) < 40:
-                    hits += 1
-            phases[phase] = {"state": renderer.state if renderer else "missing",
-                             "error": renderer.error if renderer else "", "screen_share_with_wallpaper_colour":
-                             round(hits / len(samples), 2)}
+            result = {"state": renderer.state if renderer else "missing", "error": renderer.error if renderer else "",
+                      "layer": renderer.layer if renderer else "", "embedded": renderer.embedded if renderer else False}
+            if colour:
+                image = shot.toImage()
+                target = QColor(colour)
+                samples = [(x, y) for x in range(5, 100, 10) for y in range(5, 100, 10)]
+                hits = 0
+                for fx, fy in samples:
+                    c = image.pixelColor(int(image.width() * fx / 100), int(image.height() * fy / 100))
+                    if abs(c.red() - target.red()) + abs(c.green() - target.green()) + \
+                            abs(c.blue() - target.blue()) < 40:
+                        hits += 1
+                result["screen_share_with_wallpaper_colour"] = round(hits / len(samples), 2)
+            mon = next((m for m in winapi.monitors() if m.name == name), None)
+            if renderer is not None and renderer.hwnd and mon is not None:
+                result["window"] = winapi.inspect(renderer.hwnd, mon)
+            phases[phase] = result
+            if not shell:
+                if running and renderer.embedded:
+                    failures.append(f"{phase}: shown although Windows offers no desktop layer")
+                continue
             if not running:
-                failures.append(f"{phase}: renderer {phases[phase]['state']}")
-            elif renderer.error:
+                failures.append(f"{phase}: renderer {result['state']} {result['error']}")
+                continue
+            if renderer.error:
                 failures.append(f"{phase}: {renderer.error}")
-        parent = winapi.desktop_parent()
-        report["desktop_parent"] = None if parent is None else (
-            "Progman child below SHELLDLL_DefView (Windows 11 24H2+)" if parent[1] else "WorkerW behind the icons")
+            win = result.get("window") or {}
+            if win.get("problems"):
+                failures.append(f"{phase}: {'; '.join(win['problems'])}")
+            if win.get("top_level"):
+                failures.append(f"{phase}: the wallpaper is a top-level window")
+            if win.get("clicks_reach_wallpaper"):
+                failures.append(f"{phase}: the wallpaper received clicks at {win['clicks_reach_wallpaper']} points")
         report["fullscreen_app"] = winapi.fullscreen_app()
         report["remote_session"] = winapi.remote_session()
         report["on_battery"] = winapi.on_battery()

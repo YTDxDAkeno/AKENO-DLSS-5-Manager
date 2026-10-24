@@ -124,6 +124,7 @@ class DockWindow(QWidget):
         self.on_change = on_change
         self.buttons: list[DockButton] = []
         self.hidden_away = False
+        self.game_mode = False
         self._drag: QPoint | None = None
         self.box = QBoxLayout(QBoxLayout.Direction.LeftToRight, self)
         self.box.setContentsMargins(10, 8, 10, 8)
@@ -207,6 +208,17 @@ class DockWindow(QWidget):
         p.fillPath(path, QColor(13, 25, 43, 215))
         p.setPen(QColor(38, 58, 90))
         p.drawPath(path)
+
+    def set_game_mode(self, on: bool) -> None:
+        """A game or fullscreen program is in front: the always-on-top dock steps aside until it ends."""
+        if on == self.game_mode:
+            return
+        self.game_mode = on
+        if on:
+            self.hide()
+        else:
+            self.place()
+            self.show()
 
     # -- running indicators, auto-hide -------------------------------------------------------------------------------
     def update_running(self) -> None:

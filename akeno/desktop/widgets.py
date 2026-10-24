@@ -955,6 +955,11 @@ class WidgetManager(QObject):
         for win in self.windows.values():
             win.set_paused(paused)
 
+    def desktop_in_front(self, front: bool) -> None:
+        """Win+D brings the desktop to the front: widgets stay visible just above it, then go back down."""
+        for win in self.windows.values():
+            winapi.stack(int(win.winId()), top=front)
+
     def _emit(self) -> None:
         self.on_change([dict(w.spec) for w in self.windows.values()], self.locked)
 

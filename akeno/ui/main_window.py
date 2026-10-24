@@ -363,6 +363,7 @@ class MainWindow(QMainWindow):
         from akeno.ui.game_sessions import GameSessions
         self.sessions = GameSessions(self.s, self)
         self.desktop = DesktopClient()
+        self.desktop.on_show = lambda: (self.showNormal(), self.raise_(), self.activateWindow())
         from akeno.ui.notifications import Notifier
         self.notifier = Notifier(self.s.settings, None, self)       # the tray icon is attached by the app
         from akeno.sync.data import LocalData
