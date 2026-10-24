@@ -12,7 +12,7 @@ DEFAULTS: dict[str, Any] = {
     "animations": True,
     "ui_scale": 1.0,
     "launch_with_windows": False,
-    "check_app_updates": False,         # off by default: AKENO does not phone home unless asked
+    "check_app_updates": True,          # only AKENO's release manifest is read; installing always asks first
     "auto_update_compat_db": False,
     "check_mod_updates": False,         # daily GitHub release check for newer mod versions (never auto-installs)
     "github_token": "",                 # optional; raises GitHub's API rate limit for update checks

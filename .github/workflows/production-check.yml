@@ -1,0 +1,65 @@
+name: Production read-only check
+
+# Reads the live AKENO services and compares them with what the Windows build trusts. Nothing is written:
+# - GET of health, version, license keys and the website's link pages;
+# - every endpoint the app uses, probed WITHOUT credentials and with an empty body (the server answers 401/422
+#   before any endpoint code runs);
+# - no account, no e-mail, no license, no session is created or changed.
+# Runs when this workflow or the acceptance tool changes on a development branch, or by hand.
+
+on:
+  push:
+    branches: ["claude/**", "codex/**"]
+    paths:
+      - ".github/workflows/production-check.yml"
+      - "tools/account_acceptance.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  production:
+    name: akeno.online, api.akeno.online (read-only)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install cryptography==44.0.0
+      - name: The build's license verification keys (repository variables, public)
+        env:
+          LICENSE_SERVER_URL: ${{ vars.AKENO_LICENSE_SERVER_URL }}
+          WEBSITE_URL: ${{ vars.AKENO_WEBSITE_URL }}
+          LICENSE_PUBLIC_KEYS: ${{ vars.AKENO_LICENSE_PUBLIC_KEYS }}
+        run: |
+          if [ -n "$LICENSE_PUBLIC_KEYS" ]; then
+            python tools/configure-licensing.py --server-url "${LICENSE_SERVER_URL:-https://api.akeno.online}" --website-url="$WEBSITE_URL" --keys "$LICENSE_PUBLIC_KEYS"
+          else
+            echo "AKENO_LICENSE_PUBLIC_KEYS is not set: release builds would accept no license" | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "license server variable: ${LICENSE_SERVER_URL:-(not set)}" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Account API, website and license keys
+        run: |
+          set -o pipefail
+          {
+            echo '### Production read-only check'
+            echo '```'
+            python tools/account_acceptance.py --api https://api.akeno.online --website https://akeno.online check --license-keys akeno/data/licensing.json
+            echo '```'
+          } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Release channels on AKENO's own server (when configured)
+        if: ${{ vars.AKENO_RELEASE_BASE != '' }}
+        env:
+          RELEASE_BASE: ${{ vars.AKENO_RELEASE_BASE }}
+          RELEASE_PUBLIC_KEYS: ${{ vars.AKENO_RELEASE_PUBLIC_KEYS }}
+        run: |
+          python tools/release_manifest.py embed --keys "$RELEASE_PUBLIC_KEYS" --output release-keys.json
+          for channel in stable beta; do
+            if curl -fsS --proto '=https' -o "$channel.json" "$RELEASE_BASE/channels/$channel.json"; then
+              python tools/release_manifest.py verify "$channel.json" --keys release-keys.json --channel "$channel" --release-base "$RELEASE_BASE" | tee -a "$GITHUB_STEP_SUMMARY"
+            else
+              echo "$channel: no channel manifest published at $RELEASE_BASE/channels/$channel.json" | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+          done

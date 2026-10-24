@@ -212,8 +212,7 @@ def build_suite(app, args, lic):
             ctl.discover_dependencies()
         if services.settings.get("auto_update_compat_db"):
             win.pages["settings"].update_compat()
-        if services.settings.get("check_app_updates"):
-            win.pages["updates"].check(quiet=True)
+        win.pages["updates"].auto_check()         # when enabled and due (at most every few hours)
         outcome = win.pages["updates"].svc.after_start()
         if outcome:
             win.statusBar().showMessage(i18n.t("AKENO {v} was installed.", v=outcome["version"]) if outcome.get("ok")
@@ -272,6 +271,7 @@ def smoke_test(app, ctl, win, gate=None) -> int:
                      f"{len(rep.verified)} verified, {len(rep.refused)} refused")
         for c in rep.candidates[:5]:
             lines.append(f"  {c.trust.value:10} {c.version or '?':14} {c.source:14} {c.path} — {c.detail}")
+    lines.extend(build_configuration())
     lines.append(assets.summary())
     problems = assets.verify_all()
     lines.append(f"Pages: {', '.join(win.pages)}")
@@ -282,6 +282,20 @@ def smoke_test(app, ctl, win, gate=None) -> int:
         print(text)
     win.close()
     return 3 if problems else 0
+
+
+def build_configuration() -> list[str]:
+    """What this build trusts and talks to (public values only: addresses and key ids, never a secret)."""
+    from akeno import distribution
+    from akeno.licensing import config as licensing_config
+    from akeno.updater import manifest
+    lic = licensing_config.load()
+    dist = distribution.load()
+    return [f"License API: {lic.server_url or 'none'} (website {lic.website or 'none'}; "
+            f"{'fixed in this build' if lic.locked else 'running from source'})",
+            f"License verification keys: {', '.join(sorted(lic.keys)) or 'NONE (no license can be accepted)'}",
+            f"Updates: {dist.label}; manifest {dist.channel_manifest('stable')}",
+            f"Release verification keys: {', '.join(sorted(manifest.release_keys())) or 'NONE (no update install)'}"]
 
 
 def screenshots(app, ctl, win, out_dir: str, size: str = "1920x1009", gate=None) -> int:
