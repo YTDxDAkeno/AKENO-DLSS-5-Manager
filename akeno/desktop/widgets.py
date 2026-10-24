@@ -11,6 +11,7 @@ from __future__ import annotations
 import calendar
 import json
 import logging
+import re
 import threading
 import urllib.parse
 import urllib.request
@@ -63,6 +64,45 @@ class Context:
             db_file = db_path()
         self.db_file = db_file
         self.license_view = license_view
+
+
+STYLES = ("dark", "glass", "solid", "accent")
+
+
+def accent_of(widget: QWidget) -> QColor:
+    """The colour chosen for the widget this part belongs to (the AKENO violet unless the user picked another)."""
+    w = widget
+    while w is not None:
+        spec = getattr(w, "spec", None)
+        if isinstance(spec, dict):
+            return QColor(spec.get("color") or ACCENT.name())
+        w = w.parentWidget()
+    return QColor(ACCENT)
+
+
+def paint_widget_background(p: QPainter, rect: QRect, style: str, accent: QColor, radius: float = 14) -> None:
+    path = QPainterPath()
+    path.addRoundedRect(rect.adjusted(1, 1, -1, -1), radius, radius)
+    if style == "glass":
+        p.fillPath(path, QColor(14, 22, 40, 120))
+        p.setPen(QColor(255, 255, 255, 46))
+    elif style == "solid":
+        p.fillPath(path, QColor(15, 21, 34))
+        p.setPen(QColor(38, 50, 72))
+    elif style == "accent":
+        from PySide6.QtGui import QLinearGradient
+        grad = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        a = QColor(accent).darker(170)
+        a.setAlpha(215)
+        b = QColor(10, 14, 26, 215)
+        grad.setColorAt(0, a)
+        grad.setColorAt(1, b)
+        p.fillPath(path, grad)
+        p.setPen(QColor(accent).lighter(120))
+    else:
+        p.fillPath(path, QColor(10, 18, 34, 200))
+        p.setPen(QColor(38, 58, 90, 220))
+    p.drawPath(path)
 
 
 def _label(text: str = "", size: float = 10, bold: bool = False, color: QColor = TEXT) -> QLabel:
@@ -162,7 +202,7 @@ class CalendarPanel(Panel):
                     continue
                 r = QRect(int(col * cell_w), int(44 + row * cell_h), int(cell_w), int(cell_h))
                 if (year, month, day) == (today.year, today.month, today.day):
-                    p.setBrush(ACCENT)
+                    p.setBrush(accent_of(self))
                     p.setPen(Qt.PenStyle.NoPen)
                     side = int(min(cell_w, cell_h)) - 2
                     p.drawEllipse(QRect(r.center().x() - side // 2, r.center().y() - side // 2, side, side))
@@ -198,7 +238,7 @@ class Spark(QWidget):
         for i, v in enumerate(self.values):
             x, y = (start + i) * step, h - 2 - (h - 4) * v / 100
             path.moveTo(x, y) if i == 0 else path.lineTo(x, y)
-        p.setPen(QPen(self.color, 2))
+        p.setPen(QPen(self.color if self.color != ACCENT else accent_of(self), 2))
         p.drawPath(path)
 
 
@@ -303,7 +343,7 @@ class Bar(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor(255, 255, 255, 30))
         p.drawRoundedRect(self.rect(), 3, 3)
-        p.setBrush(QColor("#FF5B73") if self.value >= 90 else ACCENT)
+        p.setBrush(QColor("#FF5B73") if self.value >= 90 else accent_of(self))
         p.drawRoundedRect(QRect(0, 0, int(self.width() * self.value / 100), self.height()), 3, 3)
 
 
@@ -456,7 +496,7 @@ class LevelBars(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         for i, v in enumerate(self.values):
             h = max(2, int(v * (self.height() - 2)))
-            color = QColor(ACCENT)
+            color = accent_of(self)
             color.setAlpha(120 + int(135 * v))
             p.setBrush(color)
             p.drawRoundedRect(QRect(int(i * w) + 1, self.height() - h, max(1, int(w) - 2), h), 2, 2)
@@ -849,11 +889,7 @@ class DesktopWidget(QWidget):
     def paintEvent(self, e):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        path = QPainterPath()
-        path.addRoundedRect(self.rect().adjusted(1, 1, -1, -1), 14, 14)
-        p.fillPath(path, QColor(10, 18, 34, 200))
-        p.setPen(QColor(38, 58, 90, 220))
-        p.drawPath(path)
+        paint_widget_background(p, self.rect(), self.spec.get("style", "dark"), accent_of(self))
         if not self.locked():
             p.setPen(QPen(DIM, 1.5))
             for i in (4, 8):
@@ -1016,6 +1052,10 @@ def clean_layout(widgets, limit: int = 60) -> list[dict]:
         for key in ("x", "y", "w", "h", "opacity"):
             if isinstance(w.get(key), int):
                 spec[key] = max(0, min(w[key], 10_000))
+        if w.get("style") in STYLES:
+            spec["style"] = w["style"]
+        if isinstance(w.get("color"), str) and re.fullmatch(r"#[0-9A-Fa-f]{6}", w["color"]):
+            spec["color"] = w["color"]
         options = w.get("options") if isinstance(w.get("options"), dict) else {}
         # only plain values survive: a layout never carries anything that runs
         spec["options"] = {k: v for k, v in options.items() if isinstance(k, str) and

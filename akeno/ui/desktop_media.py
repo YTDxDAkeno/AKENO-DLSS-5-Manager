@@ -38,7 +38,7 @@ _service: thumbsmod.ThumbnailService | None = None
 def thumbnails() -> thumbsmod.ThumbnailService:
     """One thumbnail service for the suite (its cache and its single video decoder are shared)."""
     global _service
-    if _service is None:
+    if _service is None or _service.folder != thumbsmod.cache_dir():     # another AKENO home (tests)
         _service = thumbsmod.ThumbnailService()
     return _service
 

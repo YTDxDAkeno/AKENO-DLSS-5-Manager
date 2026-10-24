@@ -9,8 +9,9 @@ from pathlib import Path
 
 from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QSize, Qt, QTime, QTimer
 from PySide6.QtGui import QColor, QGuiApplication, QIcon, QImage, QLinearGradient, QPainter, QPixmap
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFrame, QHBoxLayout, QInputDialog, QLabel,
-                               QLineEdit, QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QScrollArea,
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDialogButtonBox, QFileDialog, QFrame, QHBoxLayout,
+                               QInputDialog, QLabel,
+                               QLineEdit, QListWidget, QListWidgetItem, QMenu, QPlainTextEdit, QPushButton, QScrollArea,
                                QSizePolicy, QSlider, QSpinBox, QStackedWidget, QTabBar, QTimeEdit, QToolButton,
                                QVBoxLayout, QWidget)
 
@@ -184,8 +185,8 @@ class WallpapersPage(DesktopPage):
         self.timer.setInterval(4000)
         self.timer.timeout.connect(self.refresh_status)
         thumbs = dm.thumbnails()
-        thumbs.meta.connect(self._meta)
-        thumbs.ready.connect(lambda path, _img: self.monitor_map.update())
+        thumbs.meta.connect(self._meta)              # bound methods: Qt drops them with the page
+        thumbs.ready.connect(self._thumb_ready)
         self._fill_monitors()
         self.refresh_library()
 
@@ -573,6 +574,9 @@ class WallpapersPage(DesktopPage):
         else:
             self.preview.item = item
 
+    def _thumb_ready(self, _path: str, _image) -> None:
+        self.monitor_map.update()
+
     def _meta(self, path: str, meta: dict) -> None:
         item = self.lib.by_path(path)
         if item is None:
@@ -763,7 +767,11 @@ class WallpapersPage(DesktopPage):
         self.preview.stop()
         self._fs = self.dm.FullscreenPreview(item, self.gallery.model_.pixmap(item), self.fit_choice.value(),
                                              self.window().screen())
-        self._fs.destroyed.connect(lambda *_: self._select())
+        self._fs.destroyed.connect(self._fullscreen_closed)
+
+    def _fullscreen_closed(self, *_):
+        self._fs = None
+        self._select()
 
     # -- applying ------------------------------------------------------------------------------------------------
     def apply(self, item=None, monitors: list[str] | None = None) -> bool:
@@ -1109,21 +1117,89 @@ class WallpapersPage(DesktopPage):
         super().hideEvent(e)
 
 
+DOCK_STYLES = {"glass": msg("Glass"), "solid": msg("Solid"), "clear": msg("Icons only"), "accent": msg("Accent")}
+DOCK_THEMES = {
+    "akeno": (msg("AKENO"), {"style": "accent", "opacity": 94, "icon_size": 48, "labels": False}),
+    "glass": (msg("Glass"), {"style": "glass", "opacity": 92, "icon_size": 48, "labels": False, "blur": True}),
+    "midnight": (msg("Midnight"), {"style": "solid", "opacity": 100, "icon_size": 44, "labels": True}),
+    "minimal": (msg("Minimal"), {"style": "clear", "opacity": 100, "icon_size": 40, "labels": False}),
+}
+WIDGET_STYLES = {"dark": msg("Dark"), "glass": msg("Glass"), "solid": msg("Solid"), "accent": msg("Accent")}
+SWATCHES = ("#8E42FF", "#4C9DFF", "#3CC8F0", "#34D399", "#F6C152", "#F7687C", "#E879F9", "#E8EDF6")
+WIDGET_ABOUT = {
+    "clock": msg("Time and date"), "calendar": msg("This month"), "cpu": msg("Processor load and clock"),
+    "gpu": msg("NVIDIA graphics load"), "temperature": msg("GPU and CPU temperature where reported"),
+    "ram": msg("Memory in use"), "vram": msg("NVIDIA video memory"), "network": msg("Download and upload rate"),
+    "disk": msg("Free space per drive"), "fps": msg("Last Benchmark result"), "shortcuts": msg("Programs and folders"),
+    "music": msg("Media keys for the active player"), "visualizer": msg("Level of the sound that plays"),
+    "notes": msg("A note on the desktop"), "todo": msg("A short to-do list"), "weather": msg("open-meteo.com, once "
+                                                                                             "you enter a place"),
+    "uptime": msg("Time since Windows started"), "downloads": msg("Newest files in Downloads"),
+    "license": msg("Your AKENO license"),
+}
+
+
+def _switch(text: str, on_toggle) -> QPushButton:
+    """A chip that stays pressed while something is on (dock shown, widgets shown, positions locked)."""
+    b = QPushButton(text)
+    b.setProperty("kind", "chip")
+    b.setCheckable(True)
+    b.setCursor(Qt.CursorShape.PointingHandCursor)
+    b.setAccessibleName(text)
+    b.toggled.connect(on_toggle)
+    return b
+
+
 class DockPage(DesktopPage):
+    """The dock as you will see it, the pinned items to drag into order, and its look and place."""
+
     def __init__(self, ctl, window):
         super().__init__(ctl, window)
+        from akeno.ui import desktop_editors as de
+        from akeno.ui import desktop_media as dm
+        self.de, self.dm = de, dm
         root = QVBoxLayout(self)
-        self.header(root, "AKENO Dock", "A launcher bar for your programs, folders and groups, with a dot under "
-                    "programs that run. It is an extra bar: the Windows taskbar and Explorer stay as they are.")
-        row = ResponsiveRow(spacing=14)
-        look = Card(t("Dock"), "dock")
-        self.chk_enabled = QCheckBox(t("Show the AKENO Dock"))
-        self.chk_enabled.toggled.connect(lambda v: (v and not self._loading and self.switch_on(),
-                                                    self._set("enabled", bool(v))))
-        look.body.addWidget(self.chk_enabled)
-        self.edge = _combo(EDGE_TEXT, t("Screen edge"))
-        self.edge.currentIndexChanged.connect(lambda _: self._set("edge", self.edge.currentData()))
-        look.body.addLayout(_line(t("Screen edge"), self.edge))
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(theme.CARD_GAP)
+        self.btn_on = _switch(t("Show the dock"), lambda v: self._set("enabled", bool(v), switch=True))
+        root.addWidget(PageHeader(t("AKENO Dock"), t("A launcher bar for programs, folders and shortcuts. It is an "
+                                                     "extra bar: the Windows taskbar stays as it is."),
+                                  [self.btn_on]))
+        top = ResponsiveRow(spacing=theme.CARD_GAP)
+        view = Card(t("Preview"), "eye")
+        self.preview = de.DockPreview(self._wallpaper)
+        view.body.addWidget(self.preview)
+        themes_row = QHBoxLayout()
+        themes_row.setSpacing(6)
+        themes_row.addWidget(label(t("Themes"), "key"))
+        for key, (name, _values) in DOCK_THEMES.items():
+            themes_row.addWidget(button(t(name), kind="chip", on_click=lambda _=False, k=key: self._theme(k)))
+        themes_row.addStretch(1)
+        view.body.addLayout(themes_row)
+        top.add(view, 3)
+        look = Card(t("Look and place"), "sliders")
+        self.style = self.dm.Segmented({k: t(v) for k, v in DOCK_STYLES.items()}, "glass")
+        self.style.changed.connect(lambda v: self._set("style", v))
+        look.body.addWidget(label(t("Style"), "overline"))
+        look.body.addWidget(self.style)
+        self.size = QSlider(Qt.Orientation.Horizontal)
+        self.size.setRange(24, 96)
+        self.size.setSingleStep(4)
+        self.size.setAccessibleName(t("Icon size"))
+        self.size.valueChanged.connect(lambda v: self._set("icon_size", int(v)))
+        look.body.addLayout(_line(t("Icon size"), self.size))
+        self.opacity = QSlider(Qt.Orientation.Horizontal)
+        self.opacity.setRange(30, 100)
+        self.opacity.setAccessibleName(t("Opacity"))
+        self.opacity.valueChanged.connect(lambda v: self._set("opacity", int(v)))
+        look.body.addLayout(_line(t("Opacity"), self.opacity))
+        self.chk_labels = QCheckBox(t("Names under the icons"))
+        self.chk_labels.toggled.connect(lambda v: self._set("labels", bool(v)))
+        look.body.addWidget(self.chk_labels)
+        look.body.addWidget(label(t("Screen edge"), "overline"))
+        self.edge = self.dm.Segmented({k: t(v) for k, v in EDGE_TEXT.items()}, "bottom")
+        self.edge.changed.connect(lambda v: self._set("edge", v))
+        look.body.addWidget(self.edge)
         self.screen = QComboBox()
         self.screen.setAccessibleName(t("Monitor"))
         self.screen.currentIndexChanged.connect(lambda i: self._set("screen", max(0, i)))
@@ -1132,97 +1208,127 @@ class DockPage(DesktopPage):
         self.chk_float.toggled.connect(lambda v: self._set("floating", bool(v)))
         self.chk_hide = QCheckBox(t("Hide automatically (show at the screen edge)"))
         self.chk_hide.toggled.connect(lambda v: self._set("autohide", bool(v)))
-        self.chk_blur = QCheckBox(t("Blurred background (Windows 11)"))
-        self.chk_blur.toggled.connect(lambda v: self._set("blur", bool(v)))
-        for box in (self.chk_float, self.chk_hide, self.chk_blur):
+        self.chk_games = QCheckBox(t("Step aside while a game or fullscreen program runs"))
+        self.chk_games.toggled.connect(lambda v: self._set("hide_in_games", bool(v)))
+        self.chk_anim = QCheckBox(t("Animations"))
+        self.chk_anim.toggled.connect(lambda v: self._set("animate", bool(v)))
+        for box in (self.chk_float, self.chk_hide, self.chk_games, self.chk_anim):
             look.body.addWidget(box)
-        self.opacity = QSlider(Qt.Orientation.Horizontal)
-        self.opacity.setRange(30, 100)
-        self.opacity.setAccessibleName(t("Opacity"))
-        self.opacity.valueChanged.connect(lambda v: self._set("opacity", int(v)))
-        look.body.addLayout(_line(t("Opacity"), self.opacity))
-        self.size = QSpinBox()
-        self.size.setRange(24, 96)
-        self.size.setSuffix(" px")
-        self.size.setAccessibleName(t("Icon size"))
-        self.size.valueChanged.connect(lambda v: self._set("icon_size", int(v)))
-        look.body.addLayout(_line(t("Icon size"), self.size))
-        row.add(look, 2)
-
-        items = Card(t("Pinned"), "layers", theme.VIOLET)
-        self.list = QListWidget()
-        self.list.setAccessibleName(t("Pinned"))
-        self.list.setMinimumHeight(240)
-        self.list.setSpacing(3)
-        self.list.setIconSize(QSize(28, 28))
-        items.body.addWidget(EmptyAware(self.list, EmptyState("dock", t("Nothing pinned yet"),
-                                                              t("Add programs, folders or groups with the buttons "
-                                                                "below.")), 240))
-        items.body.addWidget(_row(button(t("Add program…"), "plus", on_click=self._add_program),
-                                  button(t("Add folder…"), "folder", on_click=self._add_folder),
-                                  button(t("New group…"), "layers", on_click=self._add_group),
-                                  button(t("Remove"), "trash", on_click=self._remove),
-                                  button(t("Up"), on_click=lambda: self._move(-1)),
-                                  button(t("Down"), on_click=lambda: self._move(1))))
-        items.body.addWidget(label(t("You can also drop programs and shortcuts on the dock, and right-click it."),
-                                   "muted", shrink=True))
-        row.add(items, 3)
-        root.addWidget(row)
+        top.add(look, 2)
+        root.addWidget(top)
+        pins = Card(t("Pinned"), "dock", right=_row(
+            button(t("Add program…"), "plus", on_click=self._add_program),
+            button(t("Add folder…"), "folder", on_click=self._add_folder),
+            button(t("New group…"), "layers", on_click=self._add_group),
+            button(t("Remove"), "trash", on_click=self._remove)))
+        self.list = de.PinnedList()
+        self.list.reordered.connect(self._reorder)
+        self.list.files_dropped.connect(lambda paths: self.add_items(
+            [{"type": "app", "path": p, "name": Path(p).stem} for p in paths]))
+        self.list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.list.customContextMenuRequested.connect(self._pin_menu)
+        pins.body.addWidget(self.list)
+        pins.body.addWidget(label(t("Drag icons into the order you want. Drop programs, shortcuts or folders from "
+                                    "Explorer here or on the dock itself."), "muted", shrink=True))
+        root.addWidget(pins)
         root.addStretch(1)
         self.load()
+
+    def _wallpaper(self, index: int):
+        names = [n for n, _ in screens()]
+        if not 0 <= index < len(names):
+            return None
+        page = self.win.pages.get("wallpapers")
+        return page._monitor_thumb(names[index]) if page is not None else None
 
     def load(self) -> None:
         self._loading = True
         try:
             d = self.cfg["dock"]
-            self.chk_enabled.setChecked(bool(d.get("enabled")))
-            self.edge.setCurrentIndex(max(0, self.edge.findData(d.get("edge", "bottom"))))
+            self.btn_on.setChecked(bool(d.get("enabled")) and self.cfg.get("enabled", True))
+            self.style.set(d.get("style", "glass"))
+            self.size.setValue(int(d.get("icon_size", 48)))
+            self.opacity.setValue(int(d.get("opacity", 92)))
+            self.chk_labels.setChecked(bool(d.get("labels")))
+            self.edge.set(d.get("edge", "bottom"))
             self.screen.clear()
             for _, text in screens():
                 self.screen.addItem(text)
             self.screen.setCurrentIndex(min(int(d.get("screen", 0)), max(0, self.screen.count() - 1)))
             self.chk_float.setChecked(bool(d.get("floating")))
             self.chk_hide.setChecked(bool(d.get("autohide")))
-            self.chk_blur.setChecked(bool(d.get("blur", True)))
-            self.opacity.setValue(int(d.get("opacity", 92)))
-            self.size.setValue(int(d.get("icon_size", 48)))
+            self.chk_games.setChecked(bool(d.get("hide_in_games", True)))
+            self.chk_anim.setChecked(bool(d.get("animate", True)))
             self._fill()
         finally:
             self._loading = False
 
+    def _running(self) -> set[str]:
+        try:
+            from akeno.desktop.dock import running_exes
+            return running_exes()
+        except Exception:                    # psutil hiccups never break the page
+            return set()
+
     def _fill(self, select: int = -1) -> None:
-        from PySide6.QtCore import QFileInfo
-        from PySide6.QtWidgets import QFileIconProvider
-        provider = QFileIconProvider()
-        self.list.clear()
-        for item in self.cfg["dock"].get("items", []):
-            if item.get("type") == "group":
-                entry = QListWidgetItem(provider.icon(QFileIconProvider.IconType.Folder),
-                                        t("{name} (group of {n})", name=item.get("name", ""),
-                                          n=len(item.get("items", []))))
-            else:
-                entry = QListWidgetItem(provider.icon(QFileInfo(item.get("path", ""))),
-                                        item.get("name") or Path(item.get("path", "")).name)
-                entry.setToolTip(item.get("path", ""))
-            self.list.addItem(entry)
+        self.list.set_items(self.cfg["dock"].get("items", []))
         if select >= 0:
             self.list.setCurrentRow(select)
+        self.preview.set_config(self.cfg["dock"], self._running())
 
-    def _set(self, key: str, value) -> None:
+    def _set(self, key: str, value, switch: bool = False) -> None:
         if self._loading:
             return
         self.cfg["dock"][key] = value
+        if switch and value:
+            self.switch_on()
         self.save()
+        self.preview.set_config(self.cfg["dock"])
+
+    def _theme(self, key: str) -> None:
+        self.cfg["dock"].update(DOCK_THEMES[key][1])
+        self.save()
+        self.load()
 
     def add_items(self, new: list[dict]) -> None:
         self.cfg["dock"].setdefault("items", []).extend(new)
         self.save()
-        self._fill(self.list.count() + len(new) - 1)
+        self._fill(len(self.cfg["dock"]["items"]) - 1)
+
+    def _reorder(self, order: list[int]) -> None:
+        items = self.cfg["dock"].get("items", [])
+        if sorted(order) != list(range(len(items))):
+            return
+        self.cfg["dock"]["items"] = [items[i] for i in order]
+        self.save()
+        self._fill()
+
+    def _pin_menu(self, pos) -> None:
+        row = self.list.indexAt(pos).row()
+        if row < 0:
+            return
+        self.list.setCurrentRow(row)
+        menu = QMenu(self)
+        menu.addAction(t("Rename…"), self._rename)
+        menu.addAction(t("Remove from dock"), self._remove)
+        menu.exec(self.list.viewport().mapToGlobal(pos))
+
+    def _rename(self) -> None:
+        row = self.list.currentRow()
+        items = self.cfg["dock"].get("items", [])
+        if not 0 <= row < len(items):
+            return
+        name, ok = QInputDialog.getText(self, t("Rename…"), t("Name"), text=items[row].get("name", ""))
+        if ok and name.strip():
+            items[row]["name"] = name.strip()[:40]
+            self.save()
+            self._fill(row)
 
     def _add_program(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(self, t("Add a program to the dock"), "",
                                                 t("Programs and shortcuts (*.exe *.lnk *.url);;All files (*)"))
-        self.add_items([{"type": "app", "path": p, "name": Path(p).stem} for p in paths])
+        if paths:
+            self.add_items([{"type": "app", "path": p, "name": Path(p).stem} for p in paths])
 
     def _add_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, t("Add folder…"))
@@ -1247,63 +1353,139 @@ class DockPage(DesktopPage):
             self.save()
             self._fill(min(row, len(items) - 1))
 
-    def _move(self, step: int) -> None:
-        row = self.list.currentRow()
-        items = self.cfg["dock"].get("items", [])
-        new = row + step
-        if 0 <= row < len(items) and 0 <= new < len(items):
-            items[row], items[new] = items[new], items[row]
-            self.save()
-            self._fill(new)
-
     def on_show(self) -> None:
         self.reload_cfg()
         self.load()
 
 
+class WidgetCard(QFrame):
+    """One widget type in the gallery: what it looks like (real panel), what it shows, Add."""
+
+    def __init__(self, kind: str, on_add):
+        super().__init__()
+        self.kind = kind
+        self.setObjectName("WidgetCard")
+        self.setFixedWidth(228)
+        self.setStyleSheet(f"#WidgetCard {{ background: {theme.SURFACE_2}; border: 1px solid {theme.BORDER};"
+                           f" border-radius: 10px; }} #WidgetCard:hover {{ border-color: {theme.BORDER_BTN}; }}")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(10, 10, 10, 10)
+        lay.setSpacing(6)
+        self.pic = QLabel()
+        self.pic.setFixedSize(208, 118)
+        self.pic.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.pic.setStyleSheet("background: #0A0F1A; border-radius: 8px;")
+        self.pic.setPixmap(icons.pixmap(WIDGET_ICONS.get(kind, "grid"), theme.TEXT_MUTED, 30))
+        lay.addWidget(self.pic)
+        row = QHBoxLayout()
+        row.setSpacing(6)
+        row.addWidget(label(t(dwidgets.TITLES[kind]), "h3"), 1)
+        self.btn = QToolButton()
+        self.btn.setIcon(icons.icon("plus", theme.TEXT, 16))
+        self.btn.setToolTip(t("Add {w}", w=t(dwidgets.TITLES[kind])))
+        self.btn.setAccessibleName(self.btn.toolTip())
+        self.btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn.setFixedSize(30, 28)
+        self.btn.setStyleSheet(f"QToolButton {{ background: {theme.ACCENT_STRONG}; border-radius: 7px; }}"
+                               f"QToolButton:hover {{ background: {theme.ACCENT}; }}")
+        self.btn.clicked.connect(lambda: on_add(kind))
+        row.addWidget(self.btn)
+        lay.addLayout(row)
+        about = label(t(WIDGET_ABOUT.get(kind, "")), "muted", wrap=True)
+        about.setMinimumHeight(about.fontMetrics().height() * 2 + 2)
+        about.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        lay.addWidget(about)
+
+    def set_picture(self, pm: QPixmap) -> None:
+        if pm.isNull():
+            return
+        target = self.pic.size()
+        scaled = pm.scaled(target.width() - 8, target.height() - 8, Qt.AspectRatioMode.KeepAspectRatio,
+                           Qt.TransformationMode.SmoothTransformation)
+        canvas = QPixmap(target)
+        canvas.fill(QColor(0, 0, 0, 0))
+        p = QPainter(canvas)
+        p.drawPixmap((target.width() - scaled.width()) // 2, (target.height() - scaled.height()) // 2, scaled)
+        p.end()
+        self.pic.setPixmap(canvas)
+
+
 class WidgetsPage(DesktopPage):
+    """A widget studio: the layout on your monitor, the selected widget's look, and the widgets you can add."""
+
+    scrolls = True
+
     def __init__(self, ctl, window):
         super().__init__(ctl, window)
+        from akeno.ui import desktop_editors as de
+        from akeno.ui import desktop_media as dm
+        self.de, self.dm = de, dm
+        self.ctx = None
+        self.previews: dict[str, QPixmap] = {}
+        self.current = ""
         root = QVBoxLayout(self)
-        self.header(root, "Widgets", "Clock, calendar, system load, notes and more on your desktop, below your "
-                    "windows. Drag them with the mouse, resize them at the lower right corner, lock them when "
-                    "they sit right. Right-click a widget for its options.")
-        row = ResponsiveRow(spacing=14)
-        lst = Card(t("On the desktop"), "grid")
-        self.list = QListWidget()
-        self.list.setAccessibleName(t("On the desktop"))
-        self.list.setMinimumHeight(240)
-        self.list.setSpacing(3)
-        self.list.setIconSize(QSize(22, 22))
-        self.list.currentRowChanged.connect(self._load_item)
-        lst.body.addWidget(EmptyAware(self.list, EmptyState("grid", t("No widgets on the desktop yet"),
-                                                            t("Pick a widget below and add it to a monitor.")), 240))
-        self.kind = QComboBox()
-        self.kind.setAccessibleName(t("Widget"))
-        for key in cfgmod.WIDGET_TYPES:
-            self.kind.addItem(t(dwidgets.TITLES[key]), key)
-        self.add_screen = QComboBox()
-        self.add_screen.setAccessibleName(t("Monitor"))
-        lst.body.addWidget(_row(self.kind, self.add_screen, button(t("Add widget"), "plus", "primary",
-                                                                   on_click=self._add),
-                                button(t("Remove"), "trash", on_click=self._remove)))
-        self.chk_lock = QCheckBox(t("Lock all widgets (no moving or resizing)"))
-        self.chk_lock.toggled.connect(self._lock)
-        lst.body.addWidget(self.chk_lock)
-        row.add(lst, 3)
-
-        side = QWidget()
-        side_lay = QVBoxLayout(side)
-        side_lay.setContentsMargins(0, 0, 0, 0)
-        side_lay.setSpacing(theme.CARD_GAP)
-        opt = Card(t("Selected widget"), "sliders")
-        self.sel = KeyValueGrid(130)
-        opt.body.addWidget(self.sel)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(theme.CARD_GAP)
+        self.btn_on = _switch(t("Show widgets"), self._enabled)
+        self.btn_lock = _switch(t("Lock positions"), self._lock)
+        root.addWidget(PageHeader(t("Widgets"), t("Clock, system load, notes and more on your desktop, below your "
+                                                  "windows. Arrange them here or drag them on the desktop."),
+                                  [self.btn_lock, self.btn_on,
+                                   button(t("Default layout"), "restore", on_click=self._defaults)]))
+        top = ResponsiveRow(spacing=theme.CARD_GAP)
+        lay_card = Card(t("Layout"), "monitor")
+        self.screen_pick = QComboBox()
+        self.screen_pick.setAccessibleName(t("Monitor"))
+        self.screen_pick.currentIndexChanged.connect(lambda _: self._refresh_canvas())
+        lay_card.body.addLayout(_line(t("Monitor"), self.screen_pick))
+        self.canvas = de.WidgetCanvas(self._preview, self._wallpaper)
+        self.canvas.setMinimumHeight(360)
+        self.canvas.selected.connect(self._select)
+        self.canvas.changed.connect(lambda spec: self._store())
+        lay_card.body.addWidget(self.canvas, 1)
+        lay_card.body.addWidget(label(t("Drag a widget to move it, drag its corner to resize it. Changes appear on "
+                                        "the desktop right away."), "muted", shrink=True))
+        top.add(lay_card, 3)
+        sel = Card(t("Selected widget"), "sliders")
+        self.sel_title = label(t("Click a widget in the layout."), "h3")
+        sel.body.addWidget(self.sel_title)
+        self.sel_box = QWidget()
+        sl = QVBoxLayout(self.sel_box)
+        sl.setContentsMargins(0, 0, 0, 0)
+        sl.setSpacing(10)
+        sl.addWidget(label(t("Style"), "overline"))
+        self.w_style = dm.Segmented({k: t(v) for k, v in WIDGET_STYLES.items()}, "dark")
+        self.w_style.changed.connect(lambda v: self._set_item("style", v))
+        sl.addWidget(self.w_style)
+        sl.addWidget(label(t("Colour"), "overline"))
+        swatches = QHBoxLayout()
+        swatches.setSpacing(6)
+        self.swatches = []
+        for colour in SWATCHES:
+            b = QToolButton()
+            b.setFixedSize(26, 26)
+            b.setCheckable(True)
+            b.setToolTip(colour)
+            b.setAccessibleName(t("Colour {c}", c=colour))
+            b.setCursor(Qt.CursorShape.PointingHandCursor)
+            b.setStyleSheet(f"QToolButton {{ background: {colour}; border: 2px solid {theme.BORDER}; "
+                            f"border-radius: 13px; }} QToolButton:checked {{ border-color: #FFFFFF; }}")
+            b.clicked.connect(lambda _=False, c=colour: self._set_item("color", c))
+            swatches.addWidget(b)
+            self.swatches.append(b)
+        custom = button(t("Other…"), kind="link", on_click=self._pick_colour)
+        swatches.addWidget(custom)
+        swatches.addStretch(1)
+        sl.addLayout(swatches)
         self.opacity = QSlider(Qt.Orientation.Horizontal)
         self.opacity.setRange(30, 100)
         self.opacity.setAccessibleName(t("Opacity"))
         self.opacity.valueChanged.connect(lambda v: self._set_item("opacity", int(v)))
-        opt.body.addLayout(_line(t("Opacity"), self.opacity))
+        sl.addLayout(_line(t("Opacity"), self.opacity))
+        self.w_screen = QComboBox()
+        self.w_screen.setAccessibleName(t("Monitor"))
+        self.w_screen.currentIndexChanged.connect(lambda i: self._set_item("screen", max(0, i)))
+        sl.addLayout(_line(t("Monitor"), self.w_screen))
         self.place = QLineEdit()
         self.place.setPlaceholderText(t("City, for example Berlin"))
         self.place.setAccessibleName(t("Weather place"))
@@ -1313,12 +1495,30 @@ class WidgetsPage(DesktopPage):
         pl.setContentsMargins(0, 0, 0, 0)
         pl.addWidget(label(t("Weather place"), "key"), 1)
         pl.addWidget(self.place, 1)
-        opt.body.addWidget(self.place_line)
+        sl.addWidget(self.place_line)
         self.weather_note = label(t("The weather widget asks open-meteo.com only after you enter a place."),
                                   "muted", shrink=True)
-        opt.body.addWidget(self.weather_note)
-        side_lay.addWidget(opt)
-        prof = Card(t("Desktop profiles"), "layers", theme.VIOLET)
+        sl.addWidget(self.weather_note)
+        self.sel_size = label("", "muted")
+        sl.addWidget(self.sel_size)
+        sl.addWidget(_row(button(t("Remove widget"), "trash", "danger", on_click=self._remove)))
+        sel.body.addWidget(self.sel_box)
+        top.add(sel, 2)
+        root.addWidget(top)
+        gallery = Card(t("Add widgets"), "grid")
+        self.gallery_holder = QWidget()
+        self.gallery = FlowLayout(self.gallery_holder, spacing=12)
+        self.cards: dict[str, WidgetCard] = {}
+        for kind in cfgmod.WIDGET_TYPES:
+            card = WidgetCard(kind, self._add_kind)
+            self.cards[kind] = card
+            self.gallery.addWidget(card)
+        gallery.body.addWidget(self.gallery_holder)
+        gallery.body.addWidget(label(t("Previews show this PC's real values. A value Windows or your graphics card "
+                                       "does not report shows as —, on the desktop too."), "muted", shrink=True))
+        root.addWidget(gallery)
+        layouts = ResponsiveRow(spacing=theme.CARD_GAP)
+        prof = Card(t("Desktop profiles"), "layers")
         prof.body.addWidget(label(t("A profile keeps the wallpapers, the dock and the widgets as they are now, for "
                                     "example one for gaming and one for work."), "dim", shrink=True))
         self.profiles = QComboBox()
@@ -1327,70 +1527,135 @@ class WidgetsPage(DesktopPage):
         prof.body.addWidget(_row(button(t("Save as profile…"), "check", on_click=self._save_profile),
                                  button(t("Use"), "play", on_click=self._apply_profile),
                                  button(t("Delete"), "trash", on_click=self._delete_profile)))
-        side_lay.addWidget(prof)
+        layouts.add(prof, 1)
         share = Card(t("Layout file"), "export")
         share.body.addWidget(label(t("Positions, sizes and options as a file. Notes and to-dos stay on this PC."),
                                    "dim", shrink=True))
         share.body.addWidget(_row(button(t("Export…"), "export", on_click=self._export),
                                   button(t("Import…"), "download", on_click=self._import)))
-        side_lay.addWidget(share)
-        row.add(side, 2)
-        root.addWidget(row)
+        layouts.add(share, 1)
+        root.addWidget(layouts)
         root.addStretch(1)
         self.load()
 
-    def load(self, select: int = 0) -> None:
+    # -- previews --------------------------------------------------------------------------------------------------
+    def _context(self):
+        if self.ctx is None:
+            self.ctx = self.de.sample_context()
+            self.ctx.sampler.need("disk", "temperature", "gpu")
+
+            def done(_data):
+                if isValid(self):
+                    self.previews.clear()
+                    self._refresh_previews()
+
+            self.ctl.run("widget-preview-sensors", self.ctx.sampler.sample, done, None, silent=True)
+        return self.ctx
+
+    def _preview(self, spec: dict) -> QPixmap | None:
+        key = json.dumps({k: spec.get(k) for k in ("type", "w", "h", "style", "color", "options")}, sort_keys=True)
+        pm = self.previews.get(key)
+        if pm is None:
+            try:
+                pm = self.de.render_widget(spec, self._context())
+            except Exception as exc:              # a preview never breaks the page
+                import logging
+                logging.getLogger(__name__).warning("widget preview %s: %s", spec.get("type"), exc)
+                pm = QPixmap()
+            self.previews[key] = pm
+        return pm
+
+    def _refresh_previews(self) -> None:
+        for kind, card in self.cards.items():
+            spec = dwidgets.new_widget(kind, [], 0)
+            card.set_picture(self._preview(spec) or QPixmap())
+        self.canvas.update()
+
+    def _wallpaper(self, index: int):
+        names = [n for n, _ in screens()]
+        page = self.win.pages.get("wallpapers")
+        return page._monitor_thumb(names[index]) if page is not None and 0 <= index < len(names) else None
+
+    # -- loading ---------------------------------------------------------------------------------------------------
+    def load(self, select: str | None = None) -> None:
         self._loading = True
         try:
-            self.chk_lock.setChecked(bool(self.cfg.get("widgets_locked")))
-            self.add_screen.clear()
-            for _, text in screens():
-                self.add_screen.addItem(text)
-            self.list.blockSignals(True)
-            self.list.clear()
-            for w in self.cfg["widgets"]:
-                text = f"{t(dwidgets.TITLES[w['type']])}  ·  " + t("monitor {n}", n=int(w.get("screen", 0)) + 1) + \
-                    f"  ·  {w.get('x', 0)}, {w.get('y', 0)}  ·  {w.get('w', 0)}×{w.get('h', 0)}"
-                self.list.addItem(QListWidgetItem(icons.icon(WIDGET_ICONS.get(w["type"], "grid"), theme.TEXT_DIM, 22),
-                                                  text))
-            self.list.blockSignals(False)
+            self.btn_on.setChecked(cfgmod.widgets_on(self.cfg) and self.cfg.get("enabled", True))
+            self.btn_lock.setChecked(bool(self.cfg.get("widgets_locked")))
+            for box in (self.screen_pick, self.w_screen):
+                keep = box.currentIndex()
+                box.blockSignals(True)
+                box.clear()
+                for _, text in screens():
+                    box.addItem(text)
+                box.setCurrentIndex(max(0, min(keep, box.count() - 1)))
+                box.blockSignals(False)
             self.profiles.clear()
             self.profiles.addItems(sorted(self.cfg.get("profiles", {})))
         finally:
             self._loading = False
-        if self.list.count():
-            self.list.setCurrentRow(min(select, self.list.count() - 1))
-        else:
-            self._load_item(-1)
+        ids = [w["id"] for w in self.cfg["widgets"]]
+        self.current = select if select in ids else (self.current if self.current in ids else
+                                                     (ids[0] if ids else ""))
+        self._refresh_canvas()
+        self._select(self.current)
+
+    def _refresh_canvas(self) -> None:
+        self.canvas.set_widgets(self.cfg["widgets"], max(0, self.screen_pick.currentIndex()), self.current)
 
     def _current(self) -> dict | None:
-        row = self.list.currentRow()
-        return self.cfg["widgets"][row] if 0 <= row < len(self.cfg["widgets"]) else None
+        return next((w for w in self.cfg["widgets"] if w.get("id") == self.current), None)
 
-    def _load_item(self, _row: int) -> None:
+    def _select(self, wid: str) -> None:
+        self.current = wid
         w = self._current()
-        self.opacity.setEnabled(w is not None)
-        self.place_line.setVisible(bool(w and w["type"] == "weather"))
-        self.weather_note.setVisible(bool(w and w["type"] == "weather"))
+        self.sel_box.setVisible(w is not None)
         if w is None:
-            self.sel.set_rows([(t("Widget"), "—")])
+            self.sel_title.setText(t("Click a widget in the layout."))
             return
         self._loading = True
         try:
-            self.sel.set_rows([(t("Widget"), t(dwidgets.TITLES[w["type"]])),
-                               (t("Position"), f"{w.get('x', 0)}, {w.get('y', 0)}"),
-                               (t("Size"), f"{w.get('w', 0)} × {w.get('h', 0)}")])
+            self.sel_title.setText(t(dwidgets.TITLES[w["type"]]))
+            self.w_style.set(w.get("style", "dark"))
+            colour = (w.get("color") or SWATCHES[0]).upper()
+            for b, c in zip(self.swatches, SWATCHES):
+                b.setChecked(c.upper() == colour)
             self.opacity.setValue(int(w.get("opacity", 90)))
+            self.w_screen.setCurrentIndex(min(int(w.get("screen", 0)), max(0, self.w_screen.count() - 1)))
+            self.place_line.setVisible(w["type"] == "weather")
+            self.weather_note.setVisible(w["type"] == "weather")
             self.place.setText(w.get("options", {}).get("place", ""))
+            self.sel_size.setText(t("Position {x}, {y} · size {w} × {h}", x=w.get("x", 0), y=w.get("y", 0),
+                                    w=w.get("w", 0), h=w.get("h", 0)))
         finally:
             self._loading = False
+        self.canvas.current = wid
+        self.canvas.update()
+
+    # -- editing ---------------------------------------------------------------------------------------------------
+    def _store(self) -> None:
+        self.save()
+        self._select(self.current)
 
     def _set_item(self, key: str, value) -> None:
         w = self._current()
         if self._loading or w is None:
             return
         w[key] = value
+        if key == "screen":
+            self.screen_pick.setCurrentIndex(int(value))
         self.save()
+        self._refresh_canvas()
+        self._select(self.current)
+
+    def _pick_colour(self) -> None:
+        from PySide6.QtWidgets import QColorDialog
+        w = self._current()
+        if w is None:
+            return
+        colour = QColorDialog.getColor(QColor(w.get("color") or SWATCHES[0]), self, t("Colour"))
+        if colour.isValid():
+            self._set_item("color", colour.name())
 
     def _set_place(self) -> None:
         w = self._current()
@@ -1401,29 +1666,58 @@ class WidgetsPage(DesktopPage):
             w["options"].update(place=place, lat=None, lon=None)
             self.save()
 
-    def add(self, kind: str, screen: int = 0) -> dict:
+    def add(self, kind: str, screen: int | None = None) -> dict:
+        screen = max(0, self.screen_pick.currentIndex()) if screen is None else screen
         spec = dwidgets.new_widget(kind, self.cfg["widgets"], screen)
         self.cfg["widgets"].append(spec)
+        self.cfg["widgets_enabled"] = True
         self.switch_on()
         self.save()
-        self.load(len(self.cfg["widgets"]) - 1)
+        self.load(spec["id"])
         return spec
 
-    def _add(self) -> None:
-        self.add(self.kind.currentData(), max(0, self.add_screen.currentIndex()))
+    def _add_kind(self, kind: str) -> None:
+        self.add(kind)
+        self.ctl.status.emit(t("{w} is on your desktop.", w=t(dwidgets.TITLES[kind])))
 
     def _remove(self) -> None:
-        row = self.list.currentRow()
-        if 0 <= row < len(self.cfg["widgets"]):
-            self.cfg["widgets"].pop(row)
-            self.save()
-            self.load(row)
+        w = self._current()
+        if w is None:
+            return
+        self.cfg["widgets"] = [x for x in self.cfg["widgets"] if x is not w]
+        self.current = ""
+        self.save()
+        self.load()
+
+    def _enabled(self, on: bool) -> None:
+        if self._loading:
+            return
+        self.cfg["widgets_enabled"] = bool(on)
+        if on:
+            self.switch_on()
+        self.save()
 
     def _lock(self, on: bool) -> None:
         if self._loading:
             return
         self.cfg["widgets_locked"] = bool(on)
         self.save()
+
+    def _defaults(self) -> None:
+        if self.cfg["widgets"] and not confirm(self, t("Default layout"), t("Replace your {n} widget(s) with the "
+                                                                          "default layout?",
+                                                                          n=len(self.cfg["widgets"])),
+                                               ok_text=t("Replace")):
+            return
+        layout: list[dict] = []
+        for kind in ("clock", "calendar", "cpu", "ram"):
+            spec = dwidgets.new_widget(kind, layout, 0)
+            layout.append(spec)
+        self.cfg["widgets"] = layout
+        self.cfg["widgets_enabled"] = True
+        self.switch_on()
+        self.save()
+        self.load(layout[0]["id"])
 
     def _save_profile(self) -> None:
         name, ok = QInputDialog.getText(self, t("Desktop profiles"), t("Name of the profile"),
@@ -1472,130 +1766,346 @@ class WidgetsPage(DesktopPage):
 
     def on_show(self) -> None:
         self.reload_cfg()
-        self.load(self.list.currentRow())
+        self.load()
+        self._context()
+        self._refresh_previews()
 
 
-def preview_png(cfg: dict, monitor: str, name: str) -> bytes:
-    """A 640×360 library picture: the first picture of the playlist, or a gradient with the theme name."""
-    img = QImage()
-    for item in cfgmod.wallpaper(cfg, monitor)["playlist"]:
-        if (item.get("kind") or media.kind_of(item["path"])) in ("image", "gif") and Path(item["path"]).is_file():
-            img = QImage(item["path"])
-            if not img.isNull():
-                img = img.scaled(640, 360, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                                 Qt.TransformationMode.SmoothTransformation).copy(0, 0, 640, 360)
+def preview_png(cfg: dict, monitor: str, name: str, wallpaper: QPixmap | None = None) -> bytes:
+    """A 640×360 library picture: the desktop as the theme makes it (wallpaper, widgets, dock)."""
+    from akeno.ui.desktop_editors import compose_preview
+    if wallpaper is None:
+        for item in cfgmod.wallpaper(cfg, monitor)["playlist"]:
+            if (item.get("kind") or media.kind_of(item["path"])) in ("image", "gif") and Path(item["path"]).is_file():
+                img = QImage(item["path"])
+                if not img.isNull():
+                    wallpaper = QPixmap.fromImage(img.scaled(1280, 720, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                                             Qt.TransformationMode.SmoothTransformation))
+                    break
+            from akeno.ui.desktop_media import thumbnails
+            cached = thumbnails().cached(item["path"])
+            if cached is not None:
+                wallpaper = QPixmap.fromImage(cached)
                 break
-    if img.isNull():
-        img = QImage(640, 360, QImage.Format.Format_ARGB32)
-        p = QPainter(img)
-        grad = QLinearGradient(0, 0, 640, 360)
-        grad.setColorAt(0, QColor(theme.VIOLET_DEEP))
-        grad.setColorAt(1, QColor(theme.BLUE))
-        p.fillRect(img.rect(), grad)
+    pm = compose_preview(cfg, monitor, wallpaper)
+    if wallpaper is None and not cfg.get("widgets") and not cfg.get("dock", {}).get("enabled"):
+        p = QPainter(pm)
         font = p.font()
         font.setPointSize(28)
         font.setBold(True)
         p.setFont(font)
         p.setPen(QColor("white"))
-        p.drawText(img.rect(), Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, name)
+        p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap, name)
         p.end()
     data = QByteArray()
     buf = QBuffer(data)
     buf.open(QIODevice.OpenModeFlag.WriteOnly)
-    img.save(buf, "PNG")
+    pm.toImage().save(buf, "PNG")
     return bytes(data)
 
 
-class ThemesPage(DesktopPage):
-    def __init__(self, ctl, window):
-        super().__init__(ctl, window)
-        root = QVBoxLayout(self)
-        self.header(root, "Theme Workshop", "Save your desktop (wallpapers with their files, the dock style and the "
-                    "widget layout) as one theme file, share it, and import themes from others. Themes contain "
-                    "media only: programs, scripts for Windows and links are refused when importing.")
-        self.lib = Card(t("Theme library"), "palette", theme.VIOLET,
-                        right=button(t("Import theme…"), "download", "primary", on_click=self._import))
-        self.grid = QVBoxLayout()
-        self.grid.setSpacing(10)
-        self.lib.body.addLayout(self.grid)
-        root.addWidget(self.lib)
+class ThemeDialog(QDialog):
+    """Save the current desktop as a theme, or edit a library theme's details."""
 
-        exp = Card(t("Create a theme from this desktop"), "export")
-        self.name = QLineEdit()
+    def __init__(self, parent, title: str, values: dict | None = None, saving: bool = True):
+        super().__init__(parent)
+        from akeno.ui import desktop_media as dm
+        self.setWindowTitle(title)
+        self.setMinimumWidth(520)
+        values = values or {}
+        lay = QVBoxLayout(self)
+        lay.setSpacing(12)
+        self.name = QLineEdit(values.get("name", ""))
         self.name.setAccessibleName(t("Name"))
         self.name.setMaxLength(60)
-        self.author = QLineEdit()
+        self.author = QLineEdit(values.get("author", ""))
         self.author.setAccessibleName(t("Author"))
         self.author.setMaxLength(60)
         self.license = QComboBox()
         self.license.setEditable(True)
         self.license.setAccessibleName(t("License"))
         self.license.addItems(["CC BY 4.0", "CC BY-SA 4.0", "CC BY-NC 4.0", "CC0 1.0", t("All rights reserved")])
-        self.description = QPlainTextEdit()
+        if values.get("license"):
+            self.license.setCurrentText(values["license"])
+        self.description = QPlainTextEdit(values.get("description", ""))
         self.description.setAccessibleName(t("Description"))
         self.description.setMaximumHeight(80)
+        rows = [(t("Name"), self.name), (t("Author"), self.author), (t("License"), self.license),
+                (t("Description"), self.description)]
         self.source = QComboBox()
         self.source.setAccessibleName(t("Wallpapers of"))
-        exp.body.addLayout(form_grid([(t("Name"), self.name), (t("Author"), self.author), (t("License"), self.license),
-                                      (t("Wallpapers of"), self.source), (t("Description"), self.description)]))
+        for name, text in screens():
+            self.source.addItem(text, name)
+        if saving:
+            rows.insert(3, (t("Wallpapers of"), self.source))
+        lay.addLayout(form_grid(rows, 120, 360))
+        self.accent = dm.Segmented({c: "" for c in SWATCHES}, values.get("accent") or SWATCHES[0])
+        for c, b in self.accent.buttons.items():
+            b.setFixedSize(28, 28)
+            b.setToolTip(c)
+            b.setAccessibleName(t("Colour {c}", c=c))
+            b.setStyleSheet(f"QPushButton {{ background: {c}; border: 2px solid {theme.BORDER}; border-radius: 14px; }}"
+                            f"QPushButton:checked {{ border-color: #FFFFFF; }}")
+        lay.addWidget(label(t("Accent colour for widgets and the dock"), "overline"))
+        lay.addWidget(self.accent)
         self.chk_widgets = QCheckBox(t("Include the widget layout"))
         self.chk_widgets.setChecked(True)
         self.chk_dock = QCheckBox(t("Include the dock style (never your pinned programs)"))
         self.chk_dock.setChecked(True)
-        exp.body.addWidget(_row(self.chk_widgets, self.chk_dock))
-        exp.body.addWidget(label(t("Only share wallpapers you made yourself or whose license allows it."), "muted",
-                                 shrink=True))
-        exp.body.addWidget(_row(button(t("Export theme…"), "export", "primary", on_click=self._export)))
-        root.addWidget(exp)
+        if saving:
+            lay.addWidget(self.chk_widgets)
+            lay.addWidget(self.chk_dock)
+            lay.addWidget(label(t("Only share wallpapers you made yourself or whose license allows it."), "muted",
+                                shrink=True))
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Save).setText(t("Save"))
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText(t("Cancel"))
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        lay.addWidget(buttons)
+
+    def values(self) -> dict:
+        return {"name": self.name.text().strip() or t("My desktop"), "author": self.author.text().strip(),
+                "license": self.license.currentText().strip(), "description": self.description.toPlainText(),
+                "monitor": self.source.currentData() or "", "widgets": self.chk_widgets.isChecked(),
+                "dock": self.chk_dock.isChecked(), "accent": self.accent.value()}
+
+
+class ThemeCard(QFrame):
+    """A theme in the gallery: its picture, name, what it holds, Apply and the other actions."""
+
+    WIDTH = 316
+
+    def __init__(self, th: themes.Theme, active: bool, page: "ThemesPage"):
+        super().__init__()
+        self.theme = th
+        self.setObjectName("ThemeCard")
+        self.setFixedWidth(self.WIDTH)
+        border = theme.ACCENT if active else theme.BORDER
+        self.setStyleSheet(f"#ThemeCard {{ background: {theme.SURFACE_2}; border: 1px solid {border};"
+                           f" border-radius: 12px; }} #ThemeCard:hover {{ border-color: "
+                           f"{theme.ACCENT if active else theme.BORDER_BTN}; }}")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(8, 8, 8, 12)
+        lay.setSpacing(6)
+        pic = QLabel()
+        w = self.WIDTH - 16
+        pic.setFixedSize(w, round(w * 9 / 16))
+        pm = QPixmap(str(th.preview)) if th.preview else QPixmap()
+        canvas = QPixmap(pic.size())
+        canvas.fill(QColor(0, 0, 0, 0))
+        painter = QPainter(canvas)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        from akeno.ui.desktop_media import placeholder, rounded
+        from PySide6.QtCore import QRectF
+        r = QRectF(0, 0, pic.width(), pic.height())
+        if not pm.isNull():
+            rounded(painter, r, 9, pm)
+        else:
+            placeholder(painter, r, 9, "image")
+        painter.end()
+        pic.setPixmap(canvas)
+        pic.setCursor(Qt.CursorShape.PointingHandCursor)
+        pic.mousePressEvent = lambda _e: page.preview(th)
+        lay.addWidget(pic)
+        head = QHBoxLayout()
+        head.setContentsMargins(4, 4, 4, 0)
+        head.addWidget(ElidedLabel(th.name, "h3"), 1)
+        if active:
+            head.addWidget(StatusPill(t("Active"), "ok"))
+        lay.addLayout(head)
+        byline = " · ".join(x for x in (th.author and t("by {a}", a=th.author), th.license) if x)
+        sub = label(byline or t("Your theme"), "muted", shrink=True)
+        sub.setContentsMargins(4, 0, 4, 0)
+        lay.addWidget(sub)
+        contents = label(page.contents(th), "dim", shrink=True)
+        contents.setContentsMargins(4, 0, 4, 0)
+        lay.addWidget(contents)
+        row = QHBoxLayout()
+        row.setContentsMargins(4, 4, 4, 0)
+        row.setSpacing(6)
+        row.addWidget(button(t("Apply"), "check", "primary", on_click=lambda: page.use(th)))
+        row.addWidget(button(t("Preview"), "eye", "ghost", on_click=lambda: page.preview(th)))
+        row.addStretch(1)
+        more = QToolButton()
+        more.setText("···")
+        more.setAutoRaise(True)
+        more.setToolTip(t("More"))
+        more.setAccessibleName(t("More"))
+        more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        menu = QMenu(more)
+        menu.addAction(icons.icon("edit", theme.TEXT, 16), t("Edit…"), lambda: page.edit(th))
+        menu.addAction(icons.icon("copy", theme.TEXT, 16), t("Duplicate"), lambda: page.duplicate(th))
+        menu.addAction(icons.icon("export", theme.TEXT, 16), t("Export…"), lambda: page.export_dialog(th))
+        menu.addSeparator()
+        menu.addAction(icons.icon("trash", theme.TEXT, 16), t("Delete"), lambda: page._delete(th))
+        more.setMenu(menu)
+        row.addWidget(more)
+        lay.addLayout(row)
+
+
+class ThemesPage(DesktopPage):
+    """Theme Workshop: whole desktops (wallpaper, its playback, dock look, widget layout and look, accent) as
+    themes to save, preview, apply, duplicate, edit, share and undo."""
+
+    def __init__(self, ctl, window):
+        super().__init__(ctl, window)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(theme.CARD_GAP)
+        self.btn_restore = button(t("Restore previous"), "restore", on_click=self.restore)
+        root.addWidget(PageHeader(t("Theme Workshop"), t("Your whole desktop as a theme: wallpaper, dock look, widgets "
+                                                         "and colours. Save it, share it, switch back any time."),
+                                  [self.btn_restore, button(t("Import…"), "download", on_click=self._import),
+                                   button(t("Save current desktop"), "plus", "primary", on_click=self._save)]))
+        self.lib = Card(t("Your themes"), "palette")
+        self.grid_holder = QWidget()
+        self.grid = FlowLayout(self.grid_holder, spacing=14)
+        self.lib.body.addWidget(self.grid_holder)
+        self.empty = EmptyState("palette", t("No themes yet"),
+                                t("Save your current desktop as a theme, or import a .akenotheme file."),
+                                button(t("Save current desktop"), "plus", "primary", on_click=self._save))
+        self.lib.body.addWidget(self.empty)
+        self.lib.body.addWidget(label(t("Themes contain media only: programs, scripts for Windows and links are "
+                                        "refused when importing. Your pinned dock programs are never part of a theme."),
+                                      "muted", shrink=True))
+        root.addWidget(self.lib)
         root.addStretch(1)
         self.load()
 
+    def contents(self, th: themes.Theme) -> str:
+        m = th.manifest
+        parts = [t("{n} wallpaper(s)", n=th.files)]
+        if m.get("dock"):
+            parts.append(t("Dock"))
+        if m.get("widgets"):
+            parts.append(t("{n} widget(s)", n=len(m["widgets"])))
+        return " · ".join(parts)
+
     def load(self) -> None:
-        self.source.clear()
-        for name, text in screens():
-            self.source.addItem(text, name)
         clear_layout(self.grid)
         items = themes.library()
-        if not items:
-            self.grid.addWidget(label(t("No themes yet. Import a .akenotheme file or create one below."), "dim",
-                                      shrink=True))
+        current = self.cfg.get("theme")
         for th in items:
-            self.grid.addWidget(self._card(th))
+            self.grid.addWidget(ThemeCard(th, th.id == current, self))
+        self.grid_holder.setVisible(bool(items))
+        self.empty.setVisible(not items)
+        self.btn_restore.setEnabled(themes.has_snapshot())
 
-    def _card(self, th: themes.Theme) -> QWidget:
-        from akeno.ui.widgets import SubCard
-        card = SubCard()
-        row = QHBoxLayout()
-        pic = label()
-        pm = QPixmap(str(th.preview)) if th.preview else QPixmap()
-        if not pm.isNull():
-            pic.setPixmap(pm.scaled(192, 108, Qt.AspectRatioMode.KeepAspectRatio,
-                                    Qt.TransformationMode.SmoothTransformation))
-        else:
-            pic.setPixmap(icons.pixmap("palette", theme.TEXT_DIM, 48))
-        row.addWidget(pic)
-        text = QVBoxLayout()
-        text.addWidget(label(th.name, "h2"))
-        byline = " · ".join(x for x in (th.author and t("by {a}", a=th.author), th.license,
-                                        t("{n} wallpaper(s)", n=th.files)) if x)
-        text.addWidget(label(byline, "dim", shrink=True))
-        if th.description:
-            text.addWidget(label(th.description, "muted", shrink=True))
-        text.addWidget(_row(button(t("Use on every monitor"), "check", "primary",
-                                   on_click=lambda _=False, x=th: self.use(x)),
-                            button(t("Delete"), "trash", on_click=lambda _=False, x=th: self._delete(x))))
-        row.addLayout(text, 1)
-        card.lay.addLayout(row)
-        return card
+    def _wallpaper_pm(self, monitor: str) -> QPixmap | None:
+        page = self.win.pages.get("wallpapers")
+        w = cfgmod.wallpaper(self.cfg, monitor)
+        for entry in w["playlist"][:1]:
+            if (entry.get("kind") or media.kind_of(entry["path"])) == "image" and Path(entry["path"]).is_file():
+                img = QImage(entry["path"])
+                if not img.isNull():
+                    return QPixmap.fromImage(img.scaled(1280, 720, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                                                        Qt.TransformationMode.SmoothTransformation))
+        return page._monitor_thumb(monitor) if page is not None else None
+
+    def save_current(self, name: str, author: str = "", description: str = "", license: str = "",
+                     monitor: str = "", widgets: bool = True, dock: bool = True, accent: str = "") -> themes.Theme:
+        """The desktop as it is now, into the theme library."""
+        monitor = monitor or (screens()[0][0] if screens() else "")
+        png = preview_png(self.cfg, monitor, name, self._wallpaper_pm(monitor))
+        th = themes.save_to_library(self.cfg, monitor, name, author, description, license, png, widgets, dock,
+                                    accent)
+        self.cfg["theme"] = th.id
+        self.save()
+        self.load()
+        return th
+
+    def _save(self) -> None:
+        dlg = ThemeDialog(self, t("Save current desktop"), {"accent": self.cfg.get("accent", "")})
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        v = dlg.values()
+        try:
+            th = self.save_current(v["name"], v["author"], v["description"], v["license"], v["monitor"], v["widgets"],
+                                   v["dock"], v["accent"])
+        except (themes.ThemeError, media.MediaError, OSError) as exc:
+            info(self, t("Save current desktop"), t("The theme was not created."), str(exc), error=True)
+            return
+        self.ctl.status.emit(t("Theme “{n}” saved.", n=th.name))
 
     def use(self, th: themes.Theme) -> None:
+        themes.snapshot(self.cfg)
         themes.apply(th, self.cfg, [name for name, _ in screens()])
         self.switch_on()
         self.save()
-        self.ctl.status.emit(t("Theme “{n}” is in use.", n=th.name))
+        self.load()
+        self.ctl.status.emit(t("Theme “{n}” is in use. “Restore previous” brings your desktop back.", n=th.name))
+
+    def restore(self) -> None:
+        if themes.restore_snapshot(self.cfg):
+            self.save()
+            self.load()
+            self.ctl.status.emit(t("Your previous desktop is back."))
+
+    def preview(self, th: themes.Theme) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle(th.name)
+        lay = QVBoxLayout(dlg)
+        lay.setSpacing(10)
+        pic = QLabel()
+        pm = QPixmap(str(th.preview)) if th.preview else QPixmap()
+        if not pm.isNull():
+            pic.setPixmap(pm.scaled(800, 450, Qt.AspectRatioMode.KeepAspectRatio,
+                                    Qt.TransformationMode.SmoothTransformation))
+        lay.addWidget(pic)
+        lay.addWidget(label(th.name, "h2"))
+        byline = " · ".join(x for x in (th.author and t("by {a}", a=th.author), th.license, self.contents(th)) if x)
+        lay.addWidget(label(byline, "dim", shrink=True))
+        if th.description:
+            lay.addWidget(label(th.description, "muted", wrap=True))
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        buttons.addWidget(button(t("Close"), on_click=dlg.reject))
+        buttons.addWidget(button(t("Apply"), "check", "primary", on_click=lambda: (dlg.accept(), self.use(th))))
+        lay.addLayout(buttons)
+        dlg.exec()
+
+    def edit(self, th: themes.Theme) -> None:
+        dlg = ThemeDialog(self, t("Edit…"), {"name": th.name, "author": th.author, "license": th.license,
+                                             "description": th.description,
+                                             "accent": th.manifest.get("accent", "")}, saving=False)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        v = dlg.values()
+        try:
+            themes.edit(th, name=v["name"], author=v["author"], license=v["license"], description=v["description"],
+                        accent=v["accent"])
+        except (themes.ThemeError, OSError) as exc:
+            info(self, t("Edit…"), str(exc), error=True)
+        self.load()
+
+    def duplicate(self, th: themes.Theme, name: str | None = None) -> themes.Theme | None:
+        if name is None:
+            name, ok = QInputDialog.getText(self, t("Duplicate"), t("Name"), text=t("{n} (copy)", n=th.name))
+            if not ok:
+                return None
+        copy = themes.duplicate(th, name)
+        self.load()
+        return copy
+
+    def export_theme(self, th: themes.Theme, path: Path) -> Path:
+        return themes.export_installed(th, path)
+
+    def export_dialog(self, th: themes.Theme) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, t("Export…"), f"{th.name}{themes.SUFFIX}",
+                                              t("AKENO themes (*.akenotheme)"))
+        if not path:
+            return
+        try:
+            out = self.export_theme(th, Path(path))
+        except (themes.ThemeError, OSError) as exc:
+            info(self, t("Export…"), t("The theme was not exported."), str(exc), error=True)
+            return
+        self.ctl.status.emit(t("Theme saved: {p}", p=str(out)))
 
     def _delete(self, th: themes.Theme) -> None:
-        if confirm(self, t("Theme library"), t("Delete the theme “{n}” and its files from the library?", n=th.name),
+        if confirm(self, t("Your themes"), t("Delete the theme “{n}” and its files from the library?", n=th.name),
                    ok_text=t("Delete")):
             themes.remove(th)
             self.load()
@@ -1633,36 +2143,47 @@ class ThemesPage(DesktopPage):
         if path:
             self.import_file(Path(path))
 
-    def export_to(self, path: Path) -> Path:
-        name = self.name.text().strip() or t("My desktop")
-        return themes.export(self.cfg, self.source.currentData() or "", path, name, self.author.text(),
-                             self.description.toPlainText(), self.license.currentText(),
-                             preview_png(self.cfg, self.source.currentData() or "", name),
-                             include_widgets=self.chk_widgets.isChecked(), include_dock=self.chk_dock.isChecked())
-
-    def _export(self) -> None:
-        name = self.name.text().strip() or t("My desktop")
-        path, _ = QFileDialog.getSaveFileName(self, t("Export theme…"), f"{name}{themes.SUFFIX}",
-                                              t("AKENO themes (*.akenotheme)"))
-        if not path:
-            return
-        try:
-            out = self.export_to(Path(path))
-        except (themes.ThemeError, media.MediaError, OSError) as exc:
-            info(self, t("Export theme…"), t("The theme was not created."), str(exc), error=True)
-            return
-        info(self, t("Export theme…"), t("Theme saved: {p}", p=str(out)))
-
     def on_show(self) -> None:
         self.reload_cfg()
         self.load()
 
 
 # -- Find wallpapers (akeno/desktop/sources.py) ------------------------------------------------------------------
-class VideoTile(QFrame):
-    """One Pixabay result: preview, what it shows, length and size, its creator, and the two actions."""
+class _TilePicture(QLabel):
+    """A result's picture with its length, resolution and kind on it (painted, like the library cards)."""
 
-    WIDTH = 236
+    def __init__(self, video, chosen, size: QSize):
+        super().__init__()
+        self.video, self.chosen = video, chosen
+        self.pm: QPixmap | None = None
+        self.setFixedSize(size)
+
+    def paintEvent(self, e):
+        from PySide6.QtCore import QRectF
+        from akeno.ui import desktop_media as dm
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        r = QRectF(self.rect())
+        if self.pm is not None:
+            dm.rounded(p, r, 8, self.pm)
+        else:
+            dm.placeholder(p, r, 8, "video")
+        kind = {"animation": t("Animation"), "film": t("Filmed")}.get(self.video.kind, "")
+        if kind:
+            dm.badge(p, 8, 8, kind.upper(), QColor(8, 12, 21, 190))
+        if self.video.duration:
+            dm.badge(p, r.right() - 8, r.bottom() - 28, dm.duration_text(self.video.duration), QColor(8, 12, 21, 190),
+                     right=True)
+        if self.chosen and self.chosen.height:
+            res = "4K" if self.chosen.height >= 2000 else f"{self.chosen.height}p"
+            dm.badge(p, 8, r.bottom() - 28, res, QColor(theme.ACCENT_STRONG))
+
+
+class VideoTile(QFrame):
+    """One Pixabay result as a media card: picture, what it shows, its creator, size, Import and the page."""
+
+    WIDTH = 252
 
     def __init__(self, video, quality: str, on_add, on_page):
         super().__init__()
@@ -1670,32 +2191,29 @@ class VideoTile(QFrame):
         self.setObjectName("VideoTile")
         self.setFixedWidth(self.WIDTH)
         self.setStyleSheet(f"#VideoTile {{ background: {theme.SURFACE_2}; border: 1px solid {theme.BORDER};"
-                           f" border-radius: 8px; }} #VideoTile:hover {{ border-color: {theme.BORDER_BTN}; }}")
+                           f" border-radius: 12px; }} #VideoTile:hover {{ border-color: {theme.BORDER_BTN}; }}")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 8, 8, 10)
         lay.setSpacing(4)
-        self.thumb = QLabel()
-        self.thumb.setFixedSize(self.WIDTH - 16, round((self.WIDTH - 16) * 9 / 16))
-        self.thumb.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.thumb.setStyleSheet(f"background: {theme.INPUT}; border-radius: 6px;")
-        self.thumb.setPixmap(icons.pixmap("film", theme.TEXT_MUTED, 28))
-        lay.addWidget(self.thumb)
-        title = ElidedLabel(video.title)
-        title.setStyleSheet("font-weight: 600;")
-        lay.addWidget(title)
         chosen = video.best(quality)
-        minutes, seconds = divmod(max(0, video.duration), 60)
-        meta = f"{minutes}:{seconds:02d}"
-        if chosen:
-            meta += f" · {chosen.label}"
-            if chosen.bytes:
-                meta += f" · {chosen.bytes / 1e6:.0f} MB"
-        lay.addWidget(ElidedLabel(meta, "muted"))
+        self.thumb = _TilePicture(video, chosen, QSize(self.WIDTH - 16, round((self.WIDTH - 16) * 9 / 16)))
+        lay.addWidget(self.thumb)
+        title = ElidedLabel(video.title.capitalize() if video.title.islower() else video.title, "h3")
+        title.setContentsMargins(2, 4, 2, 0)
+        lay.addWidget(title)
+        meta = []
         if video.user:
-            lay.addWidget(ElidedLabel(t("by {name} on Pixabay", name=video.user), "muted"))
+            meta.append(t("by {name}", name=video.user))
+        if chosen:
+            meta.append(chosen.label)
+            if chosen.bytes:
+                meta.append(f"{chosen.bytes / 1e6:.0f} MB")
+        line = ElidedLabel(" · ".join(meta), "muted")
+        line.setContentsMargins(2, 0, 2, 0)
+        lay.addWidget(line)
         row = QHBoxLayout()
         row.setSpacing(6)
-        self.btn_add = button(t("Add"), "plus", "primary", on_click=lambda: on_add(self))
+        self.btn_add = button(t("Import"), "download", "primary", on_click=lambda: on_add(self))
         self.btn_add.setEnabled(chosen is not None)
         row.addWidget(self.btn_add)
         row.addStretch(1)
@@ -1707,15 +2225,8 @@ class VideoTile(QFrame):
         img = QImage.fromData(data)
         if img.isNull():
             return
-        size = self.thumb.size()
-        ratio = self.devicePixelRatioF() or 1.0
-        pm = QPixmap.fromImage(img.scaled(round(size.width() * ratio), round(size.height() * ratio),
-                                          Qt.AspectRatioMode.KeepAspectRatioByExpanding,
-                                          Qt.TransformationMode.SmoothTransformation))
-        pm = pm.copy((pm.width() - round(size.width() * ratio)) // 2, (pm.height() - round(size.height() * ratio)) // 2,
-                     round(size.width() * ratio), round(size.height() * ratio))
-        pm.setDevicePixelRatio(ratio)
-        self.thumb.setPixmap(pm)
+        self.thumb.pm = QPixmap.fromImage(img)
+        self.thumb.update()
 
 
 class SourcesPanel(QWidget):
@@ -1984,11 +2495,11 @@ class SourcesPanel(QWidget):
         def fail(exc):
             if isValid(tile):
                 tile.btn_add.setEnabled(True)
-                tile.btn_add.setText(t("Add"))
+                tile.btn_add.setText(t("Import"))
             info(self, "Pixabay", exc.text() if isinstance(exc, self.src.SourceError) else str(exc), error=True)
         if not self.ctl.run(f"pixabay-download-{video.id}", work, done, fail, on_progress=progress, silent=True):
             tile.btn_add.setEnabled(True)
-            tile.btn_add.setText(t("Add"))
+            tile.btn_add.setText(t("Import"))
 
     def _added(self, problems: list[str], name: str) -> None:
         if problems:
@@ -2021,7 +2532,7 @@ class SourcesPanel(QWidget):
             except OSError:
                 pass
             row.addLayout(col, 1)
-            row.addWidget(button(t("Add"), "plus", on_click=lambda _=False, p=path: self._import(p)))
+            row.addWidget(button(t("Import"), "download", on_click=lambda _=False, p=path: self._import(p)))
             self.imp_list.addLayout(row)
 
     def _choose(self) -> None:
