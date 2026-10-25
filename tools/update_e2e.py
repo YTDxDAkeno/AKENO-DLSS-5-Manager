@@ -542,6 +542,9 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--work", type=Path, required=True)
     ap.add_argument("--report", type=Path)
     args = ap.parse_args(argv)
+    for stream in (sys.stdout, sys.stderr):        # the CI console is cp1252; the report has arrows
+        if stream is not None and hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     args.work.mkdir(parents=True, exist_ok=True)
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     report = Report()
