@@ -1,0 +1,7 @@
+{
+  "purpose": "ISOLATED TEST ONLY; production and shipping builds must reject this key",
+  "key_id": "4f0b6765af0b6fa0",
+  "public_key": "E-vFWNXW473DNvBjrDmgPXOLihAVEpjErKDUx9kZuuo",
+  "production_key": false,
+  "private_key_saved": false
+}

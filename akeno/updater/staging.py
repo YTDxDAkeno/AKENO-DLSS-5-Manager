@@ -4,7 +4,8 @@ The package's SHA-256 is signed, so its bytes are exactly the release's. Unpacki
 could write outside the staging folder or surprise Windows, and stops at the limits the signed release states
 (``file_count``, ``uncompressed_size_bytes``), counting the bytes really written, not the sizes the archive claims:
 
-* absolute paths, drive letters, ``..``, empty or ``.`` parts, backslash tricks;
+* absolute paths, drive letters, ``..``, empty or ``.`` parts, backslashes (the Release Manager stores only
+  ``/``), names not in Unicode NFC (as the Release Manager requires them);
 * ``:`` (alternate data streams), control characters, trailing dots or spaces, reserved device names (``CON``,
   ``NUL``, ``COM1`` …), names longer than Windows handles without long-path support;
 * symbolic links and any other special file, encrypted entries;
@@ -26,6 +27,7 @@ import json
 import os
 import re
 import stat
+import unicodedata
 import zipfile
 import zlib
 from pathlib import Path, PurePosixPath
@@ -69,8 +71,9 @@ def no_links_on_the_way(path: Path, stop: Path) -> None:
 
 def safe_name(raw: str) -> PurePosixPath:
     """The entry's path, or StagingError when it is not a plain relative path Windows stores as named."""
-    name = raw.replace("\\", "/")
-    if not name or name.startswith("/") or re.match(r"^[A-Za-z]:", name) or len(name) > MAX_PATH:
+    name = raw
+    if not name or "\\" in name or name.startswith("/") or re.match(r"^[A-Za-z]:", name) \
+            or len(name) > MAX_PATH or unicodedata.normalize("NFC", name) != name:
         raise StagingError(f"refused path in the package: {raw!r}")
     parts = name.rstrip("/").split("/")
     for part in parts:
@@ -81,18 +84,20 @@ def safe_name(raw: str) -> PurePosixPath:
 
 
 def _kind(info: zipfile.ZipInfo) -> str:
+    """``dir`` exactly when ``ZipInfo.is_dir()`` (the name ends with ``/``), as the Release Manager counts entries:
+    every other entry is a file and part of ``content_sha256``, whatever its MS-DOS attributes say."""
     if info.flag_bits & 0x1:
         raise StagingError(f"refused encrypted entry in the package: {info.filename!r}")
+    if info.orig_filename != info.filename:          # a NUL byte, or a backslash zipfile turned into "/"
+        raise StagingError(f"refused path in the package: {info.orig_filename!r}")
     mode = (info.external_attr >> 16) & 0xFFFF
     kind = stat.S_IFMT(mode)
-    if info.filename.endswith(("/", "\\")):
+    if info.is_dir():
         if kind not in (0, stat.S_IFDIR):
             raise StagingError(f"refused special entry in the package: {info.filename!r}")
         return "dir"
     if kind not in (0, stat.S_IFREG):
         raise StagingError(f"refused link or special file in the package: {info.filename!r}")
-    if info.external_attr & 0x10 and not info.file_size:     # MS-DOS directory attribute
-        return "dir"
     return "file"
 
 
@@ -103,10 +108,15 @@ def content_sha256(entries: list[dict]) -> str:
     normalised), ``sha256`` (of the decompressed bytes) and ``size_bytes`` (the real decompressed size). The records
     are sorted by name in Unicode code point order and encoded as compact JSON (UTF-8, ``ensure_ascii=False``, keys
     sorted, no BOM, no trailing newline); the aggregate is the SHA-256 of those bytes."""
+    return hashlib.sha256(canonical_records(entries)).hexdigest()
+
+
+def canonical_records(entries: list[dict]) -> bytes:
+    """The exact bytes :func:`content_sha256` hashes (``canonical`` of the Release Manager)."""
     records = sorted(({"name": e["name"], "sha256": e["sha256"], "size_bytes": e["size_bytes"]} for e in entries),
                      key=lambda r: r["name"])
-    data = json.dumps(records, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    return hashlib.sha256(data).hexdigest()
+    return json.dumps(records, ensure_ascii=False, separators=(",", ":"), sort_keys=True,
+                      allow_nan=False).encode("utf-8")
 
 
 def is_pe(path: Path) -> bool:
@@ -143,7 +153,7 @@ def extract(archive: Path, dest: Path, max_files: int = HARD_FILES, max_bytes: i
         raise StagingError(f"the package is not a readable ZIP archive ({exc})") from exc
     with z:
         infos = z.infolist()
-        if sum(1 for i in infos if not i.filename.endswith(("/", "\\"))) > max_files:
+        if sum(1 for i in infos if not i.is_dir()) > max_files:
             raise StagingError(f"the package has more files than the release states ({max_files})")
         if sum(i.file_size for i in infos) > max_bytes:
             raise StagingError("the package unpacks to more data than the release states")

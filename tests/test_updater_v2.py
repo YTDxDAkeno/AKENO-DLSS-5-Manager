@@ -90,11 +90,12 @@ def reference_content_sha256(pkg: Path) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def portable_info(pkg: Path, **kw) -> dict:
+def portable_info(pkg: Path, version: str | None = None, **kw) -> dict:
     data = pkg.read_bytes()
     with zipfile.ZipFile(pkg) as z:
         files = [i for i in z.infolist() if not i.is_dir()]
-    out = {"download_url": f"https://akeno.online/downloads/{pkg.name}", "size_bytes": len(data),
+    version = version or pkg.name.split("-")[3]               # AKENO-Gaming-Suite-<version>-portable-x64.zip
+    out = {"download_url": f"https://akeno.online/downloads/{version}/AKENO-Portable.zip", "size_bytes": len(data),
            "sha256": hashlib.sha256(data).hexdigest(),
            "authenticode": {"verified": False, "status": "not_signed", "publisher_certificate_sha256": None},
            "pe_files": 1, "verified_pe_files": 0, "file_count": len(files),
@@ -110,12 +111,12 @@ def fields(version: str = "3.1.0", sequence: int = 7, pkg: Path | None = None, *
            "published_at": iso(NOW - timedelta(hours=1)), "issued_at": iso(NOW - timedelta(hours=1)),
            "expires_at": iso(NOW + timedelta(days=29)), "sequence": sequence, "request_id": "0123456789abcdef" * 2,
            "platform": "windows-x64",
-           "download_url": f"https://akeno.online/downloads/AKENO-Gaming-Suite-{version}-Setup-x64.exe",
+           "download_url": f"https://akeno.online/downloads/{version}/AKENO-Setup.exe",
            "size_bytes": 123456789, "sha256": "cd" * 32,
            "authenticode": {"verified": False, "status": "not_signed", "publisher_certificate_sha256": None},
            "minimum_supported_version": None, "unattended_install_allowed": False,
            "install_mode": "portable-directory-swap" if pkg else "manual-installer",
-           "portable": portable_info(pkg) if pkg else None}
+           "portable": portable_info(pkg, version) if pkg else None}
     out.update(kw)
     if "issued_at" in kw and "published_at" not in kw:
         out["published_at"] = out["issued_at"]              # the backend requires both to be the same instant
@@ -182,19 +183,28 @@ def test_signature_and_metadata_manipulation_is_refused(signing, tmp_path):
                           (dict(channel="beta"), "another channel"), (dict(version="3.1"), "not a version"),
                           (dict(sequence=0), "sequence"), (dict(sequence=True), "sequence"),
                           (dict(install_mode="silent"), "unknown install mode"),
-                          (dict(download_url="https://evil.example/a.exe"), "not an official"),
-                          (dict(download_url="http://akeno.online/a.exe"), "not an official"),
-                          (dict(download_url="https://akeno.online/a.exe?x=1"), "not an official"),
-                          (dict(download_url="https://akeno.online/a b.exe"), "file name"),
+                          *((dict(download_url=url), "not the official") for url in (
+                              "https://evil.example/downloads/3.1.0/AKENO-Setup.exe",
+                              "http://akeno.online/downloads/3.1.0/AKENO-Setup.exe",
+                              "https://akeno.online/downloads/3.1.0/AKENO-Setup.exe?x=1",
+                              "https://akeno.online/downloads/3.0.9/AKENO-Setup.exe",
+                              "https://akeno.online/downloads/AKENO-Setup.exe",
+                              "https://akeno.online/downloads/3.1.0/akeno-setup.exe",
+                              "https://akeno.online/downloads/AKENO-Gaming-Suite-3.1.0-Setup-x64.exe")),
                           (dict(unattended_install_allowed="yes"), "unattended"),
                           (dict(minimum_supported_version="3"), "minimum"),
-                          (dict(portable=None), "carries no portable package")):
+                          (dict(updater_protocol=3), "updater protocol"),
+                          (dict(updater_protocol=1), "updater protocol"),
+                          (dict(portable=None), "must be a manual installer"),
+                          (dict(install_mode="manual-installer"), "names another install mode")):
         with pytest.raises(manifest.ManifestError, match=match):
             parse(envelope(key, dict(good, **change)), keys)
-    evil_pkg = dict(good["portable"], download_url="https://evil.example/x.zip")
-    with pytest.raises(manifest.ManifestError, match="not an official"):
-        parse(envelope(key, dict(good, portable=evil_pkg)), keys)
-    with pytest.raises(manifest.ManifestError, match="more signed programs"):
+    for url in ("https://evil.example/downloads/3.1.0/AKENO-Portable.zip",
+                "https://akeno.online/downloads/3.1.0/AKENO-Gaming-Suite-3.1.0-portable-x64.zip",
+                "https://akeno.online/downloads/3.1.0/AKENO-Portable.zip#x"):
+        with pytest.raises(manifest.ManifestError, match="not the official"):
+            parse(envelope(key, dict(good, portable=dict(good["portable"], download_url=url))), keys)
+    with pytest.raises(manifest.ManifestError, match="verified_pe_files"):
         parse(envelope(key, dict(good, portable=dict(good["portable"], verified_pe_files=2))), keys)
 
 
@@ -247,7 +257,11 @@ def test_expired_information_is_refused_and_a_clock_set_back_does_not_help(signi
     (dict(published_at=iso(NOW)), "published_at differs from issued_at"),
     (dict(issued_at="2026-11-02T10:00:00+01:00", published_at="2026-11-02T10:00:00+01:00",
           expires_at=iso(NOW + timedelta(days=2))), "not in UTC"),
-    (dict(published_at="yesterday"), "not a time"),
+    (dict(issued_at="yesterday", published_at="yesterday"), "not a time"),
+    # the same text, not only the same instant (the backend compares the strings)
+    (dict(issued_at="2026-11-02T09:00:00Z", published_at="2026-11-02T09:00:00+00:00"),
+     "published_at differs from issued_at"),
+    (dict(issued_at="2026-11-02T09:00:00.000000000000000000000000000000000+00:00"), "not a time"),
 ])
 def test_time_limits_match_the_backend(signing, change, match):
     key, keys = signing
@@ -288,8 +302,7 @@ def test_incompatible_releases_are_shown_but_not_installed_by_the_app(signing, t
     monkeypatch.setattr(service, "frozen", lambda: True)
     monkeypatch.setattr(service, "install_dir", lambda: tmp_path)
     svc = UpdateService(None, dist=RM, keys=keys, version="3.0.0", folder=tmp_path / "u")
-    cases = {"needs a newer updater": fields(pkg=pkg, updater_protocol=3),
-             "offered as an installer": fields(),
+    cases = {"offered as an installer": fields(),
              "code signature is invalid": fields(pkg=pkg, portable=portable_info(
                  pkg, authenticode={"verified": False, "status": "invalid", "publisher_certificate_sha256": None})),
              "too old for an update": fields(pkg=pkg, minimum_supported_version="3.0.5")}
@@ -302,9 +315,9 @@ def test_incompatible_releases_are_shown_but_not_installed_by_the_app(signing, t
     assert svc.can_install(parse(envelope(key, fields(pkg=pkg, portable=mixed)), keys))[0]
 
 
-def test_unattended_install_allowed_never_skips_the_users_confirmation(signing):
+def test_unattended_install_allowed_never_skips_the_users_confirmation(signing, tmp_path):
     key, keys = signing
-    release = parse(envelope(key, fields(unattended_install_allowed=True)), keys)
+    release = parse(envelope(key, fields(pkg=portable_zip(tmp_path, "3.1.0"), unattended_install_allowed=True)), keys)
     assert release.v2.unattended_install_allowed is True     # accepted as information; the UI still asks
     import inspect
     from akeno.ui.pages import updates
@@ -439,7 +452,8 @@ class LocalDownloads:
     def fetch(self, url, sha256, name, size=None, progress=None, token=None):
         from akeno.security.downloads import VerificationError
         self.urls.append(url)
-        data = (self.folder / name).read_bytes()
+        version = url.split("/downloads/", 1)[1].split("/")[0]     # …/downloads/<version>/AKENO-Portable.zip
+        data = (self.folder / f"AKENO-Gaming-Suite-{version}-portable-x64.zip").read_bytes()
         progress and progress(len(data), len(data))
         if hashlib.sha256(data).hexdigest() != sha256:
             raise VerificationError("SHA-256 mismatch")
@@ -795,7 +809,7 @@ def https_server(tmp_path, monkeypatch):
     for var in ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"):
         monkeypatch.delenv(var, raising=False)
     base = f"https://localhost:{server.server_address[1]}"
-    dist = distribution.Distribution("O/R", "akeno-api", "", "", frozenset({"localhost"}), base + "/api/v1")
+    dist = distribution.Distribution("O/R", "akeno-api", "", "", frozenset({"localhost"}), base + "/api/v1", base)
     yield base, routes, dist
     server.shutdown()
 
@@ -804,11 +818,11 @@ def test_release_information_and_package_over_real_https(tmp_path, signing, http
     key, keys = signing
     base, routes, dist = https_server
     pkg = portable_zip(tmp_path, "3.1.0")
-    info = portable_info(pkg, download_url=f"{base}/downloads/{pkg.name}")
-    signed = fields(pkg=pkg, portable=info, download_url=f"{base}/downloads/AKENO-Gaming-Suite-3.1.0-Setup-x64.exe")
+    info = portable_info(pkg, download_url=f"{base}/downloads/3.1.0/AKENO-Portable.zip")
+    signed = fields(pkg=pkg, portable=info, download_url=f"{base}/downloads/3.1.0/AKENO-Setup.exe")
     routes["/api/v1/releases/stable"] = (200, {"Content-Type": "application/json"},
                                          json.dumps(envelope(key, signed)).encode())
-    routes[f"/downloads/{pkg.name}"] = (200, {}, pkg.read_bytes())
+    routes["/downloads/3.1.0/AKENO-Portable.zip"] = (200, {}, pkg.read_bytes())
     svc = UpdateService(None, dist=dist, keys=keys, version="3.0.0", folder=tmp_path / "updates",
                         clock=lambda: NOW.timestamp())
     release = svc.check()
@@ -838,7 +852,8 @@ def page(akeno_home, qtbot, monkeypatch, tmp_path, signing):
     monkeypatch.setattr(service, "frozen", lambda: True)            # as in the built program
     monkeypatch.setattr(service, "install_dir", lambda: tmp_path / "Programs" / "AKENO Gaming Suite")
     # the "running program" here is python.exe, which is code-signed on Windows; the rule has its own tests
-    monkeypatch.setattr(service, "signature_check", lambda new_exe, running_exe=None: "not checked in this test")
+    monkeypatch.setattr(service, "signature_check",
+                        lambda new_exe, running_exe=None, pin=None: "not checked in this test")
     (tmp_path / "Programs" / "AKENO Gaming Suite").mkdir(parents=True)
     win = MainWindow(Controller(AppServices(db=Database(akeno_home / "s.sqlite3"))))
     qtbot.addWidget(win)
@@ -972,6 +987,7 @@ def test_release_tool_describes_and_verifies_against_the_built_files(tmp_path, s
     assert described["installer"]["sha256"] == hashlib.sha256(exe.read_bytes()).hexdigest()
     now = datetime.now(timezone.utc)
     signed = fields(pkg=pkg, issued_at=iso(now - timedelta(hours=1)), expires_at=iso(now + timedelta(days=29)),
+                    release_date=(now - timedelta(hours=1)).date().isoformat(),
                     sha256=described["installer"]["sha256"], size_bytes=described["installer"]["size_bytes"])
     doc = tmp_path / "release.json"
     doc.write_text(json.dumps(envelope(key, signed)))
@@ -1090,12 +1106,6 @@ def test_content_sha256_unicode_names_order_and_top_folder(tmp_path):
         < records.index("AKENO/ä.txt") < records.index("AKENO/日本/語.txt")
 
 
-@pytest.mark.skip(reason="the five hash vectors of AKENO_3_0_API_CONTRACT_BUNDLE.zip were not provided to this "
-                         "session; add them under tests/fixtures/api_contract/ and remove this skip")
-def test_codex_hash_vectors():
-    pass
-
-
 @pytest.mark.parametrize("change,match", [
     (lambda p, info: dict(info, content_sha256="0" * 64), "do not match the signed content_sha256"),
     (lambda p, info: dict(info, file_count=info["file_count"] + 1), "has 3 files, the signed release says 4"),
@@ -1128,10 +1138,10 @@ def _signed_with(key, signed, outer=None):
     (lambda m: m.update(extra_field=1), "does not allow: extra_field"),
     (lambda m: m["portable"].update(note="x"), "portable package information has fields"),
     (lambda m: m["portable"].pop("verified_pe_files"), "portable package information has no verified_pe_files"),
-    (lambda m: m["authenticode"].update(signer="x"), "code signature information of the installer has fields"),
+    (lambda m: m["authenticode"].update(signer="x"), "code signature information of the installer is not valid"),
     (lambda m: m.update(schema_version=2.0), "format"),
     (lambda m: m.update(schema_version=True), "format"),          # True == 1 in Python: not schema 1 either
-    (lambda m: m.update(updater_protocol=2.0), "updater_protocol"),
+    (lambda m: m.update(updater_protocol=2.0), "updater protocol"),
     (lambda m: m.update(sequence=7.0), "sequence"),
     (lambda m: m.update(sequence=True), "sequence"),
     (lambda m: m.update(size_bytes=True), "size_bytes"),
@@ -1167,7 +1177,7 @@ def test_the_outer_envelope_is_strict_too(signing, tmp_path):
     good = fields(pkg=portable_zip(tmp_path, "3.1.0"))
     doc = envelope(key, good)
     doc["unexpected"] = True
-    with pytest.raises(manifest.ManifestError, match="release has fields the release format does not allow"):
+    with pytest.raises(manifest.ManifestError, match="release field unexpected is not signed"):
         parse(doc, keys)
     doc = envelope(key, good)
     doc["schema_version"] = 2.0
@@ -1175,7 +1185,7 @@ def test_the_outer_envelope_is_strict_too(signing, tmp_path):
         parse(doc, keys)
     doc = envelope(key, good)
     doc["signature"]["extra"] = "x"
-    with pytest.raises(manifest.ManifestError, match="release signature has fields"):
+    with pytest.raises(manifest.ManifestError, match="not signed by AKENO"):
         parse(doc, keys)
     doc = envelope(key, good, outer=dict(good, sequence=7.0))           # outer 7.0 vs signed 7
     with pytest.raises(manifest.ManifestError, match="sequence differs from the signed value"):

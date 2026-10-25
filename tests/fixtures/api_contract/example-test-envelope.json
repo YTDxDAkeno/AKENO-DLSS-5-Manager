@@ -1,0 +1,47 @@
+{
+  "schema_version": 2,
+  "updater_protocol": 2,
+  "product": "akeno-gaming-suite",
+  "channel": "stable",
+  "platform": "windows-x64",
+  "version": "3.0.1",
+  "release_date": "2026-10-25",
+  "release_notes": "Public contract fixture: Größe ✓. Never publish this fixture.",
+  "published_at": "2026-10-25T12:00:00+00:00",
+  "issued_at": "2026-10-25T12:00:00+00:00",
+  "expires_at": "2026-11-24T12:00:00+00:00",
+  "sequence": 1,
+  "request_id": "0123456789abcdef0123456789abcdef",
+  "download_url": "https://akeno.online/downloads/3.0.1/AKENO-Setup.exe",
+  "size_bytes": 1024,
+  "sha256": "bdc553c2b975c34ab59828b347b5a9855e2a50f6524ba3bdf35db1ac50e7936d",
+  "authenticode": {
+    "verified": false,
+    "status": "not_signed",
+    "publisher_certificate_sha256": null
+  },
+  "minimum_supported_version": null,
+  "unattended_install_allowed": false,
+  "install_mode": "portable-directory-swap",
+  "portable": {
+    "download_url": "https://akeno.online/downloads/3.0.1/AKENO-Portable.zip",
+    "size_bytes": 1480,
+    "sha256": "3c0802ee9881c7ac47740a0702c7567839cfe71f30fca411b3ec723ad7784aed",
+    "pe_files": 1,
+    "verified_pe_files": 0,
+    "file_count": 4,
+    "uncompressed_size_bytes": 1048,
+    "content_sha256": "715885f814e94cd2a6c996f85075bfcb590da7076697e845aa43d37b0b9996fe",
+    "authenticode": {
+      "verified": false,
+      "status": "not_signed",
+      "publisher_certificate_sha256": null
+    }
+  },
+  "signed_payload": "{\"authenticode\":{\"publisher_certificate_sha256\":null,\"status\":\"not_signed\",\"verified\":false},\"channel\":\"stable\",\"download_url\":\"https://akeno.online/downloads/3.0.1/AKENO-Setup.exe\",\"expires_at\":\"2026-11-24T12:00:00+00:00\",\"install_mode\":\"portable-directory-swap\",\"issued_at\":\"2026-10-25T12:00:00+00:00\",\"minimum_supported_version\":null,\"platform\":\"windows-x64\",\"portable\":{\"authenticode\":{\"publisher_certificate_sha256\":null,\"status\":\"not_signed\",\"verified\":false},\"content_sha256\":\"715885f814e94cd2a6c996f85075bfcb590da7076697e845aa43d37b0b9996fe\",\"download_url\":\"https://akeno.online/downloads/3.0.1/AKENO-Portable.zip\",\"file_count\":4,\"pe_files\":1,\"sha256\":\"3c0802ee9881c7ac47740a0702c7567839cfe71f30fca411b3ec723ad7784aed\",\"size_bytes\":1480,\"uncompressed_size_bytes\":1048,\"verified_pe_files\":0},\"product\":\"akeno-gaming-suite\",\"published_at\":\"2026-10-25T12:00:00+00:00\",\"release_date\":\"2026-10-25\",\"release_notes\":\"Public contract fixture: Größe ✓. Never publish this fixture.\",\"request_id\":\"0123456789abcdef0123456789abcdef\",\"schema_version\":2,\"sequence\":1,\"sha256\":\"bdc553c2b975c34ab59828b347b5a9855e2a50f6524ba3bdf35db1ac50e7936d\",\"size_bytes\":1024,\"unattended_install_allowed\":false,\"updater_protocol\":2,\"version\":\"3.0.1\"}",
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "4f0b6765af0b6fa0",
+    "value": "wNtIJRmj80ylhdEWpyGjNqBLFjGoFlPhzzJ_68tOIICa1RGmA_9Wh8mxWxBc7dvbZD7EyIi3WsQ-Uz804NqiDA"
+  }
+}

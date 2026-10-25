@@ -212,7 +212,7 @@ def parse_api(doc, keys: dict, dist=None, now: float | None = None) -> Release:
         raise ManifestError("not an AKENO release (unknown format)")
     if schema == 2:
         from akeno.updater import api_v2                  # the production format since 2026-10-25
-        return api_v2.parse(doc, keys, trusted, now)
+        return api_v2.parse(doc, keys, trusted, now, getattr(dist, "download_origin", "") or api_v2.ORIGIN)
     if schema != API_SCHEMA:
         raise ManifestError("not an AKENO release (unknown format)")
     sig = doc.get("signature")

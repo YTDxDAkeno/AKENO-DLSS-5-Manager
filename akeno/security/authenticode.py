@@ -3,6 +3,9 @@
 ``WinVerifyTrust`` answers whether the embedded signature is valid and chains to a trusted root;
 the signer's subject name is read from the verified provider state with ``CertGetNameStringW``. A file counts as
 an official NVIDIA binary only when both hold: valid signature *and* signer "NVIDIA Corporation".
+
+``leaf_sha256`` is the SHA-256 of the verified signer certificate (its DER bytes): what the Release Manager pins as
+``publisher_certificate_sha256`` (``osslsigncode verify -require-leaf-hash sha256:…``).
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ class SignatureInfo:
     valid: bool
     signer: str | None
     detail: str
+    leaf_sha256: str | None = None     # SHA-256 of the verified signer certificate (DER)
 
     @property
     def is_nvidia(self) -> bool:
@@ -65,24 +69,26 @@ def verify(path: str) -> SignatureInfo:
     wintrust.WinVerifyTrust.argtypes = [wintypes.HWND, ctypes.POINTER(GUID), ctypes.POINTER(WINTRUST_DATA)]
     hr = wintrust.WinVerifyTrust(None, ctypes.byref(action), ctypes.byref(wd))
     try:
-        signer = _trusted_signer_name(wd.hWVTStateData) if hr == 0 else None
+        signer, leaf = _trusted_signer(wd.hWVTStateData) if hr == 0 else (None, None)
     finally:
         wd.dwStateAction = 2         # WTD_STATEACTION_CLOSE
         wintrust.WinVerifyTrust(None, ctypes.byref(action), ctypes.byref(wd))
     code = hr & 0xFFFFFFFF
     if hr == 0:
-        return SignatureInfo(True, True, signer, "Valid Authenticode signature.")
+        return SignatureInfo(True, True, signer, "Valid Authenticode signature.", leaf)
     reasons = {0x800B0100: "The file is not signed.", 0x80096010: "The signature is invalid (file was modified).",
                0x800B0109: "The signature does not chain to a trusted root.",
                0x800B0101: "The signing certificate has expired."}
     return SignatureInfo(True, False, signer, reasons.get(code, f"Signature check failed (0x{code:08X})."))
 
 
-def _trusted_signer_name(state) -> str | None:
-    """Read the actual verified signature's leaf, never an arbitrary embedded certificate."""
+def _trusted_signer(state) -> tuple[str | None, str | None]:
+    """The name and the SHA-256 of the actual verified signature's leaf, never of an arbitrary embedded
+    certificate."""
+    import hashlib
     from ctypes import wintypes
     if not state:
-        return None
+        return None, None
     class PROVIDER_CERT(ctypes.Structure):
         _fields_ = [("cbStruct", wintypes.DWORD), ("pCert", ctypes.c_void_p)]
     class PROVIDER_SIGNER(ctypes.Structure):
@@ -96,14 +102,24 @@ def _trusted_signer_name(state) -> str | None:
     data = wintrust.WTHelperProvDataFromStateData(state)
     signer = wintrust.WTHelperGetProvSignerFromChain(data, 0, False, 0) if data else None
     if not signer or not signer.contents.csCertChain or not signer.contents.pasCertChain:
-        return None
+        return None, None
     certificate = signer.contents.pasCertChain[0].pCert
+
+    class CERT_CONTEXT(ctypes.Structure):
+        _fields_ = [("dwCertEncodingType", wintypes.DWORD), ("pbCertEncoded", ctypes.POINTER(ctypes.c_ubyte)),
+                    ("cbCertEncoded", wintypes.DWORD), ("pCertInfo", ctypes.c_void_p),
+                    ("hCertStore", ctypes.c_void_p)]
+    leaf = None
+    if certificate:
+        context = ctypes.cast(certificate, ctypes.POINTER(CERT_CONTEXT)).contents
+        if context.pbCertEncoded and 0 < context.cbCertEncoded <= 1 << 20:
+            leaf = hashlib.sha256(ctypes.string_at(context.pbCertEncoded, context.cbCertEncoded)).hexdigest()
     crypt32.CertGetNameStringW.argtypes = [ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, ctypes.c_void_p,
                                          wintypes.LPWSTR, wintypes.DWORD]
     crypt32.CertGetNameStringW.restype = wintypes.DWORD
     length = crypt32.CertGetNameStringW(certificate, 4, 0, None, None, 0)
     if length < 2 or length > 4096:
-        return None
+        return None, leaf
     name = ctypes.create_unicode_buffer(length)
     crypt32.CertGetNameStringW(certificate, 4, 0, None, name, length)
-    return name.value or None
+    return name.value or None, leaf

@@ -107,3 +107,24 @@ def test_build_check_refuses_wrong_address_mixed_keys_and_private_material(tmp_p
     (build / "leak.bin").write_bytes(b"\0" + raw + b"\0")
     problems = checker.check(build, "https://api.akeno.online", "https://akeno.online", _b64(raw))[1]
     assert problems == ["leak.bin contains the release signing key"]
+
+
+def test_build_check_refuses_the_contract_test_key_and_test_signed_releases(tmp_path):
+    """The Release Manager's public contract fixture (tests/fixtures/api_contract) is signed with a test key: a
+    shipped build must neither trust that key nor carry the fixture."""
+    fixture = ROOT / "tests" / "fixtures" / "api_contract"
+    test_key = json.loads((fixture / "example-test-public-key.json").read_text(encoding="utf-8"))
+    assert checker.TEST_ONLY_KEYS == {test_key["key_id"]: test_key["public_key"]}
+    assert checker.kid_of(test_key["public_key"]) == test_key["key_id"] != RELEASE_KEY[0]
+    build = _build(tmp_path)
+    data = build / "_internal" / "akeno" / "data"
+    rel = json.loads((data / "release-keys.json").read_text())
+    rel["keys"].append({"kid": test_key["key_id"], "public_key": test_key["public_key"]})
+    (data / "release-keys.json").write_text(json.dumps(rel))
+    problems = checker.check(build, "https://api.akeno.online", "https://akeno.online")[1]
+    assert f"the build trusts the test-only key {test_key['key_id']}" in problems
+    shutil.copy(ROOT / "akeno" / "data" / "release-keys.json", data / "release-keys.json")
+    assert checker.check(build, "https://api.akeno.online", "https://akeno.online")[1] == []
+    shutil.copy(fixture / "example-test-envelope.json", build / "_internal" / "release.json")
+    assert checker.check(build, "https://api.akeno.online", "https://akeno.online")[1] == [
+        "_internal/release.json contains a test-only key or test-signed release"]

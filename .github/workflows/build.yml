@@ -363,6 +363,17 @@ jobs:
           if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y; $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" }
           & $iscc "/DAppVersion=$env:AKENO_VERSION" packaging\installer.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed" }
+      - name: Release Manager values of the built files (accepted by the updater's own unpacking rules)
+        shell: pwsh
+        run: |
+          $zip = "packaging\out\AKENO-Gaming-Suite-$env:AKENO_VERSION-portable-x64.zip"
+          $exe = "packaging\out\AKENO-Gaming-Suite-$env:AKENO_VERSION-Setup-x64.exe"
+          python tools/release_v2.py describe $zip $exe | Tee-Object -Variable described
+          if ($LASTEXITCODE -ne 0) { throw "the portable ZIP is not what the Release Manager and the updater accept" }
+          "### Release Manager values (file_count, uncompressed size, content_sha256)" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```json' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $described | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
       - name: Checksums
         shell: pwsh
         run: |

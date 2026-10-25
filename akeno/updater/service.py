@@ -96,13 +96,25 @@ def fetch_json(url: str, trusted=None) -> dict:
         raise UpdateError(f"the release information is not readable: {exc}") from exc
 
 
-def signature_check(new_exe: Path, running_exe: Path | None = None) -> str:
-    """The Authenticode rule for the new AKENO.exe. Returns a note for the log, raises UpdateError on a mismatch."""
+def signature_check(new_exe: Path, running_exe: Path | None = None, pin: str | None = None) -> str:
+    """The Authenticode rule for the new AKENO.exe. Returns a note for the log, raises UpdateError on a mismatch.
+
+    ``pin``: the release's signed ``publisher_certificate_sha256`` when it calls the package code-signed: the new
+    AKENO.exe must then carry a valid signature by exactly that certificate, whatever this build has."""
     from akeno.security import authenticode
+    if pin:
+        new = authenticode.verify(str(new_exe))
+        if not new.checked:
+            raise UpdateError("the release names a code signing certificate, which only Windows can check")
+        if not new.valid or new.leaf_sha256 != pin:
+            raise UpdateError("the new AKENO.exe is not signed with the certificate the release names "
+                              f"({pin[:16]}…)")
     running = authenticode.verify(str(running_exe or sys.executable))
     if not running.checked:
         return "Authenticode not checked (not Windows)"
     if not running.valid:
+        if pin:
+            return f"code signature valid ({new.signer}, the certificate the release names)"
         return "this build is not code-signed: release signature and SHA-256 only"
     new = authenticode.verify(str(new_exe))
     if not new.valid:
@@ -348,7 +360,14 @@ class UpdateService:
                                   "content_sha256": portable.content_sha256}
         staging.save(content, self.content_path(release))
         if frozen() and sys.platform == "win32":
-            self._store(signature=signature_check(root / "AKENO.exe"))
+            auth = portable.authenticode if portable is not None else None
+            try:
+                pin = auth.publisher_sha256 if auth is not None and auth.verified else None
+                note = signature_check(root / "AKENO.exe", pin=pin)
+            except UpdateError:
+                shutil.rmtree(dest, ignore_errors=True)
+                raise
+            self._store(signature=note)
         return root
 
     def content_path(self, release: manifest.Release) -> Path:

@@ -1,32 +1,37 @@
 """Release Manager schema 2 (updater protocol 2): what ``GET /api/v1/releases/stable`` returns on production.
 
-The contract is the one the production server publishes in its OpenAPI document (``ReleaseEnvelope``,
-``PortablePackage``, ``Authenticode``, ``Signature``; read by ``tools/api_contract.py --schemas`` in the read-only
-production check on 2026-10-25). Nothing here is guessed beyond what that document states; where it is silent
-(see ``docs/AKENO_3_0_UPDATER_V2.md``, "Open points") the client refuses rather than assumes:
+The contract is the Release Manager's own validator (``release_protocol.validate`` and ``verify`` of the
+production backend, see docs/AKENO_3_0_FINAL_CLIENT_ALIGNMENT.md) and its OpenAPI document. :func:`parse` accepts
+exactly what that validator accepts, and refuses everything it refuses:
 
-* The release counts only when ``signature`` (``Ed25519``, ``key_id`` of a release key built into this program)
-  verifies over the **exact UTF-8 bytes of ``signed_payload``**, unchanged. Nothing is re-serialised.
-* ``signed_payload`` must be one JSON object (as JSON text or base64url of it) without duplicate keys or
-  non-finite numbers. Only its values are used. A field that appears outside it as well must be equal.
-* The security fields must be inside it: schema and protocol, product, platform, channel, version, sequence,
-  issue and expiry time, the installer's address, SHA-256 and size, ``unattended_install_allowed``,
-  ``install_mode``, and (to install in the app) the portable package.
-* Expired information (``expires_at`` in the past) is refused. Sequence and version rules against replays are
-  applied by the service, which remembers what it has seen (``service.UpdateService.check``).
+* The release counts only when ``signature`` (exactly ``algorithm`` ``Ed25519``, ``key_id`` of a release key built
+  into this program, ``value`` 64 bytes as unpadded base64url) verifies over the **exact UTF-8 bytes of
+  ``signed_payload``** (at most 64 KiB), unchanged. Nothing is re-serialised or decoded first.
+* ``signed_payload`` is one JSON object without duplicate keys or non-finite numbers, with exactly the 20 release
+  fields (and optionally ``portable`` with exactly its 9 fields). Only its values are used. Every field outside
+  it must be one of its fields, with the same value.
+* The download addresses are exactly ``https://akeno.online/downloads/<version>/AKENO-Setup.exe`` and
+  ``…/AKENO-Portable.zip``; times are UTC; the validity is one hour to thirty days, issued at most five minutes
+  ahead and not yet expired; a portable package means ``portable-directory-swap``, none means
+  ``manual-installer`` without unattended installation; the code signature fields agree with each other.
+* Sequence and version rules against replays are applied by the service, which remembers what it has seen
+  (``service.UpdateService.check``).
 
 The app never installs anything without the user's confirmation, whatever ``unattended_install_allowed`` says.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
+import hashlib
 import json
 import math
 import re
 import time
 import urllib.parse
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime, timedelta, timezone
 
 from akeno.updater.manifest import File, ManifestError, Release
 
@@ -43,10 +48,15 @@ MAX_PORTABLE = 512 * 2 ** 20
 MAX_UNPACKED = 2 * 2 ** 30                  # uncompressed_size_bytes maximum
 MAX_FILES = 4096                            # file_count maximum
 MAX_PE = 512
-SHA = re.compile(r"^[a-f0-9]{64}$")
-VERSION = re.compile(r"^(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})$")
-REQUEST_ID = re.compile(r"^[a-f0-9]{32}$")
-NAME = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
+ORIGIN = "https://akeno.online"                # where the Release Manager's downloads are (``origin`` of verify)
+INSTALLER_NAME = "AKENO-Setup.exe"              # {origin}/downloads/{version}/<name>, nothing else
+PORTABLE_NAME = "AKENO-Portable.zip"
+MAX_PAYLOAD = 65536                             # signed_payload, UTF-8 bytes
+# always used with fullmatch: "$" would also accept a trailing newline
+SHA = re.compile(r"[a-f0-9]{64}")
+VERSION = re.compile(r"(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})\.(0|[1-9][0-9]{0,8})")
+REQUEST_ID = re.compile(r"[a-f0-9]{32}")
+B64URL = re.compile(r"[A-Za-z0-9_-]+")
 # every field the production ReleaseEnvelope requires (OpenAPI, additionalProperties: false); "portable" is optional
 SIGNED = ("schema_version", "updater_protocol", "product", "platform", "channel", "version", "sequence",
           "issued_at", "expires_at", "download_url", "sha256", "size_bytes", "unattended_install_allowed",
@@ -58,8 +68,7 @@ PORTABLE_FIELDS = frozenset({"download_url", "size_bytes", "sha256", "authentico
                              "file_count", "uncompressed_size_bytes", "content_sha256"})
 AUTHENTICODE_FIELDS = frozenset({"verified", "status", "publisher_certificate_sha256"})
 SIGNATURE_FIELDS = frozenset({"algorithm", "key_id", "value"})
-KEY_ID = re.compile(r"^[a-f0-9]{16}$")
-DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+KEY_ID = re.compile(r"[a-f0-9]{16}")
 FUTURE_SKEW = 5 * 60                         # issued_at at most five minutes ahead of now
 MIN_VALIDITY = 3600                          # expires_at - issued_at: one hour …
 MAX_VALIDITY = 30 * 86400                    # … to thirty days
@@ -110,9 +119,6 @@ class Details:
     def in_app_refusal(self, installed: str) -> str:
         """Why this release cannot be installed by the app itself ("" when it can). It can still be shown."""
         from akeno.i18n import msg
-        if self.updater_protocol != PROTOCOL:
-            return msg("This release needs a newer updater than this AKENO has. Install it with the installer from "
-                       "the download page.")
         if self.install_mode != "portable-directory-swap" or self.portable is None:
             return msg("This release is offered as an installer on the download page (AKENO installs only portable "
                        "packages itself, so it can roll back).")
@@ -125,7 +131,7 @@ class Details:
 
 
 def version_key(text: str) -> tuple[int, int, int]:
-    m = VERSION.match(str(text or ""))
+    m = VERSION.fullmatch(str(text or ""))
     if not m:
         # an installed pre-release (3.0.1-beta.1) compares by its numbers
         m = re.match(r"^(\d+)\.(\d+)\.(\d+)", str(text or ""))
@@ -152,40 +158,41 @@ def _load(text: str) -> object:
 
 
 def signed_document(payload: str) -> dict:
-    """The JSON object inside ``signed_payload``: JSON text, or base64url of JSON text."""
-    import base64
-    import binascii
+    """The JSON object ``signed_payload`` is (JSON text; the Release Manager never encodes it otherwise)."""
     try:
         doc = _load(payload)
+    except ReleaseError:
+        raise
     except ValueError as exc:
-        if isinstance(exc, ReleaseError):
-            raise
-        try:
-            text = base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)).decode("utf-8")
-            doc = _load(text)
-        except ReleaseError:
-            raise
-        except (ValueError, binascii.Error, UnicodeDecodeError) as exc2:
-            raise ReleaseError("the signed release information is not readable") from exc2
+        raise ReleaseError("the signed release information is not readable") from exc
     if not isinstance(doc, dict):
         raise ReleaseError("the signed release information is not readable")
     return doc
 
 
-def signature_bytes(value) -> bytes:
-    """``signature.value``: 64 bytes as base64url, base64 or hex (the schema says only "string")."""
-    import base64
-    import binascii
-    text = str(value or "").strip()
-    if re.fullmatch(r"[0-9a-fA-F]{128}", text):
-        return bytes.fromhex(text)
+def b64url(value, length: int) -> bytes:
+    """Unpadded base64url of exactly ``length`` bytes, in its one canonical spelling (``decode`` of the backend)."""
+    if not isinstance(value, str) or not B64URL.fullmatch(value):
+        raise ReleaseError("the release signature is not readable")
     try:
-        raw = base64.b64decode(text.replace("-", "+").replace("_", "/") + "=" * (-len(text) % 4), validate=True)
+        raw = base64.b64decode(value.replace("-", "+").replace("_", "/") + "=" * (-len(value) % 4), validate=True)
     except (binascii.Error, ValueError) as exc:
         raise ReleaseError("the release signature is not readable") from exc
-    if len(raw) != 64:
+    if len(raw) != length or base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=") != value:
         raise ReleaseError("the release signature is not readable")
     return raw
+
+
+def signature_bytes(value) -> bytes:
+    """``signature.value``: the 64 signature bytes as unpadded base64url (hex or padded base64 are refused)."""
+    return b64url(value, 64)
+
+
+def key_id(key) -> str:
+    """The key id of an Ed25519 public key: the first 16 hex digits of the SHA-256 of its 32 raw bytes."""
+    from cryptography.hazmat.primitives import serialization
+    raw = key.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    return hashlib.sha256(raw).hexdigest()[:16]
 
 
 def _is_int(value) -> bool:
@@ -208,13 +215,15 @@ def _only(value: dict, allowed: frozenset, where: str) -> None:
 
 def _time(m: dict, name: str) -> float:
     text = m.get(name)
+    if not isinstance(text, str) or len(text) > 40:
+        raise ReleaseError(f"the signed {name} is not a time")
     try:
-        dt = datetime.fromisoformat(str(text).replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
         raise ReleaseError(f"the signed {name} is not a time") from exc
     if dt.tzinfo is None:
         raise ReleaseError(f"the signed {name} has no time zone")
-    if dt.utcoffset().total_seconds() != 0:
+    if dt.utcoffset() != timedelta(0):
         raise ReleaseError(f"the signed {name} is not in UTC")
     ts = dt.timestamp()
     if not math.isfinite(ts):
@@ -223,76 +232,76 @@ def _time(m: dict, name: str) -> float:
 
 
 def _authenticode(value, where: str) -> Authenticode:
-    if not isinstance(value, dict) or not isinstance(value.get("verified"), bool) \
-            or value.get("status") not in AUTHENTICODE:
+    """Exactly ``verified``, ``status`` and ``publisher_certificate_sha256``, agreeing with each other: verified
+    means status ``verified`` and a certificate pin; anything else has no pin and is never status ``verified``."""
+    if not isinstance(value, dict) or set(value) != AUTHENTICODE_FIELDS or type(value["verified"]) is not bool \
+            or value["status"] not in AUTHENTICODE:
         raise ReleaseError(f"the code signature information of the {where} is not valid")
-    _only(value, AUTHENTICODE_FIELDS, f"code signature information of the {where}")
-    publisher = value.get("publisher_certificate_sha256")
-    if publisher is not None and not (isinstance(publisher, str) and SHA.match(publisher)):
-        raise ReleaseError(f"the code signature information of the {where} is not valid")
-    # "verified" and "status" say the same thing twice; an invalid signature never counts as a valid one
-    if value["verified"] != (value["status"] == "verified"):
+    publisher = value["publisher_certificate_sha256"]
+    if value["verified"]:
+        if value["status"] != "verified" or not isinstance(publisher, str) or not SHA.fullmatch(publisher):
+            raise ReleaseError(f"the code signature information of the {where} contradicts itself")
+    elif value["status"] == "verified" or publisher is not None:
         raise ReleaseError(f"the code signature information of the {where} contradicts itself")
     return Authenticode(value["verified"], value["status"], publisher or "")
 
 
-def _download(url, trusted, suffix: str, what: str) -> str:
-    if not isinstance(url, str) or not trusted(url):
-        raise ReleaseError(f"the {what} address is not an official AKENO download: {url}")
-    parts = urllib.parse.urlsplit(url)
-    if parts.query or parts.fragment:
-        raise ReleaseError(f"the {what} address is not an official AKENO download: {url}")
-    name = urllib.parse.unquote(parts.path.rsplit("/", 1)[-1])
-    if not NAME.match(name) or not name.lower().endswith(suffix):
-        raise ReleaseError(f"the {what} file name is not valid: {name}")
-    return name
+def _download(url, trusted, expected: str, what: str) -> str:
+    """The one address the Release Manager serves this file at (and a host of this build's distribution)."""
+    if not isinstance(url, str) or url != expected or not trusted(url):
+        raise ReleaseError(f"the {what} address is not the official AKENO download: {url}")
+    return urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1]
 
 
-def _portable(value, trusted) -> Portable:
+def _sha(value, what: str) -> str:
+    if not isinstance(value, str) or not SHA.fullmatch(value):
+        raise ReleaseError(f"the {what} checksum is not valid")
+    return value
+
+
+def _portable(value, trusted, base: str) -> Portable:
     if not isinstance(value, dict):
         raise ReleaseError("the portable package information is not valid")
     _only(value, PORTABLE_FIELDS, "portable package information")
     missing = sorted(PORTABLE_FIELDS - set(value))
     if missing:
         raise ReleaseError(f"the portable package information has no {', '.join(missing)}")
-    name = _download(value.get("download_url"), trusted, ".zip", "portable package")
-    sha, content = value.get("sha256"), value.get("content_sha256")
-    if not (isinstance(sha, str) and SHA.match(sha) and isinstance(content, str) and SHA.match(content)):
-        raise ReleaseError("the portable package checksums are not valid")
+    name = _download(value["download_url"], trusted, base + PORTABLE_NAME, "portable package")
+    size = _int(value, "size_bytes", 1, MAX_PORTABLE)
+    sha = _sha(value["sha256"], "portable package")
+    content = _sha(value["content_sha256"], "portable package content")
     pe = _int(value, "pe_files", 1, MAX_PE)
-    verified = _int(value, "verified_pe_files", 0, MAX_PE)
-    if verified > pe:
-        raise ReleaseError("the portable package claims more signed programs than it has")
+    verified = _int(value, "verified_pe_files", 0, pe)
     files = _int(value, "file_count", 1, MAX_FILES)
-    if pe > files:
-        raise ReleaseError("the portable package claims more programs than files")
-    return Portable(value["download_url"], name, sha, _int(value, "size_bytes", 1, MAX_PORTABLE), content, files,
-                    _int(value, "uncompressed_size_bytes", 1, MAX_UNPACKED), pe, verified,
-                    _authenticode(value.get("authenticode"), "portable package"))
+    unpacked = _int(value, "uncompressed_size_bytes", 1, MAX_UNPACKED)
+    auth = _authenticode(value["authenticode"], "portable package")
+    if auth.verified and verified != pe:
+        raise ReleaseError("the portable package is called code-signed, but not all of its programs are")
+    return Portable(value["download_url"], name, sha, size, content, files, unpacked, pe, verified, auth)
 
 
-def parse(doc, keys: dict, trusted, now: float | None = None):
+def parse(doc, keys: dict, trusted, now: float | None = None, origin: str = ORIGIN):
     """A schema-2 release (``Release`` with ``v2`` details), or ReleaseError.
 
     ``keys``: the build's release keys (``{kid: Ed25519PublicKey}``); ``trusted(url)``: the build's download hosts;
-    ``now``: the time for the expiry check (the caller passes a clock that cannot go back, see the service)."""
+    ``now``: the time for the expiry check (the caller passes a clock that cannot go back, see the service);
+    ``origin``: where the Release Manager's downloads are (``https://akeno.online``)."""
     from cryptography.exceptions import InvalidSignature
     if not keys:
         raise ReleaseError("this build has no release verification key")
     if not isinstance(doc, dict) or not _is_int(doc.get("schema_version")) or doc["schema_version"] != SCHEMA:
         raise ReleaseError("not an AKENO release (unknown format)")
     sig, payload = doc.get("signature"), doc.get("signed_payload")
-    if not isinstance(sig, dict) or sig.get("algorithm") != "Ed25519" or not isinstance(payload, str) or not payload:
+    if not isinstance(payload, str) or not payload or len(payload.encode("utf-8")) > MAX_PAYLOAD \
+            or not isinstance(sig, dict) or set(sig) != SIGNATURE_FIELDS or sig["algorithm"] != "Ed25519":
         raise ReleaseError("the release is not signed by AKENO")
-    _only(sig, SIGNATURE_FIELDS, "release signature")
-    if not isinstance(sig.get("key_id"), str) or not KEY_ID.match(sig["key_id"]) or not isinstance(sig.get("value"), str):
+    if not isinstance(sig["key_id"], str) or not KEY_ID.fullmatch(sig["key_id"]):
         raise ReleaseError("the release signature is not readable")
-    _only(doc, ENVELOPE, "release")
-    key = keys.get(str(sig.get("key_id") or ""))
-    if key is None:
+    key = keys.get(sig["key_id"])
+    if key is None or key_id(key) != sig["key_id"]:
         raise ReleaseError("the release is signed with a key this build does not trust")
     try:
-        key.verify(signature_bytes(sig.get("value")), payload.encode("utf-8"))
+        key.verify(signature_bytes(sig["value"]), payload.encode("utf-8"))
     except InvalidSignature as exc:
         raise ReleaseError("the release information is not signed by AKENO (signature does not match)") from exc
     m = signed_document(payload)                    # from here on, only signed values are used
@@ -301,70 +310,74 @@ def parse(doc, keys: dict, trusted, now: float | None = None):
             raise ReleaseError(f"the signed release information has no {name}")
     _only(m, ALLOWED, "signed release information")
     for name, value in doc.items():
-        # compared as JSON: 2 and 2.0, or 1 and true, are different values here
-        if name not in ("signed_payload", "signature") and name in m and \
-                json.dumps(m[name], sort_keys=True) != json.dumps(value, sort_keys=True):
+        # every outer field is a signed one, compared as JSON: 2 and 2.0, or 1 and true, are different values here
+        if name in ("signed_payload", "signature"):
+            continue
+        if name not in m:
+            raise ReleaseError(f"the release field {name} is not signed")
+        if json.dumps(m[name], sort_keys=True) != json.dumps(value, sort_keys=True):
             raise ReleaseError(f"the release field {name} differs from the signed value")
     if not _is_int(m["schema_version"]) or m["schema_version"] != SCHEMA:
         raise ReleaseError("the signed release information has another format")
+    if not _is_int(m["updater_protocol"]) or m["updater_protocol"] != PROTOCOL:
+        raise ReleaseError("the release needs another updater protocol than this AKENO has")
     if m["product"] != PRODUCT or m["platform"] != PLATFORM:
         raise ReleaseError("the release is not for this app")
     if m["channel"] != CHANNEL:
         raise ReleaseError("the release is for another channel")
     version = m["version"]
-    if not isinstance(version, str) or not VERSION.match(version):
+    if not isinstance(version, str) or not VERSION.fullmatch(version):
         raise ReleaseError(f"not a version: {version}")
-    protocol = m["updater_protocol"]
-    if not _is_int(protocol) or protocol < 1:
-        raise ReleaseError("the signed updater_protocol is not valid")
+    minimum = m["minimum_supported_version"]                  # required; null means "any version"
+    if minimum is not None and not (isinstance(minimum, str) and VERSION.fullmatch(minimum)
+                                    and version_key(minimum) <= version_key(version)):
+        raise ReleaseError("the signed minimum_supported_version is not valid")
     sequence = _int(m, "sequence", 1, MAX_SEQUENCE)
+    request_id = m["request_id"]
+    if not (isinstance(request_id, str) and REQUEST_ID.fullmatch(request_id)):
+        raise ReleaseError("the signed request_id is not valid")
     now = time.time() if now is None else now
     issued, expires = _time(m, "issued_at"), _time(m, "expires_at")
-    published = _time(m, "published_at")
-    if issued > now + FUTURE_SKEW:
-        raise ReleaseError("the release information was issued in the future (more than five minutes ahead)")
-    if published != issued:
+    if m["published_at"] != m["issued_at"]:                   # the same text, not only the same instant
         raise ReleaseError("the signed published_at differs from issued_at")
     if not MIN_VALIDITY <= expires - issued <= MAX_VALIDITY:
         raise ReleaseError("the release information's validity is not between one hour and thirty days")
+    if issued > now + FUTURE_SKEW:
+        raise ReleaseError("the release information was issued in the future (more than five minutes ahead)")
     if expires <= now:
         raise ReleaseError("the release information has expired (it is offered again once it is re-signed)")
-    if not isinstance(m["release_date"], str) or not DATE.match(m["release_date"]):
-        raise ReleaseError("the signed release_date is not a date")
+    released = m["release_date"]
     try:
-        datetime.strptime(m["release_date"], "%Y-%m-%d")
-    except ValueError as exc:
-        raise ReleaseError("the signed release_date is not a date") from exc
+        day = date.fromisoformat(released) if isinstance(released, str) else None
+    except ValueError:
+        day = None
+    if day is None or day.isoformat() != released or day > datetime.fromtimestamp(now, timezone.utc).date():
+        raise ReleaseError("the signed release_date is not valid")
     notes = m["release_notes"]
-    if not isinstance(notes, str) or not 1 <= len(notes) <= 8000:
+    if not isinstance(notes, str) or not notes.strip() or len(notes) > 8000:
         raise ReleaseError("the signed release_notes are not valid")
-    if not isinstance(m["unattended_install_allowed"], bool):
+    size = _int(m, "size_bytes", 1, MAX_INSTALLER)
+    sha = _sha(m["sha256"], "installer")
+    base = f"{origin}/downloads/{version}/"
+    name = _download(m["download_url"], trusted, base + INSTALLER_NAME, "installer")
+    installer_auth = _authenticode(m["authenticode"], "installer")
+    if type(m["unattended_install_allowed"]) is not bool:
         raise ReleaseError("the signed unattended_install_allowed is not valid")
     mode = m["install_mode"]
     if mode not in MODES:
         raise ReleaseError(f"unknown install mode: {mode}")
-    name = _download(m["download_url"], trusted, ".exe", "installer")
-    sha = m["sha256"]
-    if not (isinstance(sha, str) and SHA.match(sha)):
-        raise ReleaseError("the installer checksum is not valid")
-    size = _int(m, "size_bytes", 1, MAX_INSTALLER)
-    minimum = m["minimum_supported_version"]                  # required; null means "any version"
-    if minimum is not None and not (isinstance(minimum, str) and VERSION.match(minimum)):
-        raise ReleaseError("the signed minimum_supported_version is not a version")
-    request_id = m["request_id"]
-    if not (isinstance(request_id, str) and REQUEST_ID.match(request_id)):
-        raise ReleaseError("the signed request_id is not valid")
     portable = None
     if m.get("portable") is not None:
-        portable = _portable(m["portable"], trusted)
-    if mode == "portable-directory-swap" and portable is None:
-        raise ReleaseError("the release names a portable update but carries no portable package")
-    installer_auth = _authenticode(m["authenticode"], "installer")
-    details = Details(sequence, str(m["issued_at"]), str(m["expires_at"]), issued, expires, mode, protocol,
+        portable = _portable(m["portable"], trusted, base)
+        if mode != "portable-directory-swap":
+            raise ReleaseError("the release carries a portable package but names another install mode")
+    elif mode != "manual-installer" or m["unattended_install_allowed"]:
+        raise ReleaseError("a release without a portable package must be a manual installer download")
+    details = Details(sequence, m["issued_at"], m["expires_at"], issued, expires, mode, m["updater_protocol"],
                       m["unattended_install_allowed"], minimum, request_id, installer_auth, portable,
                       tuple(sorted(m)))
     files = [File("installer", name, m["download_url"], sha, size)]
     if portable is not None:
         files.insert(0, File("portable", portable.name, portable.url, portable.sha256, portable.size))
-    return Release(CHANNEL, version, f"v{version}", str(m["published_at"])[:30], notes, "", files, str(sig["key_id"]),
+    return Release(CHANNEL, version, f"v{version}", m["published_at"][:30], notes, "", files, sig["key_id"],
                    installer_auth.publisher_sha256, details)

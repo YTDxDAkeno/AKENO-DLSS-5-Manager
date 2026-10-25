@@ -17,7 +17,7 @@ The place is set when the program is built (``akeno/data/distribution.json``, wr
     {"update_source": "akeno-api",                                    # AKENO Release Manager (production API)
      "release_api": "https://api.akeno.online/api/v1",                # GET /releases/stable
      "release_page": "https://akeno.online/downloads/latest",
-     "download_hosts": ["akeno.online"]}
+     "download_hosts": ["akeno.online"]}                              # downloads: https://akeno.online/downloads/…
 
 Whatever the source, an update is installed only when its manifest carries AKENO's release signature (Ed25519,
 keys built into the program) and every file matches the SHA-256 the manifest lists. The source only decides where
@@ -61,6 +61,7 @@ class Distribution:
     release_page: str = ""
     extra_hosts: frozenset = field(default_factory=frozenset)
     release_api: str = ""                           # akeno-api: the Release Manager's API base (``…/api/v1``)
+    download_origin: str = ""                       # akeno-api: where it serves ``/downloads/<version>/<file>``
 
     @property
     def hosts(self) -> set[str]:
@@ -126,7 +127,12 @@ def from_dict(data: dict) -> Distribution:
             hosts.add(host.lower())
     page = page if _https_official(page) else ""
     if source == "akeno-api":
-        return Distribution(repo, "akeno-api", "", page, frozenset(hosts), base)
+        origin = str(data.get("download_origin") or f"https://{OFFICIAL_DOMAIN}").rstrip("/")
+        parts = urllib.parse.urlsplit(origin)
+        if not _https_official(origin) or parts.path or parts.query or parts.fragment or parts.port:
+            origin = f"https://{OFFICIAL_DOMAIN}"
+        hosts.add(urllib.parse.urlsplit(origin).hostname.lower())
+        return Distribution(repo, "akeno-api", "", page, frozenset(hosts), base, origin)
     return Distribution(repo, "akeno", base, page, frozenset(hosts))
 
 

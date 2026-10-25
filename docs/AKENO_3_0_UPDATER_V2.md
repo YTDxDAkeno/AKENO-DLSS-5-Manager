@@ -45,10 +45,10 @@ Beispiel einer Antwort in genau dieser Form (synthetisch, ohne echte Werte, so w
   "issued_at": "2026-11-02T09:00:00Z", "expires_at": "2026-12-02T10:00:00Z",
   "release_notes": "…", "release_date": "2026-11-02", "published_at": "2026-11-02T10:00:00Z",
   "install_mode": "portable-directory-swap", "unattended_install_allowed": false, "minimum_supported_version": null,
-  "download_url": "https://akeno.online/downloads/AKENO-Gaming-Suite-3.0.1-Setup-x64.exe",
+  "download_url": "https://akeno.online/downloads/3.0.1/AKENO-Setup.exe",
   "size_bytes": 123456789, "sha256": "…64 hex…",
   "authenticode": {"verified": false, "status": "not_signed", "publisher_certificate_sha256": null},
-  "portable": {"download_url": "https://akeno.online/downloads/AKENO-Gaming-Suite-3.0.1-portable-x64.zip",
+  "portable": {"download_url": "https://akeno.online/downloads/3.0.1/AKENO-Portable.zip",
                "size_bytes": 260000000, "sha256": "…", "content_sha256": "…", "file_count": 1500,
                "uncompressed_size_bytes": 700000000, "pe_files": 300, "verified_pe_files": 0,
                "authenticode": {"verified": false, "status": "not_signed", "publisher_certificate_sha256": null}},
@@ -76,18 +76,28 @@ Beispiel einer Antwort in genau dieser Form (synthetisch, ohne echte Werte, so w
 1. Antwort nur über HTTPS von `api.akeno.online`, Umleitungen nur zu Hosts des Builds (sonst Abbruch), max. 1 MiB.
 2. `signature.algorithm` muss `Ed25519` sein, `signature.key_id` ein **im Programm eingebauter Release-Schlüssel**
    (`akeno/data/release-keys.json`, heute nur `d6139235b220a4aa`). Lizenzschlüssel zählen nie.
-3. Die Signatur wird über **genau die UTF-8-Bytes von `signed_payload`** geprüft, unverändert. Es wird nichts neu
-   serialisiert oder kanonisiert. `signature.value` darf base64url, base64 oder hex sein (das Schema sagt nur
-   „string“).
-4. Erst danach wird `signed_payload` gelesen (JSON-Text oder base64url davon). Doppelte Schlüssel und NaN/Infinity
-   werden abgelehnt.
-5. Diese Felder **müssen signiert sein**: `schema_version`, `updater_protocol`, `product`, `platform`, `channel`,
-   `version`, `sequence`, `issued_at`, `expires_at`, `download_url`, `sha256`, `size_bytes`,
-   `unattended_install_allowed`, `install_mode`; für die Installation in der App zusätzlich `portable`.
-6. Jedes Feld, das außen **und** innen steht, muss gleich sein. Verwendet werden ausschließlich die signierten Werte.
-7. Danach die Inhaltsprüfung: Produkt, Plattform, Kanal, Version X.Y.Z, Sequenz, Zeiten mit Zeitzone und
-   `expires_at > issued_at`, Download-Adressen HTTPS auf `akeno.online` ohne Query, sichere Dateinamen (`.exe`,
-   `.zip`), Hashes, Größen und Grenzen wie im Schema.
+3. Die Signatur wird über **genau die UTF-8-Bytes von `signed_payload`** (höchstens 65 536 Byte) geprüft,
+   unverändert. Es wird nichts neu serialisiert oder kanonisiert. `signature` hat genau `algorithm`, `key_id`,
+   `value`; `value` ist genau 64 Byte als base64url ohne Padding in kanonischer Schreibweise (hex, base64 mit
+   Padding oder `+/` werden abgelehnt), `key_id` = SHA-256 des Schlüssels, erste 16 Hex-Zeichen.
+4. Erst danach wird `signed_payload` als JSON-Text gelesen (nie base64-dekodiert). Doppelte Schlüssel und
+   NaN/Infinity werden abgelehnt.
+5. Signiert sind **genau** die 20 Release-Felder (`schema_version`, `updater_protocol`, `product`, `platform`,
+   `channel`, `version`, `release_date`, `release_notes`, `published_at`, `issued_at`, `expires_at`, `sequence`,
+   `request_id`, `download_url`, `size_bytes`, `sha256`, `authenticode`, `minimum_supported_version`,
+   `unattended_install_allowed`, `install_mode`) und optional `portable` mit genau seinen 9 Feldern.
+6. Jedes Feld außerhalb muss ein signiertes Feld sein und denselben Wert haben (als JSON verglichen: `2` ≠ `2.0`).
+   Verwendet werden ausschließlich die signierten Werte.
+7. Danach dieselben Regeln wie `release_protocol.validate` des Backends (Vertrag vom 2026-10-25, Tests in
+   `tests/test_api_contract.py`): Schema und Protokoll genau Integer 2; Produkt, Plattform, Kanal; Version X.Y.Z;
+   `minimum_supported_version` null oder ≤ Version; Sequenz 1 … 2^53−1; `request_id` 32 Hex; Zeiten UTC, höchstens
+   40 Zeichen, `published_at` = `issued_at` (gleicher Text), Gültigkeit 1 h … 30 Tage, höchstens 5 min in der
+   Zukunft, `expires_at` > jetzt; `release_date` ISO-Datum, nicht nach dem heutigen UTC-Tag; Notizen nicht leer,
+   ≤ 8000 Zeichen; Adressen **genau** `https://akeno.online/downloads/<version>/AKENO-Setup.exe` und
+   `…/AKENO-Portable.zip`; Hashes 64 kleine Hex-Zeichen; Größen und Grenzen wie im Schema; Authenticode-Felder
+   widerspruchsfrei (verifiziert ⇔ Status `verified` und Zertifikats-Pin; sonst kein Pin); verifiziertes Paket ⇒
+   alle PE-Dateien signiert; mit `portable` ⇒ `portable-directory-swap`, ohne ⇒ `manual-installer` und nicht
+   unbeaufsichtigt.
 8. **Abgelaufen** (`expires_at` in der Vergangenheit) → abgelehnt. Die Uhr dafür geht nie hinter die neueste schon
    gesehene signierte `issued_at`-Zeit zurück (eine zurückgestellte PC-Uhr macht nichts wieder gültig).
 9. **Sequenz** (`UpdateService.check`): nie kleiner als die zuletzt gesehene; dieselbe Sequenz muss dasselbe Release
@@ -97,12 +107,14 @@ Keine Einstellung, Umgebungsvariable oder Oberfläche schaltet diese Prüfung ab
 Der Client enthält nur öffentliche Schlüssel (`tools/check_build_config.py` prüft jeden Build darauf).
 
 **Authenticode** (optional): `not_signed`, `present_unverified` und `mixed` blockieren nicht; `invalid` blockiert die
-Installation in der App. Ist die laufende AKENO.exe selbst signiert, muss die neue denselben Signierer haben
-(bestehende Regel, unverändert).
+Installation in der App. Nennt das signierte Paket einen verifizierten Herausgeber (`publisher_certificate_sha256`),
+muss die neue AKENO.exe gültig mit **genau diesem Zertifikat** signiert sein (SHA-256 des Signer-Zertifikats, wie
+`osslsigncode -require-leaf-hash` im Backend). Ist die laufende AKENO.exe selbst signiert, muss die neue denselben
+Signierer haben (bestehende Regel, unverändert).
 
 **Nicht installierbar in der App, aber angezeigt** (mit Hinweis auf die Download-Seite): `install_mode =
-manual-installer`, ein anderes `updater_protocol`, `authenticode.status = invalid` des Pakets, installierte Version
-kleiner als `minimum_supported_version`.
+manual-installer`, `authenticode.status = invalid` des Pakets, installierte Version kleiner als
+`minimum_supported_version`. Ein anderes `updater_protocol` als 2 lehnt schon der Parser ab (wie das Backend).
 
 `unattended_install_allowed: true` wird akzeptiert, ändert aber nichts: AKENO fragt immer.
 
@@ -179,6 +191,9 @@ erfüllt die Anforderungen des Auftrags; ein Patch kann danach dagegen geprüft 
 | Ungültige/fremde Signatur, Lizenzschlüssel | nur eingebaute Release-Schlüssel | dito, `test_license_keys_never_verify_v2_releases`, E2E |
 | Manipuliertes ZIP / Installer | SHA-256 + Größe signiert, Prüfung beim Streamen, Verwerfen | `test_a_manipulated_package_is_never_staged`, E2E |
 | ZIP-Slip, Pfad-Traversal, Laufwerksbuchstaben, ADS, Gerätenamen, Punkte/Leerzeichen am Ende | `staging.safe_name` | `test_unsafe_names_are_refused` (15 Fälle) |
+| Namen, die das Backend nie veröffentlicht (Backslash, nicht NFC, NUL) | `staging.safe_name` / `_kind` | `test_names_the_release_manager_refuses_are_refused` |
+| Paketinhalt ≠ signierte Beschreibung | `content_sha256`, `file_count`, entpackte Größe exakt verglichen, vor jeder weiteren Verwendung | `test_content_sha256_vectors` (5 offizielle Vektoren), `test_staging_refuses_a_package_that_differs_from_its_signed_contents`, E2E |
+| Anderes Code-Signing-Zertifikat als signiert | Leaf-SHA-256 = `publisher_certificate_sha256` | `test_a_signed_publisher_pin_is_required_of_the_new_program`, `test_the_leaf_certificate_hash_is_the_one_windows_reports` |
 | Symlinks, Junctions, Sonderdateien, verschlüsselte Einträge | Entpacken lehnt ab; Staging-Pfad und Baum ohne Reparse-Points | `test_links_*` |
 | ZIP-Bombe, falsch deklarierte Größen | signierte Grenzen, echte Bytes gezählt | `test_zip_bombs_and_lying_archives_are_stopped` |
 | Beschädigtes Archiv | CRC/Format → Ablehnung | `test_a_damaged_archive_is_refused` |

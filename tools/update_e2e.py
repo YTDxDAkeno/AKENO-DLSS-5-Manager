@@ -109,7 +109,8 @@ def certificates(folder: Path) -> tuple[Path, Path]:
 
 
 class ReleaseServer:
-    """``GET /api/v1/releases/stable`` and ``/downloads/<file>`` on https://(api.)akeno.online (this PC)."""
+    """``GET /api/v1/releases/stable`` and ``/downloads/<version>/AKENO-Portable.zip`` (the Release Manager's own
+    paths) on https://(api.)akeno.online (this PC)."""
 
     def __init__(self, chain: Path, files: Path):
         self.files = files
@@ -121,8 +122,9 @@ class ReleaseServer:
             def do_GET(self):
                 if self.path == "/api/v1/releases/stable" and server.release is not None:
                     return self._send(200, server.release, "application/json")
-                if self.path.startswith("/downloads/"):
-                    name = self.path.rsplit("/", 1)[-1]
+                parts = self.path.split("/")
+                if len(parts) == 4 and parts[1] == "downloads" and parts[3] == "AKENO-Portable.zip":
+                    name = f"AKENO-Gaming-Suite-{parts[2]}-portable-x64.zip"
                     if name in server.tamper:
                         return self._send(200, server.tamper[name])
                     path = server.files / name
@@ -193,7 +195,8 @@ def signed_release(key, version: str, sequence: int, pkg: Path, portable_changes
         infos = [i for i in z.infolist() if not i.is_dir()]
     issued = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=5)
     auth = {"verified": False, "status": "not_signed", "publisher_certificate_sha256": None}
-    portable = {"download_url": f"https://akeno.online/downloads/{pkg.name}", "size_bytes": len(data),
+    portable = {"download_url": f"https://akeno.online/downloads/{version}/AKENO-Portable.zip",
+                "size_bytes": len(data),
                 "sha256": hashlib.sha256(data).hexdigest(), "authenticode": auth, "pe_files": 1,
                 "verified_pe_files": 0, "file_count": len(infos),
                 "uncompressed_size_bytes": sum(i.file_size for i in infos), "content_sha256": content_aggregate(pkg)}
@@ -204,7 +207,7 @@ def signed_release(key, version: str, sequence: int, pkg: Path, portable_changes
          "release_date": issued.date().isoformat(), "published_at": iso(issued), "issued_at": iso(issued),
          "expires_at": iso(issued + timedelta(days=7)), "sequence": sequence, "request_id": hashlib.md5(
              f"{version}{sequence}".encode()).hexdigest(),
-         "download_url": f"https://akeno.online/downloads/AKENO-Gaming-Suite-{version}-Setup-x64.exe",
+         "download_url": f"https://akeno.online/downloads/{version}/AKENO-Setup.exe",
          "size_bytes": 1, "sha256": "0" * 64, "authenticode": auth, "minimum_supported_version": None,
          "unattended_install_allowed": False, "install_mode": "portable-directory-swap", "portable": portable}
     payload = json.dumps(m, sort_keys=True, separators=(",", ":"))

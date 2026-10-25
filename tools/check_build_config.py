@@ -11,7 +11,9 @@ PyInstaller folder or a portable ZIP and fails when:
 - a key is used both as license key and as release key (they must be separate key pairs);
 - a key entry carries anything besides ``kid`` and ``public_key``, or a data file holds private key material;
 - the release signing seed (environment variable ``AKENO_RELEASE_SIGNING_KEY``, when the CI job has it) appears
-  anywhere in the build, as text or as raw bytes.
+  anywhere in the build, as text or as raw bytes;
+- a test-only key or test-signed release is in the build (the public contract fixture of the Release Manager,
+  ``tests/fixtures/api_contract``): its key id among the trusted keys, its public key or the fixture's text anywhere.
 
 Only public values are printed: addresses and key ids.
 """
@@ -34,6 +36,9 @@ from akeno import distribution  # noqa: E402
 
 DATA_FILES = ("licensing.json", "release-keys.json", "distribution.json")
 PRIVATE_MARKERS = (b"PRIVATE KEY-----", b"\"private_key\"", b"\"seed\"", b"\"signing_key\"", b"\"secret\"")
+# keys and signatures that exist only for tests; a shipped build never trusts or carries them
+TEST_ONLY_KEYS = {"4f0b6765af0b6fa0": "E-vFWNXW473DNvBjrDmgPXOLihAVEpjErKDUx9kZuuo"}   # contract fixture key
+TEST_ONLY_MARKERS = tuple(v.encode() for v in TEST_ONLY_KEYS.values()) + (b"Never publish this fixture",)
 
 
 def kid_of(public: str) -> str:
@@ -102,6 +107,8 @@ def check(path: Path, server: str, website: str, signing_seed: str = "") -> tupl
             data[data_file(name)] = content
         if any(n in content for n in needles):
             problems.append(f"{name} contains the release signing key")
+        if any(n in content for n in TEST_ONLY_MARKERS):
+            problems.append(f"{name} contains a test-only key or test-signed release")
     for name in ("licensing.json", "release-keys.json"):
         if name not in data:
             problems.append(f"akeno/data/{name} is missing from the build")
@@ -115,6 +122,8 @@ def check(path: Path, server: str, website: str, signing_seed: str = "") -> tupl
         problems.append(f"website is {lic_website}, expected {website}")
     lic_keys = keys_of(lic, "license keys", problems)
     rel_keys = keys_of(rel, "release keys", problems)
+    for kid in sorted((set(lic_keys) | set(rel_keys)) & set(TEST_ONLY_KEYS)):
+        problems.append(f"the build trusts the test-only key {kid}")
     shared = set(lic_keys.values()) & set(rel_keys.values())
     if shared:
         problems.append("the same public key is used as license key and as release key")
