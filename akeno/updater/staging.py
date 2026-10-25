@@ -11,6 +11,9 @@ could write outside the staging folder or surprise Windows, and stops at the lim
 * two entries that are the same file on Windows (case-insensitive), a file that is also a folder;
 * more files or more bytes than the release states (ZIP bombs), an entry larger than it declares.
 
+The Release Manager's content aggregate (:func:`content_sha256`) is computed from the bytes really unpacked, so
+the caller can compare it with the signed value before anything else uses the files.
+
 What was unpacked is recorded as a content list (relative path → SHA-256 and size). The updater checks the staged
 folder against it before it copies anything, copies exactly the listed files, and checks the copy again before the
 switch, so nothing changed or added between verification and installation reaches the program folder.
@@ -93,6 +96,19 @@ def _kind(info: zipfile.ZipInfo) -> str:
     return "file"
 
 
+def content_sha256(entries: list[dict]) -> str:
+    """The Release Manager's content aggregate of a portable ZIP.
+
+    One record per regular file: ``name`` (the path exactly as stored in the ZIP, top folder included, not
+    normalised), ``sha256`` (of the decompressed bytes) and ``size_bytes`` (the real decompressed size). The records
+    are sorted by name in Unicode code point order and encoded as compact JSON (UTF-8, ``ensure_ascii=False``, keys
+    sorted, no BOM, no trailing newline); the aggregate is the SHA-256 of those bytes."""
+    records = sorted(({"name": e["name"], "sha256": e["sha256"], "size_bytes": e["size_bytes"]} for e in entries),
+                     key=lambda r: r["name"])
+    data = json.dumps(records, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
+
+
 def is_pe(path: Path) -> bool:
     """A Windows program or library (PE image): ``MZ`` header with a ``PE\\0\\0`` signature."""
     try:
@@ -117,6 +133,7 @@ def extract(archive: Path, dest: Path, max_files: int = HARD_FILES, max_bytes: i
     max_files, max_bytes = min(int(max_files), HARD_FILES), min(int(max_bytes), HARD_BYTES)
     dest.mkdir(parents=True, exist_ok=False)
     files: dict[str, dict] = {}
+    entries: list[dict] = []                  # per regular file, under its name as stored (content_sha256)
     folded: dict[str, str] = {}
     dirs: set[str] = set()
     written = 0
@@ -174,7 +191,8 @@ def extract(archive: Path, dest: Path, max_files: int = HARD_FILES, max_bytes: i
             except (zipfile.BadZipFile, zlib.error, EOFError) as exc:
                 raise StagingError(f"the package is damaged ({info.filename}: {exc})") from exc
             files[name.as_posix()] = {"sha256": h.hexdigest(), "size": size}
-    return {"files": files, "file_count": len(files), "bytes": written}
+            entries.append({"name": info.filename, "sha256": h.hexdigest(), "size_bytes": size})
+    return {"files": files, "file_count": len(files), "bytes": written, "content_sha256": content_sha256(entries)}
 
 
 def program_root(dest: Path) -> Path:

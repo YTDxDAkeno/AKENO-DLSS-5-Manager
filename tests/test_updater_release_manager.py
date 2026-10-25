@@ -255,3 +255,10 @@ def test_nothing_published_yet_means_up_to_date(tmp_path, signing, monkeypatch):
         service.fetch_json(f"{API}/releases/stable", RM.trusted)
     svc = UpdateService(None, dist=RM, keys=keys, version="3.0.0", folder=tmp_path)
     assert svc.check() is None and svc.state().get("last_check")
+
+
+def test_schema_version_must_be_a_json_integer(signing):
+    key, keys = signing
+    for bad in (True, 1.0, "1"):          # True == 1 and 1.0 == 1 in Python, but not in JSON
+        with pytest.raises(manifest.ManifestError, match="unknown format"):
+            manifest.parse_api(envelope(key, fields(schema_version=bad)), keys, RM)

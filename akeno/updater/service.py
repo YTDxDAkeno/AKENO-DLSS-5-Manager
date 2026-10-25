@@ -320,6 +320,16 @@ class UpdateService:
         try:
             content = staging.extract(archive, dest, portable.file_count if portable else staging.HARD_FILES,
                                       portable.uncompressed_size if portable else staging.HARD_BYTES, progress)
+            if portable is not None:
+                # the real package against its signed description, before anything else uses the files
+                if content["file_count"] != portable.file_count:
+                    raise staging.StagingError(f"the package has {content['file_count']} files, the signed release "
+                                               f"says {portable.file_count}")
+                if content["bytes"] != portable.uncompressed_size:
+                    raise staging.StagingError(f"the package unpacks to {content['bytes']} bytes, the signed release "
+                                               f"says {portable.uncompressed_size}")
+                if content["content_sha256"] != portable.content_sha256:
+                    raise staging.StagingError("the package contents do not match the signed content_sha256")
             root = staging.program_root(dest)
             content = staging.relative_to_root(content, root.relative_to(dest).as_posix() if root != dest else "")
         except staging.StagingError as exc:
@@ -330,7 +340,10 @@ class UpdateService:
             raise UpdateError("the package has no AKENO.exe")
         content["pe_files"] = staging.pe_count(root, content)
         if portable is not None:
-            content["release"] = {"pe_files": portable.pe_files, "file_count": portable.file_count,
+            # pe_files and verified_pe_files are the server's own count and Authenticode verdict; the PE count here
+            # (MZ + PE header) is shown next to it, not enforced (content_sha256 already binds every byte)
+            content["release"] = {"pe_files": portable.pe_files, "verified_pe_files": portable.verified_pe_files,
+                                  "file_count": portable.file_count,
                                   "uncompressed_size": portable.uncompressed_size,
                                   "content_sha256": portable.content_sha256}
         staging.save(content, self.content_path(release))

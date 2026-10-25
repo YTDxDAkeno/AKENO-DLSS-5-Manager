@@ -207,10 +207,13 @@ def parse_api(doc, keys: dict, dist=None, now: float | None = None) -> Release:
     trusted = dist.trusted if dist is not None else _https_github
     if not keys:
         raise ManifestError("this build has no release verification key")
-    if isinstance(doc, dict) and doc.get("schema_version") == 2:
+    schema = doc.get("schema_version") if isinstance(doc, dict) else None
+    if type(schema) is not int:                       # a JSON integer: never true (== 1) or 2.0 (== 2)
+        raise ManifestError("not an AKENO release (unknown format)")
+    if schema == 2:
         from akeno.updater import api_v2                  # the production format since 2026-10-25
         return api_v2.parse(doc, keys, trusted, now)
-    if not isinstance(doc, dict) or doc.get("schema_version") != API_SCHEMA:
+    if schema != API_SCHEMA:
         raise ManifestError("not an AKENO release (unknown format)")
     sig = doc.get("signature")
     payload = doc.get("signed_payload")

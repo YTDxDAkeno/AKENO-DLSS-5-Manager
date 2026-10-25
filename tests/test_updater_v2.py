@@ -73,6 +73,23 @@ def portable_zip(tmp_path: Path, version: str, body: str | None = None, top: str
     return out
 
 
+def reference_content_sha256(pkg: Path) -> str:
+    """An independent second implementation of the Release Manager's content aggregate (not the client's code):
+    records of name as stored, SHA-256 and size of the decompressed bytes, sorted by code point, compact JSON."""
+    records = []
+    with zipfile.ZipFile(pkg) as z:
+        for info in z.infolist():
+            if info.filename.endswith("/"):
+                continue
+            data = z.read(info)
+            records.append({"name": info.filename, "sha256": hashlib.sha256(data).hexdigest(),
+                            "size_bytes": len(data)})
+    records.sort(key=lambda r: [ord(c) for c in r["name"]])
+    text = "[" + ",".join('{"name":%s,"sha256":"%s","size_bytes":%d}' % (
+        json.dumps(r["name"], ensure_ascii=False), r["sha256"], r["size_bytes"]) for r in records) + "]"
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def portable_info(pkg: Path, **kw) -> dict:
     data = pkg.read_bytes()
     with zipfile.ZipFile(pkg) as z:
@@ -81,7 +98,8 @@ def portable_info(pkg: Path, **kw) -> dict:
            "sha256": hashlib.sha256(data).hexdigest(),
            "authenticode": {"verified": False, "status": "not_signed", "publisher_certificate_sha256": None},
            "pe_files": 1, "verified_pe_files": 0, "file_count": len(files),
-           "uncompressed_size_bytes": sum(i.file_size for i in files), "content_sha256": "ab" * 32}
+           "uncompressed_size_bytes": sum(i.file_size for i in files),
+           "content_sha256": reference_content_sha256(pkg)}
     out.update(kw)
     return out
 
@@ -89,8 +107,8 @@ def portable_info(pkg: Path, **kw) -> dict:
 def fields(version: str = "3.1.0", sequence: int = 7, pkg: Path | None = None, **kw) -> dict:
     out = {"schema_version": 2, "updater_protocol": 2, "product": "akeno-gaming-suite", "channel": "stable",
            "version": version, "release_notes": "Faster scans.", "release_date": "2026-11-02",
-           "published_at": iso(NOW), "issued_at": iso(NOW - timedelta(hours=1)),
-           "expires_at": iso(NOW + timedelta(days=30)), "sequence": sequence, "request_id": "0123456789abcdef" * 2,
+           "published_at": iso(NOW - timedelta(hours=1)), "issued_at": iso(NOW - timedelta(hours=1)),
+           "expires_at": iso(NOW + timedelta(days=29)), "sequence": sequence, "request_id": "0123456789abcdef" * 2,
            "platform": "windows-x64",
            "download_url": f"https://akeno.online/downloads/AKENO-Gaming-Suite-{version}-Setup-x64.exe",
            "size_bytes": 123456789, "sha256": "cd" * 32,
@@ -99,6 +117,8 @@ def fields(version: str = "3.1.0", sequence: int = 7, pkg: Path | None = None, *
            "install_mode": "portable-directory-swap" if pkg else "manual-installer",
            "portable": portable_info(pkg) if pkg else None}
     out.update(kw)
+    if "issued_at" in kw and "published_at" not in kw:
+        out["published_at"] = out["issued_at"]              # the backend requires both to be the same instant
     return out
 
 
@@ -188,10 +208,10 @@ def test_license_keys_never_verify_v2_releases(signing):
 
 def test_expired_information_is_refused_and_a_clock_set_back_does_not_help(signing, tmp_path):
     key, keys = signing
-    old = fields(issued_at=iso(NOW - timedelta(days=40)), expires_at=iso(NOW - timedelta(days=10)))
+    old = fields(issued_at=iso(NOW - timedelta(days=20)), expires_at=iso(NOW - timedelta(days=1)))
     with pytest.raises(manifest.ManifestError, match="expired"):
         parse(envelope(key, old), keys)
-    with pytest.raises(manifest.ManifestError, match="before it was issued"):
+    with pytest.raises(manifest.ManifestError, match="not between one hour and thirty days"):
         parse(envelope(key, fields(expires_at=iso(NOW - timedelta(days=2)))), keys)
     with pytest.raises(manifest.ManifestError, match="time zone"):
         parse(envelope(key, fields(expires_at="2026-12-01T10:00:00")), keys)
@@ -206,6 +226,37 @@ def test_expired_information_is_refused_and_a_clock_set_back_does_not_help(signi
     docs["doc"] = envelope(key, stale)
     with pytest.raises(manifest.ManifestError, match="expired"):
         svc.check()
+
+
+@pytest.mark.parametrize("change,match", [
+    # issued at most five minutes ahead
+    (dict(issued_at=iso(NOW + timedelta(minutes=5)), expires_at=iso(NOW + timedelta(days=10))), None),
+    (dict(issued_at=iso(NOW + timedelta(minutes=5, seconds=1)), expires_at=iso(NOW + timedelta(days=10))),
+     "issued in the future"),
+    # validity between one hour and thirty days, both ends included
+    (dict(issued_at=iso(NOW - timedelta(minutes=30)), expires_at=iso(NOW + timedelta(minutes=30))), None),
+    (dict(issued_at=iso(NOW - timedelta(minutes=30)), expires_at=iso(NOW + timedelta(minutes=29, seconds=59))),
+     "between one hour and thirty days"),
+    (dict(issued_at=iso(NOW - timedelta(days=1)), expires_at=iso(NOW + timedelta(days=29))), None),
+    (dict(issued_at=iso(NOW - timedelta(days=1)), expires_at=iso(NOW + timedelta(days=29, seconds=1))),
+     "between one hour and thirty days"),
+    # expires strictly after now
+    (dict(issued_at=iso(NOW - timedelta(hours=2)), expires_at=iso(NOW)), "expired"),
+    (dict(issued_at=iso(NOW - timedelta(hours=2)), expires_at=iso(NOW + timedelta(seconds=1))), None),
+    # published_at is issued_at; UTC only
+    (dict(published_at=iso(NOW)), "published_at differs from issued_at"),
+    (dict(issued_at="2026-11-02T10:00:00+01:00", published_at="2026-11-02T10:00:00+01:00",
+          expires_at=iso(NOW + timedelta(days=2))), "not in UTC"),
+    (dict(published_at="yesterday"), "not a time"),
+])
+def test_time_limits_match_the_backend(signing, change, match):
+    key, keys = signing
+    doc = envelope(key, fields(**change))
+    if match is None:
+        assert parse(doc, keys).release == "3.1.0"
+    else:
+        with pytest.raises(manifest.ManifestError, match=match):
+            parse(doc, keys)
 
 
 def test_sequence_replays_and_downgrades_are_refused(signing, tmp_path):
@@ -878,7 +929,7 @@ def test_install_asks_first_then_starts_the_updater(page, qtbot, monkeypatch):
     qtbot.waitUntil(lambda: bool(launched), timeout=10000)
     plan = launched[0]
     assert plan["version"] == "3.1.0" and Path(plan["content"]).is_file() and stopped and quit_calls
-    assert "files unpacked within the signed limits" in rows_of(page.verify_kv)["Package contents"]
+    assert "content_sha256 match the signed values" in rows_of(page.verify_kv)["Package contents"]
 
 
 def test_page_reports_a_refused_release(page, qtbot, signing):
@@ -917,9 +968,10 @@ def test_release_tool_describes_and_verifies_against_the_built_files(tmp_path, s
     assert release_v2.main(["describe", str(pkg), str(exe)]) == 0
     described = json.loads(capsys.readouterr().out)
     assert described["portable"]["file_count"] == 3 and described["portable"]["pe_files"] == 1
+    assert described["portable"]["content_sha256"] == reference_content_sha256(pkg)
     assert described["installer"]["sha256"] == hashlib.sha256(exe.read_bytes()).hexdigest()
     now = datetime.now(timezone.utc)
-    signed = fields(pkg=pkg, issued_at=iso(now - timedelta(hours=1)), expires_at=iso(now + timedelta(days=30)),
+    signed = fields(pkg=pkg, issued_at=iso(now - timedelta(hours=1)), expires_at=iso(now + timedelta(days=29)),
                     sha256=described["installer"]["sha256"], size_bytes=described["installer"]["size_bytes"])
     doc = tmp_path / "release.json"
     doc.write_text(json.dumps(envelope(key, signed)))
@@ -1005,3 +1057,147 @@ def test_junctions_in_a_staged_folder_and_on_the_way_are_refused_on_windows(tmp_
     _winapi.CreateJunction(str(tmp_path / "elsewhere"), str(tmp_path / "staging-junction"))
     with pytest.raises(staging.StagingError, match="link or junction"):
         staging.no_links_on_the_way(tmp_path / "staging-junction" / "x", tmp_path)
+
+
+# -- the backend contract: content_sha256, strict fields, types --------------------------------------------------------
+def zip_of(path: Path, entries: list[tuple[str, bytes]]) -> Path:
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, data in entries:
+            z.writestr(name, data)
+    return path
+
+
+def test_content_sha256_encoding_is_pinned(tmp_path):
+    """A hand-written vector: the exact JSON bytes the aggregate hashes (compact, keys sorted, no newline)."""
+    pkg = zip_of(tmp_path / "v.zip", [("AKENO/b.txt", b"x"), ("AKENO/", b"")])
+    text = ('[{"name":"AKENO/b.txt","sha256":"%s","size_bytes":1}]' % hashlib.sha256(b"x").hexdigest())
+    expected = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    assert staging.extract(pkg, tmp_path / "out")["content_sha256"] == expected == reference_content_sha256(pkg)
+
+
+def test_content_sha256_unicode_names_order_and_top_folder(tmp_path):
+    files = [("AKENO/zebra.txt", b"1"), ("AKENO/Zulu.txt", b"22"), ("AKENO/ä.txt", b"333"), ("AKENO/alpha.txt", b""),
+             ("AKENO/日本/語.txt", "ü".encode()), ("AKENO/_internal/lib.bin", bytes(range(256)))]
+    forward = zip_of(tmp_path / "f.zip", files)
+    backward = zip_of(tmp_path / "b.zip", list(reversed(files)))
+    a = staging.extract(forward, tmp_path / "o1")["content_sha256"]
+    b = staging.extract(backward, tmp_path / "o2")["content_sha256"]
+    assert a == b == reference_content_sha256(forward), "entry order does not matter; code point order does"
+    flat = zip_of(tmp_path / "flat.zip", [(n[len("AKENO/"):], d) for n, d in files])
+    assert staging.extract(flat, tmp_path / "o3")["content_sha256"] != a, "the top folder is part of each name"
+    records = sorted(n for n, _ in files)        # code point order: upper case, lower case, then ä, then CJK
+    assert records.index("AKENO/Zulu.txt") < records.index("AKENO/alpha.txt") < records.index("AKENO/zebra.txt") \
+        < records.index("AKENO/ä.txt") < records.index("AKENO/日本/語.txt")
+
+
+@pytest.mark.skip(reason="the five hash vectors of AKENO_3_0_API_CONTRACT_BUNDLE.zip were not provided to this "
+                         "session; add them under tests/fixtures/api_contract/ and remove this skip")
+def test_codex_hash_vectors():
+    pass
+
+
+@pytest.mark.parametrize("change,match", [
+    (lambda p, info: dict(info, content_sha256="0" * 64), "do not match the signed content_sha256"),
+    (lambda p, info: dict(info, file_count=info["file_count"] + 1), "has 3 files, the signed release says 4"),
+    (lambda p, info: dict(info, uncompressed_size_bytes=info["uncompressed_size_bytes"] + 1), "unpacks to"),
+    (lambda p, info: dict(info, uncompressed_size_bytes=info["uncompressed_size_bytes"] - 1),
+     "more data than the release states"),
+])
+def test_staging_compares_the_real_package_with_its_signed_description(tmp_path, signing, change, match):
+    key, keys = signing
+    pkg = portable_zip(tmp_path, "3.1.0")
+    svc = service_for(tmp_path, key, keys, pkg, portable=change(pkg, portable_info(pkg)))
+    with pytest.raises(UpdateError, match=match):
+        svc.prepare(svc.check())
+    assert not (tmp_path / "updates" / "staging" / "3.1.0").exists(), "nothing staged is left behind"
+
+
+def test_a_correct_package_with_its_aggregate_is_staged(tmp_path, signing):
+    key, keys = signing
+    pkg = portable_zip(tmp_path, "3.1.0")
+    svc = service_for(tmp_path, key, keys, pkg)
+    plan = svc.prepare(svc.check())
+    assert staging.load(plan["content"])["content_sha256"] == reference_content_sha256(pkg)
+
+
+def _signed_with(key, signed, outer=None):
+    return envelope(key, signed, outer=outer)
+
+
+@pytest.mark.parametrize("mutate,match", [
+    (lambda m: m.update(extra_field=1), "does not allow: extra_field"),
+    (lambda m: m["portable"].update(note="x"), "portable package information has fields"),
+    (lambda m: m["portable"].pop("verified_pe_files"), "portable package information has no verified_pe_files"),
+    (lambda m: m["authenticode"].update(signer="x"), "code signature information of the installer has fields"),
+    (lambda m: m.update(schema_version=2.0), "format"),
+    (lambda m: m.update(schema_version=True), "format"),          # True == 1 in Python: not schema 1 either
+    (lambda m: m.update(updater_protocol=2.0), "updater_protocol"),
+    (lambda m: m.update(sequence=7.0), "sequence"),
+    (lambda m: m.update(sequence=True), "sequence"),
+    (lambda m: m.update(size_bytes=True), "size_bytes"),
+    (lambda m: m["portable"].update(file_count=3.0), "file_count"),
+    (lambda m: m.update(request_id="ABC"), "request_id"),
+    (lambda m: m.update(release_date="2026-13-40"), "release_date"),
+    (lambda m: m.update(release_date="02.11.2026"), "release_date"),
+    (lambda m: m.update(release_notes=""), "release_notes"),
+    (lambda m: m.update(release_notes="x" * 8001), "release_notes"),
+    (lambda m: m.update(minimum_supported_version="3.0"), "minimum"),
+    (lambda m: m.update(authenticode={"verified": True, "status": "not_signed", "publisher_certificate_sha256": None}),
+     "contradicts itself"),
+    (lambda m: m.update(authenticode={"verified": False, "status": "verified",
+                                      "publisher_certificate_sha256": "ab" * 32}), "contradicts itself"),
+    (lambda m: m["portable"].update(authenticode={"verified": True, "status": "invalid",
+                                                  "publisher_certificate_sha256": None}), "contradicts itself"),
+    (lambda m: m.update(authenticode={"verified": False, "status": "unknown"}), "code signature information"),
+    (lambda m: m.update(authenticode={"verified": False, "status": "not_signed",
+                                      "publisher_certificate_sha256": "XYZ"}), "code signature information"),
+    (lambda m: m.update(authenticode=None), "code signature information"),
+])
+def test_signed_fields_follow_the_backend_schema_exactly(signing, tmp_path, mutate, match):
+    key, keys = signing
+    m = fields(pkg=portable_zip(tmp_path, "3.1.0"))
+    m = json.loads(json.dumps(m))
+    mutate(m)
+    with pytest.raises(manifest.ManifestError, match=match):
+        parse(envelope(key, m), keys)
+
+
+def test_the_outer_envelope_is_strict_too(signing, tmp_path):
+    key, keys = signing
+    good = fields(pkg=portable_zip(tmp_path, "3.1.0"))
+    doc = envelope(key, good)
+    doc["unexpected"] = True
+    with pytest.raises(manifest.ManifestError, match="release has fields the release format does not allow"):
+        parse(doc, keys)
+    doc = envelope(key, good)
+    doc["schema_version"] = 2.0
+    with pytest.raises(manifest.ManifestError, match="unknown format"):
+        parse(doc, keys)
+    doc = envelope(key, good)
+    doc["signature"]["extra"] = "x"
+    with pytest.raises(manifest.ManifestError, match="release signature has fields"):
+        parse(doc, keys)
+    doc = envelope(key, good, outer=dict(good, sequence=7.0))           # outer 7.0 vs signed 7
+    with pytest.raises(manifest.ManifestError, match="sequence differs from the signed value"):
+        parse(doc, keys)
+    doc = envelope(key, good)
+    doc["signature"]["key_id"] = "D6139235B220A4AA"
+    with pytest.raises(manifest.ManifestError, match="signature is not readable"):
+        parse(doc, keys)
+
+
+def test_authenticode_is_optional_but_never_misread(signing, tmp_path, monkeypatch):
+    key, keys = signing
+    pkg = portable_zip(tmp_path, "3.1.0")
+    monkeypatch.setattr(service, "frozen", lambda: True)
+    monkeypatch.setattr(service, "install_dir", lambda: tmp_path)
+    svc = UpdateService(None, dist=RM, keys=keys, version="3.0.0", folder=tmp_path / "u")
+    signed = {"verified": True, "status": "verified", "publisher_certificate_sha256": "cd" * 32}
+    release = parse(envelope(key, fields(pkg=pkg, authenticode=signed,
+                                         portable=portable_info(pkg, authenticode=signed, verified_pe_files=1))), keys)
+    assert release.publisher_sha256 == "cd" * 32 and svc.can_install(release)[0]
+    unsigned = parse(envelope(key, fields(pkg=pkg)), keys)
+    assert unsigned.v2.portable.authenticode.status == "not_signed" and svc.can_install(unsigned)[0]
+    invalid = {"verified": False, "status": "invalid", "publisher_certificate_sha256": None}
+    bad = parse(envelope(key, fields(pkg=pkg, portable=portable_info(pkg, authenticode=invalid))), keys)
+    assert not svc.can_install(bad)[0], "an invalid code signature is never treated as valid"

@@ -472,8 +472,12 @@ class UpdatesPage(QWidget):
             self.progress.setRange(0, 1)
             self.progress.setValue(1)
             self.btn_cancel.setVisible(False)
-            self._verify("contents", t("{n} files unpacked within the signed limits and checked",
-                                       n=self._file_count(release)))
+            n = self._file_count(release)
+            if getattr(release, "v2", None) is not None:     # compared in UpdateService.stage
+                self._verify("contents", t("{n} files unpacked; count, size and content_sha256 match the signed "
+                                           "values", n=n))
+            else:                                             # older channel files carry no content aggregate
+                self._verify("contents", t("{n} files unpacked and checked", n=n))
             self.phase.setText(t("Ready. AKENO closes now, installs {v} and starts again.", v=release.release))
             QTimer.singleShot(1200, lambda: self._launch(plan))
 

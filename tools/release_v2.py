@@ -11,8 +11,7 @@
 
 Read-only and offline: no network, no signing, no private key. ``describe`` also unpacks the portable ZIP with the
 app's own rules (``akeno/updater/staging.py``), so a package the updater would refuse is found before it is signed.
-``content_sha256`` is not computed here: how the server derives it is not documented in this repository (see
-``docs/AKENO_3_0_UPDATER_V2.md``); compare it with the value the admin panel shows.
+``content_sha256`` is computed exactly as the updater checks it (``akeno/updater/staging.py: content_sha256``).
 """
 
 from __future__ import annotations
@@ -46,14 +45,14 @@ def describe_zip(path: Path) -> dict:
         content = staging.extract(path, Path(tmp) / "x", api_v2.MAX_FILES, api_v2.MAX_UNPACKED)
         root = staging.program_root(Path(tmp) / "x")
         prefix = root.relative_to(Path(tmp) / "x").as_posix() if root != Path(tmp) / "x" else ""
-        content = staging.relative_to_root(content, prefix)
+        content = staging.relative_to_root(content, prefix)          # content_sha256 stays the ZIP's own
         if not (root / "AKENO.exe").is_file():
             raise SystemExit(f"{path.name}: no AKENO.exe in the package: the updater would refuse it")
         pe = staging.pe_count(root, content)
     return {"file": path.name, "size_bytes": path.stat().st_size, "sha256": sha256(path),
             "file_count": content["file_count"], "uncompressed_size_bytes": content["bytes"], "pe_files": pe,
             "top_folder": prefix or "(none)", "accepted_by_the_updater": True,
-            "content_sha256": "not computed here (server algorithm not documented in this repository)"}
+            "content_sha256": content["content_sha256"]}
 
 
 def describe(args) -> int:
@@ -125,10 +124,11 @@ def verify(args) -> int:
             info = describe_zip(path)
             for name, mine, signed in (("file_count", info["file_count"], d.portable.file_count),
                                        ("uncompressed_size_bytes", info["uncompressed_size_bytes"],
-                                        d.portable.uncompressed_size)):
-                fits = mine <= signed
-                print(f"[{'OK  ' if fits else 'FAIL'}] {name}: package {mine}, signed limit {signed}")
-                ok &= fits
+                                        d.portable.uncompressed_size),
+                                       ("content_sha256", info["content_sha256"], d.portable.content_sha256)):
+                same = mine == signed                 # the updater compares these exactly
+                print(f"[{'OK  ' if same else 'FAIL'}] {name}: package {mine}, signed {signed}")
+                ok &= same
             print(f"[INFO] pe_files: package {info['pe_files']}, release {d.portable.pe_files} "
                   f"({d.portable.verified_pe_files} code-signed, status {d.portable.authenticode.status})")
     return 0 if ok else 1

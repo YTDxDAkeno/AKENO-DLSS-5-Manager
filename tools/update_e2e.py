@@ -171,24 +171,42 @@ def package(dist: Path, out: Path, version: str, drop: tuple[str, ...] = (), ext
     return path
 
 
-def signed_release(key, version: str, sequence: int, pkg: Path) -> bytes:
+def content_aggregate(pkg: Path) -> str:
+    """content_sha256 as the Release Manager defines it, written here independently of the client's code: per
+    regular file the name as stored, SHA-256 and size of the decompressed bytes; sorted by code point; compact
+    JSON with sorted keys, UTF-8, not ASCII-escaped, no trailing newline."""
+    records = []
+    with zipfile.ZipFile(pkg) as z:
+        for info in z.infolist():
+            if not info.is_dir():
+                data = z.read(info)
+                records.append({"name": info.filename, "sha256": hashlib.sha256(data).hexdigest(),
+                                "size_bytes": len(data)})
+    records.sort(key=lambda r: r["name"])
+    return hashlib.sha256(json.dumps(records, ensure_ascii=False, separators=(",", ":"),
+                                     sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def signed_release(key, version: str, sequence: int, pkg: Path, portable_changes: dict | None = None) -> bytes:
     data = pkg.read_bytes()
     with zipfile.ZipFile(pkg) as z:
         infos = [i for i in z.infolist() if not i.is_dir()]
-    now = datetime.now(timezone.utc)
+    issued = datetime.now(timezone.utc).replace(microsecond=0) - timedelta(minutes=5)
     auth = {"verified": False, "status": "not_signed", "publisher_certificate_sha256": None}
+    portable = {"download_url": f"https://akeno.online/downloads/{pkg.name}", "size_bytes": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(), "authenticode": auth, "pe_files": 1,
+                "verified_pe_files": 0, "file_count": len(infos),
+                "uncompressed_size_bytes": sum(i.file_size for i in infos), "content_sha256": content_aggregate(pkg)}
+    for name, change in (portable_changes or {}).items():      # a value, or a function of the real value
+        portable[name] = change(portable[name]) if callable(change) else change
     m = {"schema_version": 2, "updater_protocol": 2, "product": "akeno-gaming-suite", "channel": "stable",
          "platform": "windows-x64", "version": version, "release_notes": f"AKENO {version} (update test)",
-         "release_date": now.date().isoformat(), "published_at": iso(now), "issued_at": iso(now - timedelta(minutes=5)),
-         "expires_at": iso(now + timedelta(days=7)), "sequence": sequence, "request_id": hashlib.md5(
+         "release_date": issued.date().isoformat(), "published_at": iso(issued), "issued_at": iso(issued),
+         "expires_at": iso(issued + timedelta(days=7)), "sequence": sequence, "request_id": hashlib.md5(
              f"{version}{sequence}".encode()).hexdigest(),
          "download_url": f"https://akeno.online/downloads/AKENO-Gaming-Suite-{version}-Setup-x64.exe",
          "size_bytes": 1, "sha256": "0" * 64, "authenticode": auth, "minimum_supported_version": None,
-         "unattended_install_allowed": False, "install_mode": "portable-directory-swap",
-         "portable": {"download_url": f"https://akeno.online/downloads/{pkg.name}", "size_bytes": len(data),
-                      "sha256": hashlib.sha256(data).hexdigest(), "authenticode": auth, "pe_files": 1,
-                      "verified_pe_files": 0, "file_count": len(infos),
-                      "uncompressed_size_bytes": sum(i.file_size for i in infos), "content_sha256": "0" * 64}}
+         "unattended_install_allowed": False, "install_mode": "portable-directory-swap", "portable": portable}
     payload = json.dumps(m, sort_keys=True, separators=(",", ":"))
     sig = base64.urlsafe_b64encode(key.sign(payload.encode())).rstrip(b"=").decode()
     doc = dict(m, signed_payload=payload, signature={"algorithm": "Ed25519", "key_id": tool.kid_of(tool.public_of(key)),
@@ -346,10 +364,11 @@ class E2E:
         self.rc_exe = hashlib.sha256((self.target / "AKENO.exe").read_bytes()).hexdigest()
         return True
 
-    def publish(self, version: str, dist: Path, drop=(), extra=None, tamper: bool = False) -> Path:
+    def publish(self, version: str, dist: Path, drop=(), extra=None, tamper: bool = False,
+                portable_changes: dict | None = None) -> Path:
         self.sequence += 1
         pkg = package(dist, self.files, version, drop, extra)
-        self.server.release = signed_release(self.key, version, self.sequence, pkg)
+        self.server.release = signed_release(self.key, version, self.sequence, pkg, portable_changes)
         self.server.tamper = {}
         if tamper:                              # one byte in the middle flipped: same size, other content
             data = bytearray(pkg.read_bytes())
@@ -424,7 +443,8 @@ class E2E:
         next_dist = Path(self.args.next)
 
         # 1. 3.0.0 -> 3.0.1 with a second window open
-        self.publish(v(1), next_dist)
+        # a file with a non-ASCII name (stored at the end, out of sorted order): content_sha256 by code point
+        self.publish(v(1), next_dist, extra={"docs/e2e-ünïcode-日本.txt": "AKENO ✓".encode()})
         outcome, ctx = self.apply(v(1))
         ok = r.add(bool(outcome and outcome.get("ok")), f"update {self.rc} → {v(1)} installed and passed its health check",
                    json.dumps(outcome))
@@ -517,6 +537,22 @@ class E2E:
         except Exception as exc:
             r.add("does not trust" in str(exc), "a release signed with another key is refused", str(exc)[:160])
         self.program_is(good, f"program folder still {v(1)}")
+
+        # 5b. correct package, but its signed description does not match it: refused before anything is used
+        for n, changes, expect, what in (
+                (8, {"content_sha256": "0" * 64}, "content_sha256", "a wrong signed content_sha256"),
+                (9, {"file_count": lambda real: real + 2}, "files", "a wrong signed file count"),
+                (10, {"uncompressed_size_bytes": lambda real: real + 1}, "bytes", "a wrong signed unpacked size")):
+            svc = self.service()
+            self.publish(v(n), next_dist, extra={"docs/e2e-ünïcode-日本.txt": "AKENO ✓".encode()},
+                         portable_changes=changes)
+            try:
+                svc.prepare(svc.check())
+                r.add(False, f"{what} is refused")
+            except Exception as exc:
+                r.add(expect in str(exc), f"{what} is refused at staging (test-signed release)", str(exc)[:160])
+            r.add(not (self.folder / "staging" / v(n)).exists(), f"{what}: nothing is left in the staging folder")
+        self.program_is(good, f"program folder still {v(1)} after the refused releases")
 
         # 6. the manual rollback to the kept version
         svc = self.service()
