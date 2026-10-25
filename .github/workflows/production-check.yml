@@ -60,7 +60,7 @@ jobs:
           {
             echo '### Production API contract'
             echo '```'
-            python tools/api_contract.py --api https://api.akeno.online --release-details --release-keys akeno/data/release-keys.json
+            python tools/api_contract.py --api https://api.akeno.online --release-details --schemas --api-version v2 --release-keys akeno/data/release-keys.json
             echo '```'
           } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Release channels on AKENO's own server (when configured)

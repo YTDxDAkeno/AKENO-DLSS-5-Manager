@@ -10,7 +10,10 @@ Read-only: ``GET /api/v1/openapi.json`` and ``GET /api/v1/system/version`` over 
 - ``--release-details``: the published schema of every ``/releases`` operation, and the public answer of each
   ``GET /releases…`` path without parameters (read-only, no credentials);
 - ``--release-keys FILE``: the key ``GET /releases/signing-key`` names must be one of the build's release keys
-  (exit code 1 otherwise), and a published ``/releases/stable`` must verify with the app's own parser.
+  (exit code 1 otherwise), and a published ``/releases/stable`` must verify with the app's own parser;
+- ``--schemas``: every published component schema about releases (portable packages, signatures, manifests) in
+  full, with the API's own description, so serialization rules are read from the server and not guessed;
+- ``--api-version v2`` (repeatable): the same listing for another API version's OpenAPI document, if published.
 
 A server that does not publish its OpenAPI document (docs switched off) is reported as such; it is not an error.
 """
@@ -62,10 +65,29 @@ def resolve(doc: dict, node, depth: int = 0):
     return node
 
 
-def release_details(doc: dict, base: str) -> None:
+SCHEMA_WORDS = re.compile(r"release|portable|package|manifest|signature|signed|update|artifact|channel|authenticode|"
+                          r"rollout|sequence|file|hash|digest", re.I)
+
+
+def dump_schemas(doc: dict) -> None:
+    """The API's description and every release-related component schema, resolved, in full."""
+    info = doc.get("info") or {}
+    if info.get("description"):
+        print("info.description:")
+        for line in str(info["description"]).strip().splitlines():
+            print(f"  {line}")
+    schemas = (doc.get("components") or {}).get("schemas") or {}
+    names = sorted(n for n in schemas if SCHEMA_WORDS.search(n))
+    print(f"Release-related component schemas: {', '.join(names) or 'none'}")
+    for name in names:
+        print(f"=== schema {name}")
+        print(json.dumps(resolve(doc, schemas[name]), indent=1, sort_keys=True))
+
+
+def release_details(doc: dict, base: str, prefix: str = "/api/v1") -> None:
     for path in sorted(doc["paths"]):
-        short = path[len("/api/v1"):] if path.startswith("/api/v1") else path
-        if not short.startswith("/releases"):
+        short = path[len(prefix):] if path.startswith(prefix) else path
+        if not RELEASE_WORDS.search(short):
             continue
         for method, op in sorted(doc["paths"][path].items()):
             if not isinstance(op, dict):
@@ -82,11 +104,13 @@ def release_details(doc: dict, base: str) -> None:
                 content = (resolve(doc, resp).get("content") or {})
                 for ctype, body in content.items():
                     print(f"  {code} {ctype}: {json.dumps(body.get('schema'), sort_keys=True)}")
-            if method.lower() == "get" and "{" not in short:
-                status, body = get_json(f"{base}{short}")
+            if method.lower() == "get" and "{" not in short and not short.startswith("/admin"):
+                # a path published with another version's prefix is called under that prefix
+                url = f"{base[:-len(prefix)]}{path}" if path.startswith("/api/") else f"{base}{short}"
+                status, body = get_json(url)
                 text = json.dumps(body, indent=1, sort_keys=True) if body is not None else "(no JSON)"
                 print(f"  live answer: HTTP {status}")
-                for line in text.splitlines()[:120]:
+                for line in text.splitlines()[:400]:
                     print(f"    {line}")
 
 
@@ -125,12 +149,42 @@ def check_release_keys(base: str, keys_file: Path) -> bool:
     return True
 
 
+def list_version(api: str, version: str, details: bool, schemas: bool) -> None:
+    """Paths, release operations and schemas of ``{api}/api/{version}/openapi.json`` (read-only)."""
+    prefix = f"/api/{version}"
+    base = api + prefix
+    print(f"===== API {version}")
+    status, ver = get_json(f"{base}/system/version")
+    print(f"GET {prefix}/system/version: HTTP {status}")
+    if isinstance(ver, dict):
+        for key in sorted(ver):
+            print(f"  {key}: {ver[key]}")
+    status, doc = get_json(f"{base}/openapi.json")
+    if not isinstance(doc, dict) or not isinstance(doc.get("paths"), dict):
+        print(f"GET {prefix}/openapi.json: HTTP {status}, not published")
+        return
+    info = doc.get("info") or {}
+    print(f"GET {prefix}/openapi.json: {info.get('title', '?')} {info.get('version', '?')}, {len(doc['paths'])} paths")
+    for path in sorted(doc["paths"]):
+        methods = sorted(m.upper() for m in doc["paths"][path] if m.lower() in ("get", "post", "put", "patch", "delete"))
+        print(f"  {','.join(methods):18} {path}")
+    if details:
+        release_details(doc, base, prefix)
+    if schemas:
+        dump_schemas(doc)
+    print(f"===== end of API {version}")
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--api", default="https://api.akeno.online")
     ap.add_argument("--release-details", action="store_true")
     ap.add_argument("--release-keys", type=Path, help="the build's release-keys.json")
+    ap.add_argument("--schemas", action="store_true")
+    ap.add_argument("--api-version", action="append", default=[], help="another API version to list, e.g. v2")
     args = ap.parse_args(argv)
+    for other in args.api_version:
+        list_version(args.api.rstrip("/"), other, args.release_details, args.schemas)
     base = args.api.rstrip("/") + "/api/v1"
     status, version = get_json(f"{base}/system/version")
     print(f"GET /system/version: HTTP {status}")
@@ -166,6 +220,8 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Release/update related paths: {', '.join(release) or 'none published'}")
     if args.release_details:
         release_details(doc, base)
+    if args.schemas:
+        dump_schemas(doc)
     if args.release_keys and not check_release_keys(base, args.release_keys):
         return 1
     return 0
