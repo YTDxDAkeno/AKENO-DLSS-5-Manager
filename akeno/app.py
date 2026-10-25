@@ -30,10 +30,10 @@ def setup_logging(debug: bool, name: str = "akeno.log") -> None:
 
 def desktop_process(argv: list[str]) -> int | None:
     """Desktop Studio runs in processes of its own: the host (``--desktop``) and one wallpaper renderer per
-    monitor (``--wallpaper-renderer``); so does the updater (``--apply-update``). They start before anything of
-    the suite's window is loaded."""
+    monitor (``--wallpaper-renderer``); so does the updater (``--apply-update``, ``--recover-update``). They start
+    before anything of the suite's window is loaded."""
     import re
-    if "--apply-update" in argv[:-1]:
+    if "--apply-update" in argv[:-1] or "--recover-update" in argv[:-1]:
         from akeno.updater import apply
         return apply.main(argv)
     if "--wallpaper-renderer" in argv:
@@ -58,6 +58,14 @@ def main(argv: list[str] | None = None) -> int:
     child = desktop_process(sys.argv[1:] if argv is None else list(argv))
     if child is not None:
         return child
+    if getattr(sys, "frozen", False):
+        # an update of this program folder was interrupted (power cut, restart): the staged updater finishes it
+        # and starts AKENO again; this process must not hold the folder meanwhile
+        from akeno.paths import sub
+        from akeno.updater import apply
+        from akeno.updater.service import install_dir
+        if apply.handoff_recovery(install_dir(), sub("updates")):
+            return 0
     parser = argparse.ArgumentParser(prog="akeno", description=APP_NAME)
     parser.add_argument("--minimized", action="store_true", help="start minimised (used by 'Launch with Windows')")
     parser.add_argument("--smoke-test", action="store_true",
@@ -133,8 +141,8 @@ def main(argv: list[str] | None = None) -> int:
     shell.minimized = args.minimized
     shell.start()
     from PySide6.QtCore import QTimer
-    from akeno.updater.service import write_start_marker
-    QTimer.singleShot(3000, write_start_marker)        # an update that just ran: this version starts fine
+    from akeno.updater.service import write_health_report
+    QTimer.singleShot(3000, write_health_report)       # an update that just ran: this version's own start check
     return app.exec()
 
 

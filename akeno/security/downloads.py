@@ -82,8 +82,9 @@ class CancelToken:
 
 class DownloadManager:
     def __init__(self, allowed_hosts: list[str], cache: Path | None = None, opener=None,
-                 retries: int = 3, timeout: float = 30.0):
+                 retries: int = 3, timeout: float = 30.0, hard_limit: int = HARD_LIMIT):
         self.allowed_hosts = {h.lower() for h in allowed_hosts}
+        self.hard_limit = hard_limit
         self.cache = Path(cache or cache_dir())
         self.cache.mkdir(parents=True, exist_ok=True)
         self.retries = retries
@@ -121,7 +122,7 @@ class DownloadManager:
                 return DownloadResult(dest, sha256, dest.stat().st_size, True)
             log.warning("cached file %s is corrupt; downloading again", dest)
             dest.unlink()
-        limit = min(HARD_LIMIT, int(expected_size * 1.05) + 4096) if expected_size else HARD_LIMIT
+        limit = min(self.hard_limit, int(expected_size * 1.05) + 4096) if expected_size else self.hard_limit
         last: Exception | None = None
         for attempt in range(1, self.retries + 1):
             if token and token.cancelled:

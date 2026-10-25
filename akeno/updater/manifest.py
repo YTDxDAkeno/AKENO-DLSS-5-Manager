@@ -19,7 +19,9 @@ belongs to another app or channel, would go back to an older version, or is past
 on a host of the build's distribution (GitHub's release hosts, or ``akeno.online``). Release keys are separate from
 license keys: neither can stand in for the other.
 
-The AKENO Release Manager (``GET /api/v1/releases/stable`` on the production API, schema_version 1) publishes one
+The AKENO Release Manager (``GET /api/v1/releases/stable`` on the production API) serves schema 2 since
+2026-10-25 (``api_v2.py``: sequence, expiry, install mode and a portable package for the in-app updater). Schema 1
+publishes one
 release as an object with ``signed_payload`` and ``signature`` (``{"algorithm": "Ed25519", "key_id", "value"}``).
 :func:`parse_api` trusts it only when the signature verifies over the exact ``signed_payload`` text with a built-in
 release key, and then uses only the values inside ``signed_payload``: every one of them must also equal the field
@@ -87,6 +89,7 @@ class Release:
     files: list = field(default_factory=list)
     kid: str = ""
     publisher_sha256: str = ""          # Release Manager: SHA-256 of the installer's Authenticode certificate
+    v2: object = None                   # Release Manager schema 2: the signed details (api_v2.Details)
 
     def file(self, kind: str) -> File | None:
         return next((f for f in self.files if f.kind == kind), None)
@@ -197,12 +200,16 @@ def _signed_document(payload: str) -> dict:
     raise ManifestError("the signed release information is not readable")
 
 
-def parse_api(doc, keys: dict, dist=None) -> Release:
-    """A release of the AKENO Release Manager (see the module docstring); raises ManifestError."""
+def parse_api(doc, keys: dict, dist=None, now: float | None = None) -> Release:
+    """A release of the AKENO Release Manager; raises ManifestError. Schema 2 (``api_v2``) is what production
+    serves; schema 1 (the module docstring) is still read, and is only ever shown, never installed."""
     from cryptography.exceptions import InvalidSignature
     trusted = dist.trusted if dist is not None else _https_github
     if not keys:
         raise ManifestError("this build has no release verification key")
+    if isinstance(doc, dict) and doc.get("schema_version") == 2:
+        from akeno.updater import api_v2                  # the production format since 2026-10-25
+        return api_v2.parse(doc, keys, trusted, now)
     if not isinstance(doc, dict) or doc.get("schema_version") != API_SCHEMA:
         raise ManifestError("not an AKENO release (unknown format)")
     sig = doc.get("signature")

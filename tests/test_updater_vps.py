@@ -149,7 +149,10 @@ class LocalDownloads:
         out = self.folder / "cache" / name
         out.parent.mkdir(exist_ok=True)
         out.write_bytes(data)
-        return type("R", (), {"path": out})
+        return type("R", (), {"path": out, "size": len(data)})
+
+    def cached_path(self, sha256, name):
+        return self.folder / "cache" / name
 
 
 def test_check_prepare_and_phases_from_the_vps(tmp_path, signing):
@@ -163,7 +166,8 @@ def test_check_prepare_and_phases_from_the_vps(tmp_path, signing):
     assert seen == [f"{BASE}/channels/stable.json"] and release.release == "3.1.0"
     events = []
     plan = svc.prepare(release, lambda *e: events.append(e))
-    assert [e[0] for e in events] == ["download", "download", "verified", "unpack", "signature"]
+    assert [e[0] for e in events if e[0] != "unpack" or not e[1]] == \
+        ["space", "download", "download", "verified", "unpack", "signature"]
     assert Path(plan["source"], "AKENO.exe").is_file() and plan["version"] == "3.1.0"
     assert svc.downloads().urls == [f"{BASE}/3.1.0/{pkg.name}"]
 

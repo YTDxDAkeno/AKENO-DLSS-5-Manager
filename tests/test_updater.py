@@ -32,15 +32,21 @@ def signing(tmp_path):
     return key, keys
 
 
+def healthy(version: str, ok: bool = True, then: str = "time.sleep(8)") -> str:
+    """A stand-in AKENO.py that writes the health report the real one writes once its window is up."""
+    return ("import json, os, pathlib, time\n"
+            "m = os.environ.get('AKENO_UPDATE_MARKER')\n"
+            f"m and pathlib.Path(m).write_text(json.dumps({{'version': {version!r}, 'ok': {ok!r}, "
+            f"'checks': {{'window': True, 'license_state': {ok!r}}}}}))\n"
+            f"{then}\n")
+
+
 def package(tmp_path: Path, version: str, body: str = "") -> Path:
     """A portable package: AKENO.exe is a small Python program here (it reports its start like the real one)."""
     out = tmp_path / f"AKENO-Gaming-Suite-{version}-portable-x64.zip"
     with zipfile.ZipFile(out, "w") as z:
         z.writestr("AKENO.exe", f"version {version}")
-        z.writestr("AKENO.py", body or (
-            "import os, pathlib\n"
-            "m = os.environ.get('AKENO_UPDATE_MARKER')\n"
-            "m and pathlib.Path(m).write_text('ok')\n"))
+        z.writestr("AKENO.py", body or healthy(version))
         z.writestr("_internal/lib.txt", version)
     return out
 
@@ -142,8 +148,8 @@ def installed(tmp_path: Path, version: str) -> Path:
     target = tmp_path / "Programs" / "AKENO"
     target.mkdir(parents=True)
     (target / "AKENO.exe").write_text(f"version {version}")
-    (target / "AKENO.py").write_text("import os, pathlib\nm = os.environ.get('AKENO_UPDATE_MARKER')\n"
-                                     "m and pathlib.Path(m).write_text('old ok')\n")
+    (target / "AKENO.py").write_text(healthy(version, then="m and pathlib.Path(m + '.old').write_text('old ok'); "
+                                                         "time.sleep(8)"))
     (target / "_internal").mkdir()
     (target / "_internal" / "lib.txt").write_text(version)
     (target / "data").mkdir()
@@ -153,7 +159,7 @@ def installed(tmp_path: Path, version: str) -> Path:
 
 def updater_plan(svc, release, staged, target) -> dict:
     plan = svc.plan(release, staged, target)
-    plan.update(keep=["data"], pid=None, timeout=20, start=[sys.executable, "{target}/AKENO.py"])
+    plan.update(keep=["data"], pid=None, timeout=20, settle=0.5, start=[sys.executable, "{target}/AKENO.py"])
     return plan
 
 
@@ -172,7 +178,7 @@ def test_update_swaps_the_program_folder_and_keeps_the_previous_version(tmp_path
     (svc.folder / "result.json").write_text(json.dumps(outcome))
     assert svc.after_start()["ok"] and svc.previous() == "3.0.0"
     rollback = svc.rollback_plan()
-    rollback.update(keep=["data"], pid=None, timeout=20, start=[sys.executable, "{target}/AKENO.py"])
+    rollback.update(keep=["data"], pid=None, timeout=20, settle=0.5, start=[sys.executable, "{target}/AKENO.py"])
     rollback["target"] = str(target)
     assert apply.run(rollback)["ok"]
     assert (target / "AKENO.exe").read_text() == "version 3.0.0" and (target / "data" / "settings.txt").exists()
@@ -188,7 +194,7 @@ def test_a_version_that_does_not_start_is_rolled_back(tmp_path, signing):
     assert not outcome["ok"] and outcome["rolled_back"]
     assert (target / "AKENO.exe").read_text() == "version 3.0.0"
     assert (target / "data" / "settings.txt").read_text() == "portable user data"
-    assert (svc.folder / "started.marker").read_text() == "old ok", "the previous version runs again"
+    assert (svc.folder / "started.marker.old").read_text() == "old ok", "the previous version runs again"
     (svc.folder / "result.json").write_text(json.dumps(outcome))
     svc.after_start()
     assert "3.0.1" in svc.state()["failed"]
