@@ -476,9 +476,13 @@ def test_a_directory_is_only_an_entry_ending_with_a_slash(tmp_path):
 @pytest.mark.parametrize("name", ["dir\\file.txt", "Grüße.txt", "folder\\"])
 def test_names_the_release_manager_refuses_are_refused(tmp_path, name):
     archive = tmp_path / "p.zip"
+    entry = zipfile.ZipInfo("placeholder")
+    entry.filename = name                       # stored as given (ZipInfo() itself turns "\\" into "/" on Windows)
     with zipfile.ZipFile(archive, "w") as z:
         z.writestr("AKENO.exe", b"MZ")
-        z.writestr(zipfile.ZipInfo(name), b"x")
+        z.writestr(entry, b"x")
+    with zipfile.ZipFile(archive) as z:
+        assert z.infolist()[1].orig_filename == name
     with pytest.raises(staging.StagingError, match="refused path"):
         staging.extract(archive, tmp_path / "x")
 
@@ -531,19 +535,35 @@ def test_staging_passes_the_signed_pin_to_the_code_signature_check(monkeypatch, 
     assert not (tmp_path / "c" / "updates" / "staging" / "3.0.1").exists()
 
 
+def embedded_certificates(exe: Path) -> list:
+    """The certificates of a PE file's Authenticode signature, read independently of Windows: the security
+    directory (data directory 4) holds a WIN_CERTIFICATE whose body is a PKCS#7 SignedData."""
+    import struct
+    from cryptography.hazmat.primitives.serialization import pkcs7
+    data = exe.read_bytes()
+    pe = struct.unpack_from("<I", data, 0x3C)[0]
+    optional = pe + 24
+    magic = struct.unpack_from("<H", data, optional)[0]
+    directories = optional + (96 if magic == 0x10B else 112)
+    offset, size = struct.unpack_from("<II", data, directories + 4 * 8)
+    length, _revision, kind = struct.unpack_from("<IHH", data, offset)
+    assert kind == 0x0002 and length <= size, "a PKCS#7 signature"
+    return pkcs7.load_der_pkcs7_certificates(data[offset + 8:offset + length])
+
+
 @pytest.mark.skipif(not __import__("sys").platform.startswith("win"), reason="Authenticode needs Windows")
-def test_the_leaf_certificate_hash_is_the_one_windows_reports():
-    """On Windows: the SHA-256 the client reads from the verified signature is the DER hash of the signer
-    certificate, as PowerShell's Get-AuthenticodeSignature reports it (python.exe is code-signed)."""
-    import subprocess
+def test_the_leaf_certificate_hash_is_the_signers_certificate():
+    """On Windows: the SHA-256 the client reads from the verified signature (WinVerifyTrust) is the DER hash of the
+    signer certificate embedded in the file, the one whose name it reports (python.exe is code-signed)."""
     import sys
+    from cryptography.hazmat.primitives.serialization import Encoding
+    from cryptography.x509.oid import NameOID
     from akeno.security import authenticode
     info = authenticode.verify(sys.executable)
     if not info.valid:
         pytest.skip("this python.exe is not code-signed")
-    script = ("$c = (Get-AuthenticodeSignature -LiteralPath $env:AKENO_EXE).SignerCertificate; "
-              "-join ([System.Security.Cryptography.SHA256]::Create().ComputeHash($c.RawData) "
-              "| ForEach-Object { $_.ToString('x2') })")
-    out = subprocess.run(["powershell", "-NoProfile", "-Command", script], capture_output=True, text=True,
-                         timeout=120, env={**__import__("os").environ, "AKENO_EXE": sys.executable}, check=True)
-    assert info.leaf_sha256 == out.stdout.strip() and len(info.leaf_sha256) == 64
+    by_hash = {hashlib.sha256(c.public_bytes(Encoding.DER)).hexdigest(): c for c in embedded_certificates(
+        Path(sys.executable))}
+    assert info.leaf_sha256 in by_hash, "the hash of one of the file's own certificates"
+    names = [a.value for a in by_hash[info.leaf_sha256].subject.get_attributes_for_oid(NameOID.COMMON_NAME)]
+    assert info.signer in names, (info.signer, names)

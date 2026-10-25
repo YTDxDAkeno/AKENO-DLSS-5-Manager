@@ -4,3 +4,6 @@ akeno/data/diagnostic_source/AkenoNrDiagnostic.h text eol=lf
 
 # Exact upstream source bytes are SHA-256 pinned, including original whitespace.
 community/vendor/** -text -whitespace
+
+# The Release Manager contract fixture is SHA-256 pinned (tests/test_api_contract.py): exact bytes everywhere.
+tests/fixtures/api_contract/** -text -whitespace

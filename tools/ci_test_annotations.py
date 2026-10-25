@@ -24,5 +24,6 @@ def annotate(path):
 
 
 if __name__ == '__main__':
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')    # a Windows console is cp1252
     for argument in sys.argv[1:]:
         annotate(argument)

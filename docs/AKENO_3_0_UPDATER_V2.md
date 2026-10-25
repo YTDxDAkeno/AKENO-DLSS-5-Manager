@@ -193,7 +193,7 @@ erfüllt die Anforderungen des Auftrags; ein Patch kann danach dagegen geprüft 
 | ZIP-Slip, Pfad-Traversal, Laufwerksbuchstaben, ADS, Gerätenamen, Punkte/Leerzeichen am Ende | `staging.safe_name` | `test_unsafe_names_are_refused` (15 Fälle) |
 | Namen, die das Backend nie veröffentlicht (Backslash, nicht NFC, NUL) | `staging.safe_name` / `_kind` | `test_names_the_release_manager_refuses_are_refused` |
 | Paketinhalt ≠ signierte Beschreibung | `content_sha256`, `file_count`, entpackte Größe exakt verglichen, vor jeder weiteren Verwendung | `test_content_sha256_vectors` (5 offizielle Vektoren), `test_staging_refuses_a_package_that_differs_from_its_signed_contents`, E2E |
-| Anderes Code-Signing-Zertifikat als signiert | Leaf-SHA-256 = `publisher_certificate_sha256` | `test_a_signed_publisher_pin_is_required_of_the_new_program`, `test_the_leaf_certificate_hash_is_the_one_windows_reports` |
+| Anderes Code-Signing-Zertifikat als signiert | Leaf-SHA-256 = `publisher_certificate_sha256` | `test_a_signed_publisher_pin_is_required_of_the_new_program`, `test_the_leaf_certificate_hash_is_the_signers_certificate` |
 | Symlinks, Junctions, Sonderdateien, verschlüsselte Einträge | Entpacken lehnt ab; Staging-Pfad und Baum ohne Reparse-Points | `test_links_*` |
 | ZIP-Bombe, falsch deklarierte Größen | signierte Grenzen, echte Bytes gezählt | `test_zip_bombs_and_lying_archives_are_stopped` |
 | Beschädigtes Archiv | CRC/Format → Ablehnung | `test_a_damaged_archive_is_refused` |
