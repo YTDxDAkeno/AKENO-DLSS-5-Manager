@@ -1,13 +1,13 @@
 # Distribution, updates and the private source repository
 
-> **Update source since 2026-10-24: the AKENO Release Manager.** Every build asks
-> `GET https://api.akeno.online/api/v1/releases/stable` (`akeno/data/distribution.json`, `update_source: "akeno-api"`).
-> It trusts a release only with an Ed25519 signature by the built-in release key `d6139235b220a4aa` over
-> `signed_payload`, and uses only the signed values. Such a release is shown and opened on
-> `https://akeno.online/downloads/latest`, never installed silently or by the app itself. The Release Manager
-> offers one installer file and no portable package for the rollback-capable updater. The GitHub release
-> repository below stays available through `AKENO_UPDATE_SOURCE=github`. Details:
-> `docs/handover/CODEX_VPS_INTEGRATION.md` §B.
+> **Update source since 2026-10-25: the AKENO Release Manager, release schema 2.** Every build asks
+> `GET https://api.akeno.online/api/v1/releases/stable`. It trusts a release only with an Ed25519 signature by the
+> built-in release key `d6139235b220a4aa` over the exact `signed_payload`, uses only the signed values, refuses
+> replayed sequences, older versions and expired information, and installs a `portable-directory-swap` release
+> itself after the user confirms: verified download, safe unpacking, a separate updater with a journal, a health
+> check, automatic rollback and recovery after a power cut. Details (German): `docs/AKENO_3_0_UPDATER_V2.md`.
+> The GitHub release repository and static channel files described below stay available as alternatives
+> (`AKENO_UPDATE_SOURCE=github` / `akeno`).
 
 ## Architecture
 

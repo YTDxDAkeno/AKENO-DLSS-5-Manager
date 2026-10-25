@@ -29,7 +29,7 @@ from akeno.updater.service import CHECK_HOURS, ServiceUnavailable, UpdateService
 CHANNEL_TEXT = {"stable": "Stable", "beta": "Beta (earlier, less tested)"}
 TIMER_MS = 30 * 60_000          # look whether an automatic check is due (it runs at most every CHECK_HOURS)
 START_HOURS = 1                 # "check on start": not again when AKENO is restarted within the hour
-UPDATER_START_S = 30            # the updater must report within this time, or AKENO stays open
+UPDATER_START_S = 90            # the updater must report within this time (a virus scanner may delay its first start)
 AUTHENTICODE_TEXT = {"verified": "Valid code signature", "not_signed": "Not code-signed (allowed)",
                      "present_unverified": "Code signature present, not verified by the server",
                      "invalid": "Invalid code signature", "mixed": "Partly code-signed"}
@@ -326,6 +326,8 @@ class UpdatesPage(QWidget):
             return
         self.btn_check.setEnabled(False)
         self.pill.set(t("Checking…"), "pending")
+        self.verification.clear()                 # every check shows its own verification, nothing older
+        self._show_verification()
         if not quiet:
             self.banner.clear()
 

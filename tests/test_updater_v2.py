@@ -990,3 +990,18 @@ def test_updater_started_reads_the_journal(tmp_path):
         proc.wait()
     apply.Journal(tmp_path / "journal.json").write(started=since - 100)
     assert svc.updater_started(proc, since) is False, "ended without a fresh journal"
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="NTFS junctions exist on Windows only")
+def test_junctions_in_a_staged_folder_and_on_the_way_are_refused_on_windows(tmp_path):
+    import _winapi
+    pkg = portable_zip(tmp_path, "3.1.0")
+    content = staging.relative_to_root(staging.extract(pkg, tmp_path / "out"), "AKENO")
+    root = tmp_path / "out" / "AKENO"
+    (tmp_path / "elsewhere").mkdir()
+    _winapi.CreateJunction(str(tmp_path / "elsewhere"), str(root / "planted"))
+    with pytest.raises(staging.StagingError, match="link or junction"):
+        staging.verify(root, content)
+    _winapi.CreateJunction(str(tmp_path / "elsewhere"), str(tmp_path / "staging-junction"))
+    with pytest.raises(staging.StagingError, match="link or junction"):
+        staging.no_links_on_the_way(tmp_path / "staging-junction" / "x", tmp_path)
