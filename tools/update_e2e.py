@@ -350,7 +350,12 @@ class E2E:
         self.sequence += 1
         pkg = package(dist, self.files, version, drop, extra)
         self.server.release = signed_release(self.key, version, self.sequence, pkg)
-        self.server.tamper = {pkg.name: pkg.read_bytes()[:-1] + b"\0"} if tamper else {}
+        self.server.tamper = {}
+        if tamper:                              # one byte in the middle flipped: same size, other content
+            data = bytearray(pkg.read_bytes())
+            data[len(data) // 2] ^= 0xFF
+            assert bytes(data) != pkg.read_bytes()
+            self.server.tamper = {pkg.name: bytes(data)}
         return pkg
 
     def start_old(self, second: bool = True) -> list[subprocess.Popen]:
