@@ -786,6 +786,8 @@ def page(akeno_home, qtbot, monkeypatch, tmp_path, signing):
     monkeypatch.setattr(client.DesktopClient, "start", lambda self: True)
     monkeypatch.setattr(service, "frozen", lambda: True)            # as in the built program
     monkeypatch.setattr(service, "install_dir", lambda: tmp_path / "Programs" / "AKENO Gaming Suite")
+    # the "running program" here is python.exe, which is code-signed on Windows; the rule has its own tests
+    monkeypatch.setattr(service, "signature_check", lambda new_exe, running_exe=None: "not checked in this test")
     (tmp_path / "Programs" / "AKENO Gaming Suite").mkdir(parents=True)
     win = MainWindow(Controller(AppServices(db=Database(akeno_home / "s.sqlite3"))))
     qtbot.addWidget(win)
