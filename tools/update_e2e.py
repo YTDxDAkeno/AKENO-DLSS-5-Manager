@@ -153,13 +153,21 @@ def iso(dt: datetime) -> str:
 def package(dist: Path, out: Path, version: str, drop: tuple[str, ...] = (), extra: dict | None = None) -> Path:
     """A portable ZIP of a program folder (files at the top, like the CI's Compress-Archive)."""
     path = out / f"AKENO-Gaming-Suite-{version}-portable-x64.zip"
+    dropped = set()
     with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as z:
         for f in sorted(dist.rglob("*")):
             rel = f.relative_to(dist).as_posix()
-            if f.is_file() and not any(rel.lower().endswith(d.lower()) for d in drop):
-                z.write(f, rel)
+            if not f.is_file():
+                continue
+            hit = [d for d in drop if rel.lower().endswith(d.lower())]
+            if hit:
+                dropped.update(hit)
+                continue
+            z.write(f, rel)
         for rel, data in (extra or {}).items():
             z.writestr(rel, data)
+    if set(drop) - dropped:                     # the scenario would not test what it says
+        raise AssertionError(f"not in the build, so not removed: {sorted(set(drop) - dropped)}")
     return path
 
 
@@ -361,7 +369,8 @@ class E2E:
         plan = svc.prepare(release)
         content = staging.load(plan["content"])
         procs = self.start_old()
-        plan.update(pid=procs[0].pid, timeout=180, **plan_extra)
+        plan.update(pid=procs[0].pid, timeout=180)
+        plan.update(plan_extra)                 # a scenario may set its own timeout
         result = Path(plan["result"])
         result.unlink(missing_ok=True)
         svc.launch(plan)
