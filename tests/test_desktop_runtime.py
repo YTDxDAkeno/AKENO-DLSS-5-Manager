@@ -26,6 +26,7 @@ def renderer(qapp, monkeypatch):
     r.crashes = hostmod.Crashes()
     r.state, r.error, r.paused, r.config, r.stopping = "running", "", None, "", False
     r.embed_failures, r.losses, r.layer, r.embedded, r.hwnd = 0, [], "", False, 0
+    r.exits, r.replaced, r.replaced_shown = [], 0, 0
     later = []
     monkeypatch.setattr(hostmod.QTimer, "singleShot", lambda ms, fn: later.append(ms))
     started = []
@@ -54,6 +55,16 @@ def test_explorer_restarts_restart_the_wallpaper_quickly(renderer):
     for _ in range(hostmod.LOST_GIVE_UP - 1):
         renderer._finished(hostmod.DESKTOP_LOST, None)
     assert renderer.state == "failed" and "Explorer" in renderer.error
+    assert renderer.exits == [hostmod.DESKTOP_LOST] * hostmod.LOST_GIVE_UP
+
+
+def test_exit_codes_are_kept_for_the_diagnostics_but_not_a_requested_stop(renderer):
+    """tools/desktop_check.py fails on any renderer that ended by itself; a stop the host asked for is not one."""
+    from akeno.desktop import host as hostmod
+    renderer._finished(hostmod.EMBED_FAILED, None)
+    renderer.stopping = True
+    renderer._finished(0, None)
+    assert renderer.exits == [hostmod.EMBED_FAILED] and renderer.state == "stopped"
 
 
 def test_switches_are_separate(akeno_home):

@@ -293,7 +293,7 @@ class MetricPanel(Panel):
         if cpu_temp is not None:
             parts.append(t("CPU {c:.0f} °C", c=cpu_temp))
         if not parts:
-            return None, "—", t("Windows reports no temperature here without a vendor tool.")
+            return None, "—", t("No temperature without a vendor tool.")
         main = gpu_temp if gpu_temp is not None else cpu_temp
         return main, f"{main:.0f} °C", " · ".join(parts)
 

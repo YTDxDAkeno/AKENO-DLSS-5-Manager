@@ -74,6 +74,10 @@ A new wallpaper for a monitor gives it a fresh start. The runtime also ends by i
 3. **Monitors are matched by position.** Qt 6 names screens by model ("DELL U3223QE", "HyperVMonitor"), Win32 by
    device (`\\.\DISPLAY1`). `winapi.monitor_of()` maps the configuration's Qt screen name to the Win32 monitor at
    the same physical position. In 3.0 a name mismatch skipped attaching and showed a plain window over the icons.
+   Two monitors of the same model share Qt's name; there the key gets the monitor's position
+   (`winapi.screen_key()`: "DELL U2720Q @2560,0"). Unique names stay as they were, and a setting saved under the
+   bare model name still applies to both until one is changed. Before, the second identical monitor never got a
+   wallpaper. A monitor that matches no Windows monitor gets no wallpaper (the renderer refuses, see 5).
 4. **Verified before it is shown.** `winapi.verify()` checks:
    - the parent;
    - the z-order (below the icon view, or behind the icon host);
@@ -85,9 +89,17 @@ A new wallpaper for a monitor gives it a fresh start. The runtime also ends by i
    window over the desktop.
 6. **Explorer restart.** The renderer checks every 2 s that it is still attached. If not, it hides itself and exits
    with `DESKTOP_LOST`.
-7. **No `SPI_SETDESKWALLPAPER` on the raised desktop.** That call would destroy Explorer's `WorkerW`. On the classic
+7. **Qt replacing the window.** Qt destroys and recreates the native window of a window that is already shown when
+   the first GPU-drawn widget joins it. The page of a web wallpaper does that a moment after it starts drawing, both
+   after switching to a web wallpaper and in a renderer that starts with one. The new window is an ordinary
+   top-level window. Qt reports it (`WinIdChange`) before it shows it; the renderer then attaches it behind the
+   icons at once and verifies it after Qt has shown it. Showing it, Qt writes its own window style again (the
+   Windows runner measured `WS_CHILD` gone, parent kept); every check that finds a problem therefore attaches the
+   window once more, styles included, before it gives up. If that fails too, the window is hidden and the
+   renderer exits with `EMBED_FAILED`. See "The desktop window went away" below.
+8. **No `SPI_SETDESKWALLPAPER` on the raised desktop.** That call would destroy Explorer's `WorkerW`. On the classic
    layout it redraws Windows' own wallpaper after the last renderer stops.
-8. **Clicks go through.** The window is `WS_EX_TRANSPARENT` and never takes the focus. Desktop clicks reach the icon
+9. **Clicks go through.** The window is `WS_EX_TRANSPARENT` and never takes the focus. Desktop clicks reach the icon
    view; web wallpapers receive the mouse position over the socket instead.
 
 Widgets are never attached into Explorer. They stay ordinary windows at the bottom of the z-order. On **Win+D** the
@@ -312,25 +324,48 @@ See [DESKTOP_OPEN_SOURCE_RESEARCH.md](DESKTOP_OPEN_SOURCE_RESEARCH.md). In short
 
 | Area | Tests |
 |---|---|
-| Embedding | `tests/test_desktop_embedding.py`: the attach/verify/fail-safe logic against a model of both Explorer layouts (classic and raised): styles before `SetParent`, z-order, no window when no layer, no `SetParent(NULL)`, Explorer restart detection |
+| Embedding | `tests/test_desktop_embedding.py`: the attach/verify/fail-safe logic against a model of both Explorer layouts (classic and raised): styles before `SetParent`, z-order, no window when no layer, no `SetParent(NULL)`, Explorer restart detection; a real `WallpaperWindow` whose native window Qt replaces (attached again before it is shown, style rewritten by Qt repaired, refused when no layer exists); two monitors of the same model |
 | Runtime | `tests/test_desktop_runtime.py`: exit codes and retries, Explorer-restart handling, the separate stop actions, the tray menu, the autostart value (fake registry); `tests/test_desktop.py`: the runtime with real renderer processes (crash restart, game pause, the suite disconnecting while the wallpaper keeps running) |
 | Library | `tests/test_desktop_library.py`: real thumbnails from a 4K PNG, GIF, H.264 MP4 and VP9 WebM; durations and resolutions; cache hits; a broken file; Lively import and every refusal |
 | Pages | `tests/test_desktop_ui.py` and `tests/test_desktop.py`: the gallery showing real frames, the preview playing and stopping, favourites, filters, search, drop, fullscreen preview, widget canvas drag with snapping, dock preview, themes save/apply/restore/duplicate/edit/export |
 
 **Automated, Windows CI:**
-- `tools/desktop_check.py` runs the packaged `AKENO.exe` on the GitHub Windows runner, with a picture, a video and a
-  web wallpaper.
+- `tools/desktop_check.py` runs the packaged `AKENO.exe` on the GitHub Windows runner. Phases: picture → video →
+  web → picture again (one renderer reloading), a renderer that starts with the web wallpaper, Windows' own
+  wallpaper redrawn next to a running renderer (`refresh_wallpaper`), the suite connecting and disconnecting, and
+  a real Explorer restart (`taskkill`, then `explorer.exe`).
 - It measures from outside:
   - the parent chain and z-order of each wallpaper window;
   - whether it is a top-level window;
-  - whether clicks at 25 points reach it.
+  - whether clicks at 25 points reach it;
+  - every 50 ms during the whole run: whether any window of a renderer process is a visible top-level window;
+  - every renderer exit the host did not ask for (only the Explorer restart may cause one).
+- Result for commit `1e551b1` (run 40143293383, Windows Server 2022, build 20348, classic layout, one monitor
+  "HyperVMonitor" = `\\.\DISPLAY1`, 1024×768): all phases pass. Switching to the web wallpaper made Qt replace
+  the window once; it was attached before it was visible, and the check after showing put back the style and size
+  Qt had reset. `refresh_wallpaper` left the running wallpaper and Explorer's `WorkerW` in place. After the Explorer
+  restart the renderer exited with `DESKTOP_LOST`, showed nothing while there was no desktop and came back behind
+  the new icons. No renderer window was ever a visible top-level window.
 - The runner is Windows Server with the **classic** desktop layout. Windows 11 24H2's raised desktop is **not**
   covered by CI. CI screenshots of the runner are not proof of what a gaming PC shows.
+
+### "The desktop window went away" (investigated 2026-10-24)
+
+The runner logged `wallpaper HyperVMonitor: the desktop window went away (Explorer restarted?)` once (run
+40136602963, 22:22:27), about 4 s after the check switched the running renderer from the video to the web
+wallpaper; the web wallpaper's page started 2.5 s later in a new renderer.
+- Not an Explorer restart, and not `refresh_wallpaper()` of another renderer: the check runs one renderer process,
+  which reloads its wallpaper, and no renderer had ended before the message.
+- Cause: Qt replaces the native window of a shown window when the first GPU-drawn widget joins it (see "Qt
+  replacing the window" above; reproduced with PySide6 6.8.1). The new window was an ordinary top-level window,
+  so the renderer's check found it "gone" and the renderer restarted. Until then the window could cover the
+  desktop.
+- Fixed in `94f3301` and `1e551b1`; the regression tests and the runner measurement are listed above.
 
 **Not verifiable in CI, so not verified until tested on a real PC:**
 - the raised desktop of Windows 11 24H2+;
 - icon visibility and clicks on a real Explorer;
-- Explorer restarts;
+- Explorer restarts on a real PC (the runner restart is measured, see above);
 - Win+D and Alt+Tab;
 - monitor and scaling changes;
 - fullscreen games;
@@ -365,6 +400,9 @@ Optional diagnostics:
 | 13 | Import a new video into the library | a real frame of that video appears on its card within a few seconds; length and resolution are shown |
 | 14 | Select the video | the preview plays muted; sound and play/pause work; it stops when you open another page |
 | 15 | Themes → Save current desktop → change wallpaper and dock → apply another theme → Restore previous desktop | the saved desktop comes back: wallpaper, dock look, widget layout |
+| 16 | Apply a picture, then a web wallpaper (an HTML folder), then the picture again; watch the screen while switching | no window flashes over the desktop or the icons; the web page appears behind the icons |
+| 17 | Two monitors of the same model: apply different wallpapers to each | each monitor shows its own wallpaper |
+| 18 | With a Windows slideshow or Windows Spotlight as background: apply a wallpaper, then Stop wallpaper | Windows' own background comes back; note whether the slideshow or Spotlight still changes afterwards |
 
 **If test 2 or 3 fails:**
 1. Wallpapers → Desktop Runtime → Desktop layer → "Inside Windows' wallpaper window", then repeat.

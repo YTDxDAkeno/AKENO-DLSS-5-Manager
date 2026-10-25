@@ -12,6 +12,12 @@ cover the desktop like an ordinary window. While it runs it checks every two sec
 after an Explorer restart (Explorer's windows, and with them ours, are gone) it exits with ``DESKTOP_LOST`` and the
 host starts it again once the new desktop exists.
 
+Qt replaces the native window of a window that is already shown when the first GPU-drawn widget joins it: the page
+of a web wallpaper does, a moment after it starts drawing. The replacement is an ordinary top-level window again.
+:meth:`WallpaperWindow.event` sees it (``WinIdChange``, before Qt shows it) and puts it behind the icons at once, or
+hides it and leaves. Before this, the replacement covered the desktop until the next check noticed it, and the
+renderer exited with "the desktop window went away (Explorer restarted?)" although Explorer had not restarted.
+
 Web wallpapers run in a sandboxed Chromium page (Qt WebEngine). The page is served from its own folder through the
 ``akeno-wallpaper://`` scheme: it can read the files of that folder and nothing else on the PC, every network
 request is blocked, pop-ups and plug-ins are off, and an animation frame limit applies. Optionally it receives the
@@ -289,6 +295,10 @@ class WallpaperWindow(QWidget):
         self.error = ""
         self.layer: winapi.Layer | None = None
         self.embedded = False
+        self.hwnd = 0                                    # the native window that sits behind the icons
+        self.replaced = 0                                # native windows Qt replaced and we attached again
+        self.replaced_shown = 0                          # ... of them already visible when Qt reported them
+        self.changed: callable = lambda: None            # called after a replaced window was attached again
         self.lost: callable = lambda code: None          # called with an exit code when the desktop goes away
         from akeno.desktop.audio import AudioMeter
         self.meter = AudioMeter()
@@ -334,7 +344,11 @@ class WallpaperWindow(QWidget):
         if not result.ok:
             return self._refuse(result.error)
         self.layer = result.layer
+        self.hwnd = hwnd                             # from here on a window Qt replaces is attached again (event)
         self.show()                                  # Qt shows the child window where it already sits
+        if self.layer is None:                       # Qt replaced the window while showing it, and that one failed
+            return False
+        hwnd = self.hwnd
         winapi.place(hwnd, monitor, self.layer)      # again, in case showing moved it
         problems = winapi.verify(hwnd, monitor, self.layer)
         if problems:
@@ -343,6 +357,45 @@ class WallpaperWindow(QWidget):
         self.embedded = True
         self.watch.start()
         return True
+
+    def event(self, e) -> bool:
+        if e.type() == QEvent.Type.WinIdChange:
+            self._native_window_changed()
+        return super().event(e)
+
+    def _native_window_changed(self) -> None:
+        """Qt destroyed our native window and created a new one (see the module docstring). The new one is a
+        top-level window that Qt has not shown yet: it goes behind the icons now, or it is hidden for good."""
+        hwnd = int(self.internalWinId() or 0)
+        if not winapi.WINDOWS or self.layer is None or not self.hwnd or not hwnd or hwnd == self.hwnd:
+            return                                   # not embedded (yet), being destroyed, or nothing changed
+        was_running = self.embedded
+        self.hwnd = hwnd
+        shown = winapi.is_visible(hwnd)
+        monitor = self.target()
+        result = winapi.attach(hwnd, monitor, prefer=self.layering()) if monitor is not None else \
+            winapi.Embedding(False, problems=["this monitor is not connected"])
+        if not result.ok:
+            self.watch.stop()
+            self.layer = None
+            self._refuse(f"Qt replaced the wallpaper window: {result.error}")
+            if was_running:
+                QTimer.singleShot(0, lambda: self.lost(EMBED_FAILED))
+            return
+        self.layer = result.layer
+        self.replaced += 1
+        self.replaced_shown += int(shown)
+        log.log(logging.WARNING if shown else logging.INFO, "wallpaper %s: Qt replaced the native window (%s); it is "
+                "behind the desktop icons again (%s)", self.monitor, "already visible" if shown else "not yet shown",
+                self.layer.mode)
+        if was_running:
+            QTimer.singleShot(0, self._settle)
+
+    def _settle(self) -> None:
+        """After Qt showed a replaced window: the same check as every two seconds, then tell the host."""
+        self._watch()
+        if self.embedded:
+            self.changed()
 
     def _refuse(self, why: str) -> bool:
         """Never left on screen: hidden, and the error goes to the host and the suite."""
@@ -378,8 +431,15 @@ class WallpaperWindow(QWidget):
             winapi.hide(hwnd)
             self.lost(DESKTOP_LOST)
             return
-        if winapi.verify(hwnd, monitor, self.layer):
-            winapi.place(hwnd, monitor, self.layer)        # z-order or size changed: put it back once
+        found = winapi.verify(hwnd, monitor, self.layer)
+        if found:
+            log.warning("wallpaper %s: %s; attaching it again", self.monitor, "; ".join(found))
+            # z-order, size or style changed (Qt rewrites the style of a window it replaced when it shows it):
+            # attach it again once, styles and all, and put it back
+            result = winapi.attach(hwnd, monitor, prefer=self.layering())
+            if result.ok:
+                self.layer = result.layer
+            winapi.place(hwnd, monitor, self.layer)
             problems = winapi.verify(hwnd, monitor, self.layer)
             if problems:
                 self.watch.stop()
@@ -387,10 +447,8 @@ class WallpaperWindow(QWidget):
                 self.lost(EMBED_FAILED)
 
     def _qt_geometry(self) -> QRect:
-        for screen in QGuiApplication.screens():
-            if screen.name() == self.monitor:
-                return screen.geometry()
-        return QGuiApplication.primaryScreen().geometry()
+        screen = winapi.screen_of(self.monitor, QGuiApplication.screens())
+        return (screen or QGuiApplication.primaryScreen()).geometry()
 
     def reload(self) -> None:
         wcfg = self.wcfg()
@@ -514,6 +572,11 @@ def main(argv: list[str] | None = None) -> int:
         window.close()
         return EMBED_FAILED
 
+    def ready() -> dict:
+        return {"cmd": "ready", "monitor": args.monitor, "error": window.error, "embedded": window.embedded,
+                "layer": window.layer.mode if window.layer else "", "hwnd": window.hwnd or int(window.winId()),
+                "replaced": window.replaced, "replaced_shown": window.replaced_shown}
+
     def command(message: dict) -> None:
         cmd = message.get("cmd")
         if cmd == "pause":
@@ -522,9 +585,7 @@ def main(argv: list[str] | None = None) -> int:
             window.set_paused(False)
         elif cmd == "reload":
             window.reload()
-            channel.send({"cmd": "ready", "monitor": args.monitor, "error": window.error,
-                          "embedded": window.embedded, "layer": window.layer.mode if window.layer else "",
-                          "hwnd": int(window.winId())})
+            channel.send(ready())
         elif cmd == "place":
             window.place()
         elif cmd == "vdesk":
@@ -535,8 +596,8 @@ def main(argv: list[str] | None = None) -> int:
     channel.closed.connect(lambda: leave(0))
     for screen in QGuiApplication.screens():
         screen.geometryChanged.connect(lambda *_: window.place())
-    channel.send({"cmd": "ready", "monitor": args.monitor, "error": window.error, "embedded": window.embedded,
-                  "layer": window.layer.mode if window.layer else "", "hwnd": int(window.winId())})
+    window.changed = lambda: channel.send(ready())
+    channel.send(ready())
     code = app.exec()
     for obj in (channel, window):       # Qt objects go before the application object (no crash on exit)
         obj.deleteLater()

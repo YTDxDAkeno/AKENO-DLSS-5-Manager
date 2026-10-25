@@ -84,7 +84,13 @@ def stop_wallpapers(cfg: dict) -> dict:
 
 
 def wallpaper(cfg: dict, monitor: str) -> dict:
-    return _merge(WALLPAPER_DEFAULTS, cfg.get("wallpapers", {}).get(monitor))
+    """A monitor's wallpaper settings. ``monitor`` is a screen key (winapi.screen_key): of two monitors of the same
+    model, one without its own entry yet keeps what was set for the model's name before."""
+    walls = cfg.get("wallpapers", {})
+    entry = walls.get(monitor)
+    if entry is None and " @" in monitor:
+        entry = walls.get(monitor.rsplit(" @", 1)[0])
+    return _merge(WALLPAPER_DEFAULTS, entry)
 
 
 def load(file: Path | None = None) -> dict:

@@ -86,6 +86,9 @@ class Renderer(QObject):
         self.layer = ""                         # where the wallpaper sits (raised | workerw | ...)
         self.embedded = False
         self.hwnd = 0                           # the renderer's window (diagnostics, the CI desktop check)
+        self.exits: list[int] = []              # exit codes of renderers that ended on their own (diagnostics)
+        self.replaced = 0                       # native windows Qt replaced and the renderer attached again
+        self.replaced_shown = 0                 # ... of them already visible when the renderer got them
 
     def start(self) -> None:
         if self.process is not None:
@@ -116,6 +119,7 @@ class Renderer(QObject):
         if self.stopping:
             self.state = "stopped"
             return
+        self.exits = (self.exits + [code])[-20:]
         if code == EMBED_FAILED:
             self.embed_failures += 1
             if self.embed_failures > len(EMBED_RETRY_S):
@@ -345,10 +349,12 @@ class DesktopHost(QObject):
 
     def monitors_wanted(self) -> list[str]:
         out = []
-        for screen in QGuiApplication.screens():
-            w = cfgmod.wallpaper(self.cfg, screen.name())
+        screens = QGuiApplication.screens()
+        for screen in screens:
+            key = winapi.screen_key(screen, screens)
+            w = cfgmod.wallpaper(self.cfg, key)
             if w.get("enabled") and w.get("playlist"):
-                out.append(screen.name())
+                out.append(key)
         return out
 
     def renderer_wanted(self, monitor: str) -> bool:
@@ -536,6 +542,8 @@ class DesktopHost(QObject):
                 r.layer = str(message.get("layer") or "")[:40]
                 if str(message.get("hwnd", "")).isdigit():
                     r.hwnd = int(message["hwnd"])
+                r.replaced = int(message.get("replaced") or 0)
+                r.replaced_shown = int(message.get("replaced_shown") or 0)
                 if r.embedded:
                     r.state = "running"
                     r.embed_failures = 0
@@ -559,7 +567,8 @@ class DesktopHost(QObject):
         return {"cmd": "status", "pid": os.getpid(), "game_running": self.game_running(),
                 "started": self.started_at, "user_paused": self.user_paused,
                 "renderers": {m: {"state": r.state, "error": r.error, "paused": bool(r.paused),
-                                  "embedded": r.embedded, "layer": r.layer, "hwnd": r.hwnd,
+                                  "embedded": r.embedded, "layer": r.layer, "hwnd": r.hwnd, "exits": r.exits,
+                                  "replaced": r.replaced, "replaced_shown": r.replaced_shown,
                                   "reasons": [str(x) for x in self.reasons.get(m, [])]}
                               for m, r in self.renderers.items()},
                 "dock": self.dock is not None,

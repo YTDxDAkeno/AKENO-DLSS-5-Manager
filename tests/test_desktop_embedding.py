@@ -28,8 +28,8 @@ class Win:
 class Shell:
     """A model of the desktop windows. ``layout``: classic | raised | broken (the icons are never split off)."""
 
-    def __init__(self, layout="classic", virtual=(-1920, 0, 2560, 1440)):
-        self.ids = itertools.count(100)
+    def __init__(self, layout="classic", virtual=(-1920, 0, 2560, 1440), first_id=100):
+        self.ids = itertools.count(first_id)
         self.wins: dict[int, Win] = {}
         self.top: list[int] = []
         self.layout = layout
@@ -324,6 +324,26 @@ def test_qt_screens_are_matched_to_windows_monitors_by_position_not_name():
     assert w.match_monitor("x", (3900, 10, 100, 100), mons).name == d2, "otherwise the monitor under its centre"
 
 
+def test_two_monitors_of_the_same_model_get_a_wallpaper_each():
+    """Qt 6 names screens by model: two identical monitors share a name, so the position tells them apart (before,
+    both mapped to the first one and the second monitor never got a wallpaper)."""
+    from akeno.desktop import config as cfgmod
+    d1, d2 = r"\\.\DISPLAY1", r"\\.\DISPLAY2"
+    mons = [w.Monitor(d1, 0, 0, 2560, 1440, True), w.Monitor(d2, 2560, 0, 2560, 1440)]
+    screens = [FakeScreen("DELL U2720Q", 0, 0, 2560, 1440), FakeScreen("DELL U2720Q", 2560, 0, 2560, 1440),
+               FakeScreen("HyperVMonitor", 5120, 0, 1920, 1080)]
+    keys = [w.screen_key(s, screens) for s in screens]
+    assert keys == ["DELL U2720Q @0,0", "DELL U2720Q @2560,0", "HyperVMonitor"], "unique names stay as they were"
+    assert w.monitor_of(keys[0], screens, mons).name == d1
+    assert w.monitor_of(keys[1], screens, mons).name == d2
+    assert w.screen_of("DELL U2720Q", screens) is None
+    cfg = cfgmod.load()
+    cfg["wallpapers"]["DELL U2720Q"] = dict(cfgmod.WALLPAPER_DEFAULTS, enabled=True, playlist=[{"path": "a.png"}])
+    assert cfgmod.wallpaper(cfg, keys[1])["enabled"], "what was set for the model's name still applies"
+    cfg["wallpapers"][keys[1]] = dict(cfgmod.WALLPAPER_DEFAULTS, enabled=False)
+    assert not cfgmod.wallpaper(cfg, keys[1])["enabled"] and cfgmod.wallpaper(cfg, keys[0])["enabled"]
+
+
 @pytest.mark.parametrize("layout", ["classic", "raised"])
 def test_find_layer_describes_the_desktop(layout):
     shell = Shell(layout)
@@ -397,4 +417,126 @@ def test_renderer_leaves_when_explorer_restarts(qapp, tmp_path, monkeypatch):
     win.lost = codes.append
     win._watch()
     assert codes == [renderer.DESKTOP_LOST]
+    win.close()
+
+
+class QtWindows(dict):
+    """The model's windows, plus the native windows Qt creates for our wallpaper window: a window id the model has
+    not seen is one of those, a frameless top-level popup."""
+
+    def __init__(self, shell, wins):
+        super().__init__(wins)
+        self.shell = shell
+
+    def __missing__(self, hwnd):
+        win = self[hwnd] = Win("Qt683QWindowIcon", style=w.WS_POPUP, rect=(0, 0, 640, 480))
+        self.shell.top.insert(0, hwnd)
+        return win
+
+
+def embedded_window(tmp_path, monkeypatch, layout):
+    """A real WallpaperWindow embedded into the model of Explorer's windows (Qt's own window ids)."""
+    from akeno.desktop import config as cfgmod
+    from akeno.desktop import renderer
+    file = tmp_path / "desktop.json"
+    cfgmod.save(cfgmod.load(), file)
+    shell = Shell(layout, first_id=10**9)              # far from Qt's own window ids
+    shell.wins = QtWindows(shell, shell.wins)
+    monkeypatch.setattr(w, "WINDOWS", True)
+    monkeypatch.setattr(w, "virtual_desktop_id", lambda: None)
+    monkeypatch.setattr(w, "_api", lambda api: shell if api is None else api)
+    name = real_monitor(monkeypatch)
+    win = renderer.WallpaperWindow(name, file)
+    assert win.embed(tries=1, delay=0), win.error
+    return shell, win
+
+
+def replace_native_window(qapp, shell, win) -> int:
+    """What Qt does when the first GPU-drawn widget (a web wallpaper's page) joins the shown window: the native
+    window is destroyed (Windows takes it out of the desktop layer) and a new top-level one is created."""
+    old = win.hwnd
+    if old in shell.wins:
+        shell.destroy(old)
+    win.destroy(True, True)
+    win.create()
+    return int(win.internalWinId())
+
+
+@pytest.mark.parametrize("layout", ["classic", "raised"])
+def test_a_native_window_qt_replaces_goes_behind_the_icons_before_it_is_shown(qapp, tmp_path, monkeypatch, layout):
+    """Regression (Windows runner, 2026-10-24: "the desktop window went away (Explorer restarted?)" right after a
+    web wallpaper started): Qt replaced the embedded window by a new top-level one; it covered the desktop until the
+    next check, then the renderer exited although Explorer had not restarted."""
+    from akeno.desktop import renderer
+    shell, win = embedded_window(tmp_path, monkeypatch, layout)
+    layer_parent = win.layer.parent
+    old = win.hwnd
+    codes, changed = [], []
+    win.lost, win.changed = codes.append, lambda: changed.append(win.hwnd)
+    new = replace_native_window(qapp, shell, win)
+    assert new != old and win.hwnd == new
+    assert shell.parent(new) == layer_parent and new not in shell.top, "a child of the desktop layer, not top-level"
+    assert shell.wins[new].style & w.WS_CHILD and not shell.wins[new].style & w.WS_POPUP
+    assert win.replaced == 1 and win.replaced_shown == 0
+    for _ in range(5):
+        qapp.processEvents()
+    assert codes == [], "the renderer keeps running: Explorer did not restart"
+    assert changed == [new], "the host learns the new window"
+    assert w.verify(new, win.target(), win.layer, shell) == []
+    win._watch()
+    assert codes == [] and win.embedded
+    assert win.layer.mode == ("raised" if layout == "raised" else "workerw")
+    win.close()
+    assert not shell.wins[new].visible and shell.parent(new) == layer_parent
+    assert renderer.DESKTOP_LOST not in codes
+
+
+def test_a_replaced_window_whose_style_qt_rewrites_on_showing_is_attached_again(qapp, tmp_path, monkeypatch):
+    """Windows runner, 2026-10-24 23:28:30: after the replacement Qt showed the window and dropped WS_CHILD again
+    ("the wallpaper is not a child window"); the check after showing attaches it again instead of giving up."""
+    shell, win = embedded_window(tmp_path, monkeypatch, "classic")
+    codes = []
+    win.lost = codes.append
+    new = replace_native_window(qapp, shell, win)
+    shell.wins[new].style = w.WS_POPUP                 # what Qt's show did to the style
+    assert "the wallpaper is not a child window" in w.verify(new, win.target(), win.layer, shell)
+    for _ in range(5):
+        qapp.processEvents()
+    assert codes == [] and win.embedded
+    assert shell.wins[new].style & w.WS_CHILD and shell.parent(new) == win.layer.parent
+    assert w.verify(new, win.target(), win.layer, shell) == []
+    win.close()
+
+
+def test_a_replaced_window_that_cannot_go_behind_the_icons_is_hidden_and_the_renderer_leaves(qapp, tmp_path,
+                                                                                               monkeypatch):
+    from akeno.desktop import renderer
+    shell, win = embedded_window(tmp_path, monkeypatch, "classic")
+    codes = []
+    win.lost = codes.append
+    shell.destroy(shell.workerw)                       # Explorer is just restarting: no layer at that moment
+    shell.destroy(shell.progman)
+    new = replace_native_window(qapp, shell, win)
+    assert new not in shell.wins or not shell.wins[new].visible, "never shown in front of the desktop"
+    assert not win.isVisible() and not win.embedded and "Qt replaced the wallpaper window" in win.error
+    for _ in range(5):
+        qapp.processEvents()
+    assert codes == [renderer.EMBED_FAILED], "the host tries again after 3, 10 and 30 s"
+
+
+def test_window_id_changes_before_embedding_or_while_closing_are_left_alone(qapp, tmp_path, monkeypatch):
+    from akeno.desktop import config as cfgmod
+    from akeno.desktop import renderer
+    file = tmp_path / "desktop.json"
+    cfgmod.save(cfgmod.load(), file)
+    monkeypatch.setattr(w, "WINDOWS", True)
+    monkeypatch.setattr(w, "virtual_desktop_id", lambda: None)
+    attached = []
+    monkeypatch.setattr(w, "attach", lambda *a, **k: attached.append(a) or w.Embedding(False))
+    monkeypatch.setattr(w, "hide", lambda hwnd, api=None: None)
+    win = renderer.WallpaperWindow(real_monitor(monkeypatch), file)
+    win.winId()                                        # created, not embedded: embed() decides
+    win.destroy(True, True)                            # the id goes to 0 on the way
+    win.create()
+    assert attached == [] and win.replaced == 0
     win.close()
