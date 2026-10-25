@@ -161,6 +161,7 @@ jobs:
           AKENO_V15_SCREENSHOTS: screenshots/v15-fixtures
           AKENO_V16_SCREENSHOTS: screenshots/v16-fixtures
           AKENO_V2_SCREENSHOTS: screenshots/v2-fixtures
+          AKENO_UPDATE_SCREENSHOTS: screenshots/updates-fixtures
       - name: Publish bounded test failure annotations
         if: failure()
         run: python tools/ci_test_annotations.py test-results.xml
@@ -397,6 +398,7 @@ jobs:
             screenshots/desktop-studio/*
             screenshots/fivem-fixture/*.png
             screenshots/fivem-fixture-150pct/*.png
+            screenshots/updates-fixtures/*.png
             ${{ runner.temp }}/akeno-gui/logs/*
             ${{ runner.temp }}/akeno-smoke/logs/*
             ${{ runner.temp }}/akeno-exe/logs/*
