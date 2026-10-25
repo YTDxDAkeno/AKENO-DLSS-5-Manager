@@ -29,6 +29,7 @@ from akeno.updater.service import CHECK_HOURS, ServiceUnavailable, UpdateService
 CHANNEL_TEXT = {"stable": "Stable", "beta": "Beta (earlier, less tested)"}
 TIMER_MS = 30 * 60_000          # look whether an automatic check is due (it runs at most every CHECK_HOURS)
 START_HOURS = 1                 # "check on start": not again when AKENO is restarted within the hour
+UPDATER_START_S = 30            # the updater must report within this time, or AKENO stays open
 AUTHENTICODE_TEXT = {"verified": "Valid code signature", "not_signed": "Not code-signed (allowed)",
                      "present_unverified": "Code signature present, not verified by the server",
                      "invalid": "Invalid code signature", "mixed": "Partly code-signed"}
@@ -499,12 +500,33 @@ class UpdatesPage(QWidget):
             except Exception:           # the updater ends it anyway
                 pass
         try:
-            self.svc.launch(plan)
+            proc = self.svc.launch(plan)
         except OSError as exc:
             self._busy(False)
             self.banner.show_message(t("The update was not installed. Nothing was changed: {e}", e=str(exc)), "error")
             return
-        QApplication.instance().quit()
+        self._wait_for_updater(proc, time.monotonic() + UPDATER_START_S)
+
+    def _wait_for_updater(self, proc, deadline: float) -> None:
+        """AKENO quits only once the updater runs; an updater that does not start leaves AKENO open."""
+        started = self.svc.updater_started(proc)
+        if started:
+            QApplication.instance().quit()
+            return
+        if started is None and time.monotonic() < deadline:
+            QTimer.singleShot(250, lambda: self._wait_for_updater(proc, deadline))
+            return
+        try:
+            if proc is not None and proc.poll() is None:
+                proc.kill()
+        except OSError:
+            pass
+        self._busy(False)
+        self.svc._store(pending=None)
+        self._show_release(self.release)
+        self.refresh()
+        self.banner.show_message(t("The update was not installed. Nothing was changed: {e}",
+                                   e=t("the new version's updater did not start")), "error")
 
     def _later(self) -> None:
         if self.release is not None:

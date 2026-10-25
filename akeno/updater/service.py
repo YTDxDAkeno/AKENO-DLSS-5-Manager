@@ -378,15 +378,29 @@ class UpdateService:
                 "recovery_command": subprocess.list2cmdline([str(exe), "--recover-update", str(journal),
                                                              "--no-start"])}
 
-    def launch(self, plan: dict) -> None:
-        """Start the updater (the staged new AKENO.exe); the caller then quits AKENO."""
+    def launch(self, plan: dict) -> subprocess.Popen:
+        """Start the updater (the staged new AKENO.exe). The caller quits AKENO once :meth:`updater_started` says
+        the updater runs (a new version too broken to run its own updater must not leave the user without AKENO)."""
         plan_file = self.folder / "plan.json"
         staging.write_atomic(plan_file, json.dumps(plan, indent=1).encode("utf-8"))
         exe = Path(plan["source"]) / "AKENO.exe"
         flags = 0x00000008 | 0x00000200 if sys.platform == "win32" else 0
-        subprocess.Popen([str(exe), "--apply-update", str(plan_file)], creationflags=flags, close_fds=True,
-                         cwd=str(Path(plan["source"])))
+        self._launched = time.time()
+        proc = subprocess.Popen([str(exe), "--apply-update", str(plan_file)], creationflags=flags, close_fds=True,
+                                cwd=str(Path(plan["source"])))
         self._store(pending=plan["version"])
+        return proc
+
+    def updater_started(self, proc: subprocess.Popen | None, since: float | None = None) -> bool | None:
+        """True once the updater has written its journal (it does so before it waits for AKENO to end), False when
+        it ended without doing so, None while it is still starting."""
+        since = getattr(self, "_launched", 0) if since is None else since
+        journal = self.journal()
+        if journal.get("phase") and float(journal.get("started") or 0) >= since - 1:
+            return True
+        if proc is not None and proc.poll() is not None:
+            return False
+        return None
 
     # -- after a start -----------------------------------------------------------------------------------------------
     def after_start(self) -> dict | None:

@@ -24,11 +24,15 @@ AKENO DLSS 5 Manager becomes the AKENO Gaming Suite. Everything of 2.1 stays as 
   - The Theme Workshop (`.akenotheme`).
 - **Community.** DLSS 5 presets, FPS Booster profiles and widget layouts as data-only `.akenopack` packages, and a reviewed index with SHA-256 checks, a block list and reporting.
 - **Cloud Sync.** Your AKENO data between your PCs through a folder you choose, with per-field merge, conflicts you decide, a quota and optional encryption. Never licenses, tokens, DLLs or game files.
-- **Updates.**
-  - A signed release manifest from the public release repository; no GitHub account needed.
-  - Every file is SHA-256-checked.
-  - A separate updater process keeps the previous version and rolls back if the new one does not start.
-  - Stable and Beta channels.
+- **Updates (AKENO – Updates).**
+  - From the AKENO Release Manager on akeno.online (release schema 2): Ed25519-signed release information with
+    a sequence number and an expiry date; a replayed, older or expired release is refused.
+  - The portable package must match its signed SHA-256 and size and is unpacked only within its signed limits.
+  - Nothing is installed without your confirmation. Downloads run in the background and can be cancelled.
+  - A separate updater process switches the program folder, checks that the new version really works (its own
+    start check, not only a started process), keeps the previous version and rolls back otherwise. An update
+    interrupted by a power cut or a restart is finished at the next sign-in or start.
+  - Your license, settings, games, themes and wallpapers are never touched; the uninstaller keeps working.
 - **Notifications** in categories you can switch off.
 
 ## Security

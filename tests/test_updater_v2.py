@@ -495,11 +495,15 @@ def test_update_applies_with_journal_and_keeps_user_data(tmp_path, signing, aken
     key, keys = signing
     before = user_data(akeno_home)
     target = installed(tmp_path, "3.0.0")
+    (target / "unins000.exe").write_bytes(b"MZ uninstaller")      # Inno Setup's uninstaller in the program folder
+    (target / "unins000.dat").write_bytes(b"uninstall log")
     pkg = portable_zip(tmp_path, "3.1.0")
     svc = service_for(tmp_path, key, keys, pkg)
     outcome = apply.run(plan_for(svc, svc.check(), target))
     assert outcome["ok"], outcome
     assert (target / "AKENO.py").read_text() == healthy("3.1.0")
+    assert (target / "unins000.exe").read_bytes() == b"MZ uninstaller", "uninstalling keeps working"
+    assert (target / "unins000.dat").is_file() and not (svc.folder / "previous" / "unins000.exe").exists()
     assert (svc.folder / "previous" / "AKENO.exe").read_text() == "version 3.0.0"
     phases = [p for p, _ in svc.journal()["history"]]
     assert phases == ["prepared", "stopping", "copying", "swapping", "swapped", "health", "committing", "committed"]
@@ -861,6 +865,7 @@ def test_install_asks_first_then_starts_the_updater(page, qtbot, monkeypatch):
     monkeypatch.setattr(updates, "confirm", lambda *a, **k: next(answers))
     launched, stopped = [], []
     monkeypatch.setattr(page.svc, "launch", lambda plan: launched.append(plan))
+    monkeypatch.setattr(page.svc, "updater_started", lambda proc, since=None: True)
     monkeypatch.setattr(page.win.desktop, "stop", lambda: stopped.append(1))
     quit_calls = []
     app = type("App", (), {"quit": lambda self: quit_calls.append(1)})()
@@ -950,3 +955,36 @@ def test_the_kept_previous_version_stays_known_after_a_failed_update(tmp_path, s
     assert svc.previous() == "3.0.0", "a failed attempt does not forget the kept version"
     plan = svc.rollback_plan()
     assert plan["version"] == "3.0.0" and plan["rollback"]
+
+
+def test_akeno_stays_open_when_the_updater_does_not_start(page, qtbot, monkeypatch):
+    from akeno.ui.pages import updates
+    page.check(quiet=False)
+    qtbot.waitUntil(lambda: page.release is not None, timeout=5000)
+    monkeypatch.setattr(updates, "confirm", lambda *a, **k: True)
+    monkeypatch.setattr(updates, "UPDATER_START_S", 1)
+    quit_calls = []
+    app = type("App", (), {"quit": lambda self: quit_calls.append(1)})()
+    monkeypatch.setattr(updates, "QApplication", type("Q", (), {"instance": staticmethod(lambda: app)}))
+    monkeypatch.setattr(page.win.desktop, "stop", lambda: None)
+    broken = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])   # never writes its journal
+    monkeypatch.setattr(page.svc, "launch", lambda plan: broken)
+    page._install()
+    qtbot.waitUntil(lambda: not page.busy, timeout=15000)
+    assert not quit_calls and broken.wait(5) is not None, "the hanging updater was ended, AKENO stays open"
+    assert "did not start" in page.banner.text()
+
+
+def test_updater_started_reads_the_journal(tmp_path):
+    svc = UpdateService(None, dist=RM, keys={}, folder=tmp_path)
+    since = time.time()
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(5)"])
+    try:
+        assert svc.updater_started(proc, since) is None
+        apply.Journal(tmp_path / "journal.json").write(phase="prepared", started=time.time())
+        assert svc.updater_started(proc, since) is True
+    finally:
+        proc.kill()
+        proc.wait()
+    apply.Journal(tmp_path / "journal.json").write(started=since - 100)
+    assert svc.updater_started(proc, since) is False, "ended without a fresh journal"

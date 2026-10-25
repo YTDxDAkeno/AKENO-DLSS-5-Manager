@@ -41,6 +41,9 @@ from akeno.updater import staging
 
 log = logging.getLogger(__name__)
 KEEP_ALWAYS = ("portable.ini", "AKENO.ini")
+# the installer's uninstaller lives in the program folder; the portable package does not carry it
+KEEP_PATTERNS = ("unins*.exe", "unins*.dat", "unins*.msg")
+UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
 UNFINISHED = ("prepared", "stopping", "copying", "swapping", "swapped", "health", "committing", "rolling_back")
 FINAL = ("committed", "rolled_back", "failed")
 RUNONCE_KEY = r"Software\Microsoft\Windows\CurrentVersion\RunOnce"
@@ -214,6 +217,27 @@ def free_bytes(path: Path) -> int:
     return shutil.disk_usage(path).free
 
 
+def update_uninstall_entry(target: Path, version: str) -> None:
+    """The installed version Windows shows in "Installed apps" (the installer's entry for this folder)."""
+    if sys.platform != "win32":
+        return
+    import winreg
+    want = os.path.normcase(os.path.normpath(str(target)))
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY) as root:
+            for i in range(winreg.QueryInfoKey(root)[0]):
+                name = winreg.EnumKey(root, i)
+                with winreg.OpenKey(root, name, 0, winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE) as key:
+                    try:
+                        location, _ = winreg.QueryValueEx(key, "InstallLocation")
+                    except OSError:
+                        continue
+                    if os.path.normcase(os.path.normpath(str(location))) == want:
+                        winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, version)
+    except OSError as exc:
+        log.info("uninstall entry not updated: %s", exc)
+
+
 def set_runonce(command: str | None) -> None:
     """The one-time recovery at the next sign-in (Windows); ``None`` removes it."""
     if sys.platform != "win32":
@@ -243,8 +267,10 @@ def copy_listed(source: Path, dest: Path, content: dict) -> None:
 
 
 def carry_over(keep: list[str], src: Path, dst: Path) -> None:
-    """Move the kept items (portable data folder, ``portable.ini``) from ``src`` to ``dst`` where ``dst`` lacks them."""
-    for name in {*keep, *KEEP_ALWAYS}:
+    """Move the kept items (portable data folder, ``portable.ini``, the installer's uninstaller) from ``src`` to
+    ``dst`` where ``dst`` lacks them."""
+    names_ = {*keep, *KEEP_ALWAYS} | {p.name for pattern in KEEP_PATTERNS for p in Path(src).glob(pattern)}
+    for name in names_:
         old = src / name
         if (old.exists() or old.is_symlink()) and not (dst / name).exists():
             move(old, dst / name)
@@ -323,12 +349,12 @@ def health(command: list[str], marker: Path, version: str, timeout: float = 90,
         _end(proc)
         return False, "no health report within the time limit", proc
     failed = [k for k, v in (report.get("checks") or {}).items() if v is not True]
-    if report.get("version") != version:
-        _end(proc)
-        return False, f"reports version {report.get('version')}, expected {version}", proc
     if report.get("ok") is not True or failed:
         _end(proc)
         return False, f"its own checks failed: {', '.join(failed) or 'not ok'}", proc
+    if report.get("version") != version:
+        _end(proc)
+        return False, f"reports version {report.get('version')}, expected {version}", proc
     settle_end = time.monotonic() + settle
     while time.monotonic() < settle_end:
         if proc.poll() is not None:
@@ -425,6 +451,7 @@ def _run(plan, target, source, keep, journal, outcome) -> dict:
         journal.write(phase="committing", health=detail)
         keep_previous(target, Path(plan["backup"]))
         set_runonce(None)
+        update_uninstall_entry(target, plan["version"])
         journal.write(phase="committed")
         outcome["ok"] = True
         return outcome
@@ -474,6 +501,7 @@ def recover(journal_path: Path, start: bool = True) -> dict | None:
             if phase == "committing":                     # the new version had passed its health check
                 keep_previous(target, Path(plan["backup"]))
                 set_runonce(None)
+                update_uninstall_entry(target, plan["version"])
                 journal.write(phase="committed")
                 outcome["ok"] = True
             elif phase in ("prepared", "stopping", "copying"):

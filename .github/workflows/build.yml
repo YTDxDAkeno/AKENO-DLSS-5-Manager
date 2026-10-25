@@ -401,6 +401,57 @@ jobs:
             ${{ runner.temp }}/akeno-smoke/logs/*
             ${{ runner.temp }}/akeno-exe/logs/*
 
+  windows-update-e2e:
+    # A disposable Windows runner: installs the tested installer, then updates, breaks, interrupts and rolls back
+    # that installation through the real packaged AKENO.exe files against a local test Release Manager
+    # (tools/update_e2e.py). The test key replaces the release key in that test installation only.
+    name: Windows update end to end (installer, updater, health check, rollback, recovery)
+    needs: [windows]
+    runs-on: windows-2022
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QT_QPA_FONTDIR: 'C:\Windows\Fonts'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - name: Build the next version of this commit (patch number + 1, for the update test only)
+        shell: pwsh
+        run: |
+          python packaging\make_icon.py
+          $v = (Select-String -Path akeno\__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          $p = $v.Split('.'); $next = "$($p[0]).$($p[1]).$([int]$p[2] + 1)"
+          (Get-Content akeno\__init__.py) -replace '__version__ = ".+"', "__version__ = `"$next`"" | Set-Content akeno\__init__.py
+          pyinstaller --noconfirm --distpath dist-next --workpath build-next packaging\akeno.spec
+          if ($LASTEXITCODE -ne 0) { throw "next version build failed" }
+          git checkout -- akeno/__init__.py
+          Copy-Item README.md, THIRD_PARTY_NOTICES.md, LICENSE dist-next\AKENO\
+      - uses: actions/download-artifact@v4
+        with:
+          name: AKENO-Gaming-Suite-windows-x64
+          path: rc
+      - name: Update end to end on this runner
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem rc -Filter '*-Setup-x64.exe' | Select-Object -First 1
+          python tools/update_e2e.py --installer $setup.FullName --next dist-next\AKENO --work "$env:RUNNER_TEMP\e2e" --report e2e-report.md
+          $code = $LASTEXITCODE
+          if (Test-Path e2e-report.md) { Get-Content e2e-report.md | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+          New-Item -ItemType Directory -Force e2e-logs | Out-Null
+          Copy-Item "$env:LOCALAPPDATA\AKENO\updates\*.log", "$env:LOCALAPPDATA\AKENO\updates\*.json" e2e-logs -ErrorAction SilentlyContinue
+          Copy-Item "$env:LOCALAPPDATA\AKENO\logs\*" e2e-logs -ErrorAction SilentlyContinue
+          Copy-Item "$env:RUNNER_TEMP\e2e\setup.log" e2e-logs -ErrorAction SilentlyContinue
+          if ($code -ne 0) { throw "update end-to-end test failed" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-update-e2e
+          path: |
+            e2e-report.md
+            e2e-logs/*
+
   publish-release:
     # Users download from the PUBLIC release repository (no GitHub login); this repository stays private.
     # Needs: variable AKENO_RELEASE_REPO (owner/name), secrets AKENO_RELEASE_SIGNING_KEY (Ed25519 seed from
@@ -408,7 +459,7 @@ jobs:
     # the release repository only). None of them ever reaches the Windows build.
     name: Publish to the public release repository
     if: startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_channel != 'none')
-    needs: [test-linux, server, real-assets, windows]
+    needs: [test-linux, server, real-assets, windows, windows-update-e2e]
     runs-on: ubuntu-24.04
     environment: release
     permissions:
@@ -484,7 +535,7 @@ jobs:
   development-release:
     name: Draft development release from tested Windows artifacts
     if: github.event_name == 'workflow_dispatch' && inputs.draft_release
-    needs: [test-linux, server, real-assets, windows]
+    needs: [test-linux, server, real-assets, windows, windows-update-e2e]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
