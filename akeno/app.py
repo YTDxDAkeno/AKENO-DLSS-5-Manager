@@ -220,12 +220,18 @@ def build_suite(app, args, lic):
             ctl.discover_dependencies()
         if services.settings.get("auto_update_compat_db"):
             win.pages["settings"].update_compat()
-        win.pages["updates"].auto_check()         # when enabled and due (at most every few hours)
-        outcome = win.pages["updates"].svc.after_start()
-        if outcome:
-            win.statusBar().showMessage(i18n.t("AKENO {v} was installed.", v=outcome["version"]) if outcome.get("ok")
-                                        else i18n.t("The update to {v} did not start; the previous version is back.",
-                                                    v=outcome.get("version")), 15000)
+        win.pages["updates"].auto_check(on_start=True)   # when enabled (not again within the hour)
+        def report_update() -> None:
+            outcome = win.pages["updates"].svc.after_start()
+            if outcome:
+                win.statusBar().showMessage(
+                    i18n.t("AKENO {v} was installed.", v=outcome["version"]) if outcome.get("ok") else
+                    i18n.t("The update to {v} did not start; the previous version is back.", v=outcome.get("version")),
+                    15000)
+                win.pages["updates"].refresh()
+        report_update()
+        # right after an update the updater is still confirming this start (its health check): report it then
+        QTimer.singleShot(45_000, report_update)
         license_reminder()
         win.pages["downloads"].auto_check()
         try:

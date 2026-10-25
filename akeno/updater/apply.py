@@ -356,7 +356,7 @@ def run(plan: dict) -> dict:
     keep = list(plan.get("keep") or [])
     journal = Journal(plan.get("journal") or Path(plan["result"]).with_name("journal.json"))
     outcome = {"version": plan["version"], "previous": plan.get("previous_version"), "ok": False,
-               "rolled_back": False, "error": "", "at": time.time()}
+               "rolled_back": False, "error": "", "at": time.time(), "rollback": bool(plan.get("rollback"))}
     lock_path = plan.get("lock") or Path(plan["result"]).with_name("apply.lock")
     try:
         with lock(lock_path):

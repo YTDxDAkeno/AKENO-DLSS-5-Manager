@@ -769,3 +769,184 @@ def test_release_information_and_package_over_real_https(tmp_path, signing, http
     routes["/api/v1/releases/stable"] = (503, {}, b"{}")
     with pytest.raises(service.ServiceUnavailable):
         svc.check()
+
+
+# -- the Updates page ------------------------------------------------------------------------------------------------
+@pytest.fixture
+def page(akeno_home, qtbot, monkeypatch, tmp_path, signing):
+    from akeno.core.db import Database
+    from akeno.desktop import client
+    from akeno.services import AppServices
+    from akeno.ui.controller import Controller
+    from akeno.ui.main_window import MainWindow
+    monkeypatch.setattr(client.DesktopClient, "start", lambda self: True)
+    monkeypatch.setattr(service, "frozen", lambda: True)            # as in the built program
+    monkeypatch.setattr(service, "install_dir", lambda: tmp_path / "Programs" / "AKENO Gaming Suite")
+    (tmp_path / "Programs" / "AKENO Gaming Suite").mkdir(parents=True)
+    win = MainWindow(Controller(AppServices(db=Database(akeno_home / "s.sqlite3"))))
+    qtbot.addWidget(win)
+    win.resize(1400, 900)
+    win.show()
+    win.go("updates")
+    p = win.pages["updates"]
+    key, keys = signing
+    pkg = portable_zip(tmp_path, "3.1.0")
+    p.svc = service_for(tmp_path, key, keys, pkg)
+    p.svc.settings = p.s.settings
+    yield p
+    win.sessions.stop()
+
+
+def rows_of(grid) -> dict:
+    return {grid.grid.itemAtPosition(i, 0).widget().text(): grid.grid.itemAtPosition(i, 1).widget().text()
+            for i in range(grid.grid.rowCount()) if grid.grid.itemAtPosition(i, 0)}
+
+
+def shot(page, name: str) -> None:
+    out = os.environ.get("AKENO_UPDATE_SCREENSHOTS")
+    if out:
+        Path(out).mkdir(parents=True, exist_ok=True)
+        page.window().grab().save(str(Path(out) / f"{name}.png"))
+
+
+def test_page_shows_a_v2_release_with_its_verification(page, qtbot):
+    shot(page, "updates-not-checked")
+    page.check(quiet=False)
+    qtbot.waitUntil(lambda: page.headline.text() == "AKENO Gaming Suite 3.1.0 is available.", timeout=5000)
+    assert rows_of(page.facts)["Latest version"] == "3.1.0"
+    verify = rows_of(page.verify_kv)
+    assert "valid" in verify["Release signature"] and "sequence 7" in verify["Release information"]
+    assert "Not code-signed" in verify["Code signature"]
+    this_pc = rows_of(page.kv)
+    assert this_pc["Installed version"] == service.__version__ and this_pc["Latest version"] == "3.1.0"
+    assert this_pc["Last successful check"] != "—"
+    assert page.btn_install.isVisibleTo(page) and page.btn_download.isVisibleTo(page)
+    assert page.btn_notes.isVisibleTo(page) and page.btn_later.isVisibleTo(page)
+    assert not page.btn_page.isVisibleTo(page) and not page.channel_row.isVisibleTo(page), "only stable on the RM"
+    shot(page, "updates-available")
+
+
+def test_page_downloads_in_the_background_and_can_cancel(page, qtbot, monkeypatch):
+    page.check(quiet=False)
+    qtbot.waitUntil(lambda: page.release is not None, timeout=5000)
+    page._download()
+    qtbot.waitUntil(lambda: not page.busy, timeout=5000)
+    assert page.svc.downloaded(page.release) and not page.btn_download.isVisibleTo(page)
+    assert "Ready to install" in page.pill.text()
+    assert "match the signed values" in rows_of(page.verify_kv)["Package checksum"]
+    shot(page, "updates-ready")
+    # a slow download is cancelled by the user: nothing is kept, the page is usable again
+    from akeno.security.downloads import Cancelled
+
+    def slow(url, sha256, name, size=None, progress=None, token=None):
+        while not token.cancelled:
+            progress and progress(1, 2)
+            time.sleep(0.05)
+        raise Cancelled("Download cancelled.")
+    monkeypatch.setattr(page.svc.downloads(), "fetch", slow)
+    page.svc._store(downloaded=None)
+    page._download()
+    qtbot.waitUntil(lambda: page.btn_cancel.isVisible(), timeout=5000)
+    assert page.busy and not page.btn_check.isEnabled()
+    page._cancel()
+    qtbot.waitUntil(lambda: not page.busy, timeout=5000)
+    assert "cancelled" in page.banner.text() and page.btn_check.isEnabled()
+
+
+def test_install_asks_first_then_starts_the_updater(page, qtbot, monkeypatch):
+    from akeno.ui.pages import updates
+    page.check(quiet=False)
+    qtbot.waitUntil(lambda: page.release is not None, timeout=5000)
+    answers = iter([False, True])
+    monkeypatch.setattr(updates, "confirm", lambda *a, **k: next(answers))
+    launched, stopped = [], []
+    monkeypatch.setattr(page.svc, "launch", lambda plan: launched.append(plan))
+    monkeypatch.setattr(page.win.desktop, "stop", lambda: stopped.append(1))
+    quit_calls = []
+    app = type("App", (), {"quit": lambda self: quit_calls.append(1)})()
+    monkeypatch.setattr(updates, "QApplication", type("Q", (), {"instance": staticmethod(lambda: app)}))
+    page._install()                              # "Cancel" in the confirmation: nothing happens
+    assert not page.busy and not launched
+    page._install()
+    qtbot.waitUntil(lambda: bool(launched), timeout=10000)
+    plan = launched[0]
+    assert plan["version"] == "3.1.0" and Path(plan["content"]).is_file() and stopped and quit_calls
+    assert "files unpacked within the signed limits" in rows_of(page.verify_kv)["Package contents"]
+
+
+def test_page_reports_a_refused_release(page, qtbot, signing):
+    key, keys = signing
+    forged = envelope(Ed25519PrivateKey.generate(), fields())
+    page.svc.fetch = lambda url: forged
+    page.check(quiet=False)
+    qtbot.waitUntil(lambda: bool(page.banner.text()), timeout=5000)
+    assert "could not be verified" in page.banner.text() and page.headline.isHidden()
+    assert "refused" in rows_of(page.verify_kv)["Release signature"]
+    shot(page, "updates-refused")
+
+
+def test_options_follow_the_settings(page, qtbot):
+    calls = []
+    page.check = lambda quiet=False: calls.append(quiet)
+    page.ctl.set_setting("check_updates_on_start", False)
+    assert not page.opt_start.isChecked()
+    page.auto_check(on_start=True)
+    page.ctl.set_setting("check_updates_on_start", True)
+    page.auto_check(on_start=True)
+    page.ctl.set_setting("check_app_updates", False)
+    assert not page.opt_start.isEnabled()
+    page.auto_check(on_start=True)
+    assert calls == [True]
+    assert page.opt_ask.isChecked() and not page.opt_ask.isEnabled(), "asking before installing cannot be switched off"
+
+
+# -- the maintainer's tool -------------------------------------------------------------------------------------------
+def test_release_tool_describes_and_verifies_against_the_built_files(tmp_path, signing, capsys):
+    import release_v2
+    key, keys = signing
+    pkg = portable_zip(tmp_path, "3.1.0")
+    exe = tmp_path / "AKENO-Gaming-Suite-3.1.0-Setup-x64.exe"
+    exe.write_bytes(b"MZ installer")
+    assert release_v2.main(["describe", str(pkg), str(exe)]) == 0
+    described = json.loads(capsys.readouterr().out)
+    assert described["portable"]["file_count"] == 3 and described["portable"]["pe_files"] == 1
+    assert described["installer"]["sha256"] == hashlib.sha256(exe.read_bytes()).hexdigest()
+    now = datetime.now(timezone.utc)
+    signed = fields(pkg=pkg, issued_at=iso(now - timedelta(hours=1)), expires_at=iso(now + timedelta(days=30)),
+                    sha256=described["installer"]["sha256"], size_bytes=described["installer"]["size_bytes"])
+    doc = tmp_path / "release.json"
+    doc.write_text(json.dumps(envelope(key, signed)))
+    keys_file = tmp_path / "keys.json"
+    public = tool.public_of(key)
+    keys_file.write_text(json.dumps({"keys": [{"kid": tool.kid_of(public), "public_key": public}]}))
+    assert release_v2.main(["verify", str(doc), "--zip", str(pkg), "--exe", str(exe), "--keys", str(keys_file)]) == 0
+    assert "can install it itself" in capsys.readouterr().out
+    exe.write_bytes(b"MZ another installer")             # a file changed after the signing request
+    assert release_v2.main(["verify", str(doc), "--zip", str(pkg), "--exe", str(exe), "--keys", str(keys_file)]) == 1
+    assert "[FAIL] installer" in capsys.readouterr().out
+    assert release_v2.main(["verify", str(doc), "--keys", str(ROOT / "akeno" / "data" / "release-keys.json")]) == 1
+    assert "does not trust" in capsys.readouterr().out
+
+
+def test_the_kept_previous_version_stays_known_after_a_failed_update(tmp_path, signing, akeno_home):
+    key, keys = signing
+    target = installed(tmp_path, "3.0.0")
+    pkg = portable_zip(tmp_path, "3.1.0")
+    svc = service_for(tmp_path, key, keys, pkg)
+    outcome = apply.run(plan_for(svc, svc.check(), target))
+    (svc.folder / "result.json").write_text(json.dumps(outcome))
+    assert svc.previous() == "3.0.0", "known before the start is reported"
+    svc.after_start()
+    assert svc.previous() == "3.0.0"
+    (tmp_path / "b").mkdir()
+    broken = portable_zip(tmp_path / "b", "3.2.0", body="raise SystemExit(3)\n")
+    doc = envelope(key, fields("3.2.0", 8, pkg=broken))
+    svc2 = UpdateService(None, dist=RM, keys=keys, fetch=lambda url: doc, version="3.1.0", folder=svc.folder,
+                         downloads=LocalDownloads(broken.parent), clock=lambda: NOW.timestamp())
+    failed = apply.run(plan_for(svc2, svc2.check(), target))
+    assert failed["rolled_back"]
+    (svc.folder / "result.json").write_text(json.dumps(failed))
+    svc.after_start()
+    assert svc.previous() == "3.0.0", "a failed attempt does not forget the kept version"
+    plan = svc.rollback_plan()
+    assert plan["version"] == "3.0.0" and plan["rollback"]

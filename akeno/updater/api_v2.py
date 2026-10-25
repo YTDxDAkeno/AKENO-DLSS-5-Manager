@@ -96,17 +96,18 @@ class Details:
 
     def in_app_refusal(self, installed: str) -> str:
         """Why this release cannot be installed by the app itself ("" when it can). It can still be shown."""
+        from akeno.i18n import msg
         if self.updater_protocol != PROTOCOL:
-            return ("This release needs a newer updater than this AKENO has. Install it with the installer from the "
-                    "download page.")
+            return msg("This release needs a newer updater than this AKENO has. Install it with the installer from "
+                       "the download page.")
         if self.install_mode != "portable-directory-swap" or self.portable is None:
-            return ("This release is offered as an installer on the download page (AKENO installs only portable "
-                    "packages itself, so it can roll back).")
+            return msg("This release is offered as an installer on the download page (AKENO installs only portable "
+                       "packages itself, so it can roll back).")
         if self.portable.authenticode.status == "invalid":
-            return "The release's code signature is invalid, so AKENO does not install it."
+            return msg("The release's code signature is invalid, so AKENO does not install it.")
         if self.minimum_supported_version and version_key(installed) < version_key(self.minimum_supported_version):
-            return ("AKENO {v} is too old for an update from here. Install the new version with the installer from "
-                    "the download page.").replace("{v}", installed)
+            return msg("AKENO {v} is too old for an update from here. Install the new version with the installer "
+                       "from the download page.", v=installed)
         return ""
 
 

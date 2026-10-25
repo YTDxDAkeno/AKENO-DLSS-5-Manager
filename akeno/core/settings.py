@@ -13,6 +13,8 @@ DEFAULTS: dict[str, Any] = {
     "ui_scale": 1.0,
     "launch_with_windows": False,
     "check_app_updates": True,          # only AKENO's release manifest is read; installing always asks first
+    "check_updates_on_start": True,     # also when AKENO starts (not again within the hour)
+    "update_background_download": False,  # download and verify a found update in the background; never installs
     "auto_update_compat_db": False,
     "check_mod_updates": False,         # daily GitHub release check for newer mod versions (never auto-installs)
     "github_token": "",                 # optional; raises GitHub's API rate limit for update checks

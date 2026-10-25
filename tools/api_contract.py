@@ -144,8 +144,15 @@ def check_release_keys(base: str, keys_file: Path) -> bool:
     except manifest.ManifestError as exc:
         print(f"[FAIL] the published stable release does not verify in the app: {exc}")
         return False
-    f = release.files[0]
-    print(f"[OK  ] stable {release.release} verified (key {release.kid}): {f.name}, {f.size} bytes, sha256 {f.sha256}")
+    for f in release.files:
+        print(f"[OK  ] stable {release.release} verified (key {release.kid}): {f.kind} {f.name}, {f.size} bytes, "
+              f"sha256 {f.sha256}")
+    d = getattr(release, "v2", None)
+    if d is not None:
+        print(f"[INFO] schema 2: sequence {d.sequence}, issued {d.issued_at}, expires {d.expires_at}, "
+              f"install mode {d.install_mode}, signed fields: {', '.join(d.signed_fields)}")
+        why = d.in_app_refusal("3.0.0")
+        print(f"[INFO] AKENO 3.0.0 {'installs it after confirmation' if not why else 'shows it only: ' + why}")
     return True
 
 

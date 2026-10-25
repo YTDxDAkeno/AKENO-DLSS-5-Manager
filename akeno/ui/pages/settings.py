@@ -119,7 +119,17 @@ class SettingsPage(QWidget):
 
         # Updates
         upd = Card(t("Updates"), "refresh")
-        upd.body.addWidget(self._check("check_app_updates", t("Check for AKENO updates automatically (on start and every few hours)")))
+        auto = self._check("check_app_updates", t("Check for AKENO updates automatically (every few hours)"))
+        upd.body.addWidget(auto)
+        start = self._check("check_updates_on_start", t("Check for updates when AKENO starts"))
+        background = self._check("update_background_download",
+                                 t("Download updates in the background (installing always asks)"))
+        for box in (start, background):
+            upd.body.addWidget(indented(box))
+            box.setEnabled(auto.isChecked())
+            auto.toggled.connect(box.setEnabled)
+        upd.body.addWidget(button(t("Open AKENO – Updates"), "refresh", kind="link",
+                                  on_click=lambda: ctl.navigate.emit("updates")))
         upd.body.addWidget(self._check("auto_update_compat_db", t("Update the compatibility database automatically")))
         mods = self._check("check_mod_updates", t("Check for new mod versions once a day"))
         mods.setToolTip(t("Asks GitHub for new releases of the mods. Nothing is installed by itself."))
@@ -244,6 +254,11 @@ class SettingsPage(QWidget):
         cb = QCheckBox(text)
         cb.setChecked(bool(self.s.settings.get(key)))
         cb.toggled.connect(lambda v, k=key: self.ctl.set_setting(k, v))
+
+        def changed(name: str) -> None:          # the same setting changed elsewhere (AKENO – Updates)
+            if name in (key, "*") and cb.isChecked() != bool(self.s.settings.get(key)):
+                cb.setChecked(bool(self.s.settings.get(key)))
+        self.ctl.settings_changed.connect(changed)
         return cb
 
     def _refresh_storage(self) -> None:

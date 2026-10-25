@@ -400,6 +400,10 @@ class UpdateService:
             return None
         if not outcome.get("ok"):
             self._store(failed=sorted(set(state.get("failed") or []) | {outcome.get("version")}))
+        elif outcome.get("previous") and not outcome.get("rollback"):
+            self._store(kept_previous=outcome["previous"])        # what updates\previous holds from now on
+        elif outcome.get("rollback"):
+            self._store(kept_previous=None)
         self._store(reported=outcome.get("at"), pending=None)
         staging_dir = self.folder / "staging"
         if staging_dir.exists():
@@ -407,10 +411,13 @@ class UpdateService:
         return outcome
 
     def previous(self) -> str | None:
-        """The version kept for a rollback."""
-        backup = self.folder / "previous"
+        """The version kept for a rollback (it stays known after later updates that did not pass their check)."""
+        if not (self.folder / "previous").is_dir():
+            return None
         outcome = self.last_outcome() or {}
-        return outcome.get("previous") if backup.is_dir() and outcome.get("ok") else None
+        if outcome.get("ok") and outcome.get("at") != self.state().get("reported"):
+            return None if outcome.get("rollback") else outcome.get("previous")   # not reported yet
+        return self.state().get("kept_previous")
 
     def rollback_plan(self) -> dict:
         backup = self.folder / "previous"
@@ -425,6 +432,7 @@ class UpdateService:
         plan = self.plan(release, staged)
         plan["backup"] = str(self.folder / "rolled-back")
         plan["content"] = ""
+        plan["rollback"] = True
         return plan
 
 
