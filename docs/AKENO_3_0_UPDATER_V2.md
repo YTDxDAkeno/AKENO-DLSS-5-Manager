@@ -296,6 +296,7 @@ gebaut, dass eine Abweichung **sicher fehlschlägt** (Release wird nicht angebot
 | `tools/release_v2.py`, `tools/update_e2e.py` | neu |
 | `tools/api_contract.py`, `.github/workflows/production-check.yml` | Schema-Ausgabe, v2-Details |
 | `.github/workflows/build.yml` | E2E-Job, Screenshots, Veröffentlichung wartet auf E2E |
-| `tests/test_updater_v2.py` | neu (57 Tests) |
+| `tests/test_updater_v2.py` | neu (58 Tests) |
 | `tests/test_updater.py`, `tests/test_updater_vps.py` | an Health-Bericht und Phasen angepasst |
+| `tests/test_account_client.py` | Test-Server liest den Request-Body (Wackeltest unter Windows behoben) |
 | `docs/…` | diese Dateien, Release Notes |

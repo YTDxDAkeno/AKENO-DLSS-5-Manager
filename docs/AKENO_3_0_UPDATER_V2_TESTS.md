@@ -7,7 +7,7 @@ Stand 2026-10-25. Nur tatsächlich ausgeführte Tests; alles andere steht unter 
 | Ebene | Wo | Ergebnis |
 |---|---|---|
 | Unit-, Integrations- und UI-Tests, Linux (offscreen Qt) | lokal und CI „Tests (Linux)“ | gesamte Suite grün: lokal 869 bestanden, 6 übersprungen (vorher 812/6, keine Regression) |
-| dieselben Tests auf Windows Server 2022 | CI „Windows build, tests and smoke test“ | grün (Läufe 176, 177, 179, 180) |
+| dieselben Tests auf Windows Server 2022 | CI „Windows build, tests and smoke test“ | grün (Läufe 176, 177, 179–182) |
 | neue Updater-Tests `tests/test_updater_v2.py` | Linux und Windows | 58 Tests (1 nur Windows: echte NTFS-Junction) |
 | bestehende Updater-Tests (`test_updater*.py`) | Linux und Windows | grün, an Health-Bericht angepasst |
 | Lizenz-/Kontotests, Lizenzserver (SQLite, PostgreSQL 16, Docker) | CI | grün, Lizenzcode unverändert |
@@ -33,10 +33,11 @@ die in derselben CI-Pipeline gebaute `AKENO-Gaming-Suite-3.0.0-Setup-x64.exe`; d
 Commits mit Version 3.0.1. Der lokale Release Manager läuft als `https://akeno.online` auf dem Runner (hosts-Datei,
 Test-CA), der Release-Prüfschlüssel ist **nur in dieser Testinstallation** durch einen Wegwerf-Testschlüssel ersetzt.
 
-Ergebnis Lauf 180: **49 von 50 bestanden**. Der eine Fehler war ein Fehler im Testskript (die „Manipulation“ des
-Downloads veränderte kein Byte); behoben in `9137296`. Der Abschnitt wird mit dem nächsten Lauf aktualisiert.
+Ergebnis **Läufe 181 und 182 (Commits `9137296`, `7add76e`): 50 von 50 bestanden.** Frühere Läufe scheiterten an
+Fehlern im Testskript selbst (Konsolenkodierung, doppeltes Argument, eine „Manipulation“, die kein Byte änderte);
+das Produkt bestand dort jeweils alle Prüfungen, die liefen.
 
-| Szenario | Ergebnis (Lauf 180) |
+| Szenario | Ergebnis (Lauf 182) |
 |---|---|
 | Installer still, pro Benutzer; Deinstaller im Programmordner; installierte EXE = 3.0.0 | OK |
 | Update 3.0.0 → 3.0.1 mit zweitem offenen AKENO-Fenster; Health-Check bestanden; Journal vollständig | OK |
@@ -47,7 +48,7 @@ Downloads veränderte kein Byte); behoben in `9137296`. Der Abschnitt wird mit d
 | Update mit fehlenden Programmdaten → eigene Prüfungen schlagen fehl → zurück | OK |
 | falscher Build (meldet andere Version) → zurück | OK |
 | Stromausfall direkt nach dem Ordnertausch: RunOnce gesetzt; nächster AKENO-Start übergibt an den Updater, vorherige Version wiederhergestellt; RunOnce entfernt | OK |
-| manipulierter Download | Testskriptfehler (s. o.) |
+| manipulierter Download (ein Byte geändert) → vor dem Entpacken abgelehnt (SHA-256 stimmt nicht) | OK |
 | Release mit fremdem Schlüssel abgelehnt; Programmordner unverändert | OK |
 | manueller Rollback 3.0.1 → 3.0.0 mit Health-Check | OK |
 | Deinstallation entfernt das Programm | OK |
