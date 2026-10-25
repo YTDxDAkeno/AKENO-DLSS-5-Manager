@@ -3,6 +3,8 @@
 Stand 2026-10-25. Nichts veröffentlicht, nichts gemergt, kein produktiver Upload, kein Release-Entwurf angefasst,
 VPS, Lizenzsystem und produktiver Ed25519-Schlüssel unverändert.
 
+> **Nachtrag:** Die Codex-Übergabe liegt inzwischen vor und ist umgesetzt: [AKENO_3_0_FINAL_CONTRACT_REPORT.md](AKENO_3_0_FINAL_CONTRACT_REPORT.md) ersetzt §0, §4, §8 und §9; der gültige Release-Kandidat ist jetzt Run 187 (Commit `e34a951`), nicht mehr Run 184.
+
 ## 0. Wichtig vorab: die Codex-Übergabe lag nicht vor
 
 `AKENO_3_0_FINAL_API_CONTRACT.md` und `AKENO_3_0_API_CONTRACT_BUNDLE.zip` sind in dieser Sitzung **nicht
