@@ -326,6 +326,11 @@ class _Handler(BaseHTTPRequestHandler):
         pass
 
     def _answer(self):
+        # read the request body first: on Windows, closing a socket with unread data sends a reset instead of
+        # the answer, and the client would see a dropped connection ("offline") now and then
+        length = int(self.headers.get("Content-Length") or 0)
+        if length:
+            self.rfile.read(length)
         _Handler.seen.append((self.command, self.path, dict(self.headers)))
         step = _Handler.script.pop(0) if _Handler.script else (200, {}, {})
         if step == "drop":
