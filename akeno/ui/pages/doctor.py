@@ -14,7 +14,7 @@ from akeno.i18n import t
 from akeno.system import commands
 from akeno.system.doctor.repair import STEPS
 from akeno.system.doctor.startup import SOURCE_LABELS
-from akeno.system.model import Level, Reading, human_bytes, human_duration
+from akeno.system.model import Level, Reading, dec, human_bytes, human_duration
 from akeno.ui import theme
 from akeno.ui.system_ui import (FindingList, ReadingTile, Sparkline, TabbedPage, TaskBar, card, export_button,
                                 fill_table, make_table, open_link, selected_data)
@@ -586,7 +586,7 @@ class HardwareTab(QWidget):
         temps = [(z["name"], f"{z['celsius']:.0f} °C · {t(z['source'])}") for z in rep.data.get("temperatures") or []]
         cpu_t = rep.data.get("cpu_temperature") or {}
         if not cpu_t.get("value"):
-            temps.append((t("Processor"), t(cpu_t.get("note") or "Not available on this PC.")))
+            temps.append((t("Processor"), t(dec(cpu_t.get("note") or "Not available on this PC."))))
         for d in rep.data.get("drives") or []:
             if isinstance(d.get("temperature"), (int, float)) and d["temperature"]:
                 temps.append((d.get("name") or "?", f"{d['temperature']} °C · " + t("drive")))
