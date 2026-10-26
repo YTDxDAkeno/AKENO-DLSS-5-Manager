@@ -79,3 +79,8 @@ class SystemTools:
             g = self.running_game()
             return g.launcher if g is not None else None
         return NetworkService(self.store, running_launcher=launcher)
+
+    @cached_property
+    def mods(self):
+        from akeno.system.mods.service import ModScanner
+        return ModScanner(self.s, self.store)

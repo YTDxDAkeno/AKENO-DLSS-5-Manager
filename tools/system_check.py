@@ -94,7 +94,23 @@ def run_network(out: dict) -> None:
     store.close()
 
 
-MODULES = {"doctor": run_doctor, "cleaner": run_cleaner, "network": run_network}
+def run_mods(out: dict) -> None:
+    """Scan the runner's library (games found by AKENO's scanners) and Minecraft instances; read-only."""
+    from akeno.services import AppServices
+    from akeno.system.mods.service import ModScanner
+    from akeno.system.store import SystemStore
+    svc = AppServices()
+    svc.library.scan()
+    store = SystemStore(Path(out["_home"]) / "system.sqlite3")
+    t0 = time.monotonic()
+    groups = ModScanner(svc, store).scan()
+    out["mods.scan"] = {"seconds": round(time.monotonic() - t0, 1), "games": len(svc.library.games()),
+                        "groups": [g.summary() for g in groups]}
+    store.close()
+    svc.db.close()
+
+
+MODULES = {"doctor": run_doctor, "cleaner": run_cleaner, "network": run_network, "mods": run_mods}
 
 
 def main(argv=None) -> int:
@@ -183,6 +199,9 @@ def summary(out: dict) -> None:
     if bw:
         print(f"Bandwidth: down {bw['down_bps']:.0f} B/s up {bw['up_bps']:.0f} B/s, "
               f"{len(bw['processes'])} programs with connections")
+    ms = out.get("mods.scan")
+    if ms:
+        print(f"Mod scan ({ms['seconds']} s): {ms['games']} library games, {len(ms['groups'])} with mods")
     if "doctor.shortcuts" in out:
         print(f"Broken shortcuts: {len(out['doctor.shortcuts'])}")
 

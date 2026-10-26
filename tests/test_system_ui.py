@@ -198,6 +198,14 @@ def test_maintenance_setting_persists(suite):
     assert svc.system_tools.cleaner.maintenance()["interval_days"] == 7
 
 
+def test_maintenance_tick_after_shutdown_is_quiet(suite):
+    win, ctl, svc = suite
+    page = win.pages["cleaner"]
+    svc.system_tools.store.close()                      # the app shut down while the page still exists
+    page.maintenance_tick()
+    assert not page.timer.isActive()
+
+
 def test_network_stability_and_bufferbloat_consent(suite, qtbot):
     win, ctl, svc = suite
     net = svc.system_tools.network
@@ -265,3 +273,52 @@ def test_network_dns_benchmark_table(suite, qtbot, monkeypatch):
     tab.run()
     qtbot.waitUntil(lambda: tab.table.rowCount() >= 5, timeout=30000)
     assert tab.results[-1]["server"] == "9.9.9.9"
+
+
+def _minecraft_fixture(tmp_path):
+    import json
+    import zipfile
+    base = tmp_path / "Roaming" / "PrismLauncher" / "instances" / "Pack"
+    mods = base / ".minecraft" / "mods"
+    mods.mkdir(parents=True)
+    (base / "instance.cfg").write_text("name=Test Pack\n")
+    (base / "mmc-pack.json").write_text(json.dumps({"components": [
+        {"uid": "net.minecraft", "version": "1.20.1"}, {"uid": "net.fabricmc.fabric-loader", "version": "0.15.11"}]}))
+    for name, mid in (("a.jar", "sodium"), ("b.jar", "sodium"), ("c.jar", "lithium")):
+        with zipfile.ZipFile(mods / name, "w") as z:
+            z.writestr("fabric.mod.json", json.dumps({"id": mid, "version": "1.0", "name": mid.title()}))
+    return {"APPDATA": str(tmp_path / "Roaming"), "USERPROFILE": str(tmp_path / "User")}
+
+
+def test_installed_mods_library(suite, qtbot, tmp_path):
+    win, ctl, svc = suite
+    svc.system_tools.mods.env = _minecraft_fixture(tmp_path)
+    win.go("installed")
+    page = win.pages["installed"]
+    page.scan()
+    qtbot.waitUntil(lambda: not page.task.running and page.list.count() >= 1, timeout=30000)
+    keys = [page.list.item(i).data(0x0100) for i in range(page.list.count())]
+    mc = next(k for k in keys if k.startswith("minecraft:"))
+    page.list.setCurrentRow(keys.index(mc))
+    assert page.d_table.rowCount() == 3
+    from akeno.ui.system_ui import FindingView
+    assert any(w.finding.id == "mods.duplicate.sodium" for w in page.d_findings.findChildren(FindingView))
+    page.filter.setCurrentIndex(page.filter.findData("minecraft"))
+    assert page.list.count() == 1
+    page.filter.setCurrentIndex(0)
+    page.search.setText("lithium")
+    assert page.list.count() == 1 and page.d_table.rowCount() == 1
+    page.search.setText("")
+    page.d_table.selectRow(0)
+    assert page.b_open.isEnabled() and "AKENO does not change this file" in page.d_mod.text()
+
+
+def test_installed_mods_empty_state_is_centered(suite, qtbot):
+    win, ctl, svc = suite
+    page = win.pages["installed"]
+    svc.system_tools.mods.groups = []
+    page.refresh()
+    page._render_list()
+    win.go("installed")
+    assert page.empty_box.isVisible() and not page.library.isVisible()
+    assert page.empty_box.minimumHeight() >= 360

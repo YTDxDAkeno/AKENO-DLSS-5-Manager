@@ -4,6 +4,7 @@ Disk Space Analyzer and Smart Maintenance. Nothing is removed without the previe
 from __future__ import annotations
 
 import os
+import sqlite3
 import time
 
 from PySide6.QtCore import Qt
@@ -57,10 +58,18 @@ class CleanerPage(TabbedPage):
         self.timer.setInterval(3600_000)
         self.timer.timeout.connect(self.maintenance_tick)
         self.timer.start()
-        QTimer.singleShot(90_000, self.maintenance_tick)
+        self.first = QTimer(self)                       # owned by the page: gone with it, unlike a bare singleShot
+        self.first.setSingleShot(True)
+        self.first.timeout.connect(self.maintenance_tick)
+        self.first.start(90_000)
 
     def maintenance_tick(self) -> None:
-        if not self.svc.maintenance_due() or self.junk.task.running or self.ctl.is_busy("cleaner:maintenance"):
+        try:
+            due = self.svc.maintenance_due()
+        except sqlite3.ProgrammingError:                # the system store was closed (shutdown): no more checks
+            self.timer.stop()
+            return
+        if not due or self.junk.task.running or self.ctl.is_busy("cleaner:maintenance"):
             return
 
         def done(out) -> None:

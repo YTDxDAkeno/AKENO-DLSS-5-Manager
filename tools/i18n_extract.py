@@ -104,6 +104,11 @@ def system_strings() -> set[str]:
                                              "Median latency", "Jitter", "Loss", "Done", "Failed", "Restored",
                                              "Windows did not report the signal."}
     out |= {"Windows denied the Wi-Fi details (location access may be required)."}
+    from akeno.system.mods.model import SOURCE_TEXT
+    from akeno.ui.pages import installed
+    out |= set(SOURCE_TEXT.values()) | {x for _, x in installed.FILTERS} | {x for _, x in installed.SORTS}
+    out |= set(installed.PLATFORM_TEXT.values()) | set(installed.KIND_TEXT.values())
+    out |= {"Complete", "Some files could not be read", "Failed", "(disabled)", "unreadable"}
     out |= {"Desktop", "Start menu", "Desktop (all users)", "Start menu (all users)", "Not available on this PC.",
             "Only administrators can read this folder.", "No minidump folder.",
             "ACPI thermal zone (not necessarily the processor)", "thermal slowdown active"}
