@@ -71,7 +71,30 @@ def run_cleaner(out: dict) -> None:
     store.close()
 
 
-MODULES = {"doctor": run_doctor, "cleaner": run_cleaner}
+def run_network(out: dict) -> None:
+    """Overview, a short stability test, the DNS benchmark and one bandwidth sample. No bufferbloat load test and
+    no change to any setting."""
+    from akeno.system.network.service import NetworkService
+    from akeno.system.store import SystemStore
+    store = SystemStore(Path(out["_home"]) / "system.sqlite3")
+    svc = NetworkService(store)
+    t0 = time.monotonic()
+    ov = svc.overview()
+    out["network.overview"] = {"seconds": round(time.monotonic() - t0, 1),
+                               "active": ov["active"].to_dict() if ov["active"] else None,
+                               "adapters": [a.to_dict() for a in ov["adapters"]], "errors": ov["errors"],
+                               "diagnosis": ov["diagnosis"].to_dict(), "rates": ov["rates"]}
+    t0 = time.monotonic()
+    rep = svc.stability(count=8)
+    out["network.stability"] = {"seconds": round(time.monotonic() - t0, 1), "report": rep.to_dict()}
+    t0 = time.monotonic()
+    out["network.dns"] = {"seconds": round(time.monotonic() - t0, 1), "results": svc.dns_benchmark()}
+    out["network.dns"]["seconds"] = round(time.monotonic() - t0, 1)
+    out["network.bandwidth"] = svc.bandwidth()
+    store.close()
+
+
+MODULES = {"doctor": run_doctor, "cleaner": run_cleaner, "network": run_network}
 
 
 def main(argv=None) -> int:
@@ -139,6 +162,27 @@ def summary(out: dict) -> None:
             if c["status"] != "not_found":
                 print(f"  {c['id']}: {c['status']} {c['count']} files {c['bytes']} bytes running={c['running']} "
                       f"errors={len(c['errors'])}")
+    ov = out.get("network.overview")
+    if ov:
+        a = ov["active"] or {}
+        print(f"Network ({ov['seconds']} s): active={a.get('name')} kind={a.get('kind')} gw={a.get('gateway')} "
+              f"dns={a.get('dns')} speed={a.get('speed_mbps')} wifi={a.get('wifi')} errors={ov['errors']}")
+    st = out.get("network.stability")
+    if st:
+        rep = st["report"]
+        print(f"Stability ({st['seconds']} s): " + "; ".join(f"[{f['level']}] {dec(f['title'])}" for f in rep["findings"]))
+        for s in rep["data"].get("series", []):
+            x = s["stats"]
+            print(f"  {s['method']} {s['target']}: loss={x['loss_percent']} median={x['median']} jitter={x['jitter']} "
+                  f"error={s['error'][:80]}")
+    dn = out.get("network.dns")
+    if dn:
+        print(f"DNS ({dn['seconds']} s): " + "; ".join(f"{r['name']} {r['cached_ms']}/{r['uncached_ms']} ms "
+                                                     f"{r['answered_percent']}%" for r in dn["results"]))
+    bw = out.get("network.bandwidth")
+    if bw:
+        print(f"Bandwidth: down {bw['down_bps']:.0f} B/s up {bw['up_bps']:.0f} B/s, "
+              f"{len(bw['processes'])} programs with connections")
     if "doctor.shortcuts" in out:
         print(f"Broken shortcuts: {len(out['doctor.shortcuts'])}")
 

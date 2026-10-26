@@ -96,6 +96,14 @@ def system_strings() -> set[str]:
             "touched.", "Websites load a little slower the first time."}
     out |= {"the program was running", "shader caches were not confirmed"} | set(clean_service.INTERVALS.values())
     out |= {title for _, title in cleaner.TABS} | set(cleaner.RISK_TEXT.values()) | set(cleaner.STATUS_TEXT.values())
+    from akeno.system.network import bandwidth as net_bw, bufferbloat as net_bb
+    from akeno.ui.pages import network
+    out |= {title for _, title in network.TABS} | set(network.KIND_TEXT.values()) | {x for _, x in network.DURATIONS}
+    out |= set(net_bb.PHASE_TEXT.values()) | {"connected", "disconnected", "protected", "already ended",
+                                             "Windows refused (an elevated or protected process)",
+                                             "Median latency", "Jitter", "Loss", "Done", "Failed", "Restored",
+                                             "Windows did not report the signal."}
+    out |= {"Windows denied the Wi-Fi details (location access may be required)."}
     out |= {"Desktop", "Start menu", "Desktop (all users)", "Start menu (all users)", "Not available on this PC.",
             "Only administrators can read this folder.", "No minidump folder.",
             "ACPI thermal zone (not necessarily the processor)", "thermal slowdown active"}

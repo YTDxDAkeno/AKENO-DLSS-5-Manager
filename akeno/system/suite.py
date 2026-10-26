@@ -35,6 +35,29 @@ class SystemTools:
                 out.add(p.pid)
         return out
 
+    def running_game(self):
+        """The library game whose folder a running process was started from (the first one found), or None."""
+        import psutil
+        games = [(os.path.normcase(os.path.abspath(g.install_dir)).rstrip("\\/") + os.sep, g)
+                 for g in self.s.library.games() if g.install_dir]
+        if not games:
+            return None
+        for p in psutil.process_iter(["exe"]):
+            exe = p.info.get("exe")
+            if not exe:
+                continue
+            low = os.path.normcase(exe)
+            for folder, g in games:
+                if low.startswith(folder):
+                    return g
+        return None
+
+    def recover(self) -> dict:
+        """At start and exit: resume processes a Network Gaming Mode left paused (same process only)."""
+        if "network" in self.__dict__ or self.store.get("network.gaming.paused"):
+            return self.network.gaming.restore()
+        return {}
+
     # -- modules -------------------------------------------------------------------------------------------------
     @cached_property
     def doctor(self):
@@ -47,3 +70,12 @@ class SystemTools:
         from akeno.system.cleaner.service import CleanerService, steam_libraries
         return CleanerService(self.store, games=self.s.library.games,
                               steam_dirs=lambda: steam_libraries(self.s.library.games()))
+
+    @cached_property
+    def network(self):
+        from akeno.system.network.service import NetworkService
+
+        def launcher():
+            g = self.running_game()
+            return g.launcher if g is not None else None
+        return NetworkService(self.store, running_launcher=launcher)

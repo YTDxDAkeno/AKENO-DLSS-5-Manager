@@ -241,6 +241,15 @@ def build_suite(app, args, lic):
 
     if not args.smoke_test and not args.screenshot:
         QTimer.singleShot(200, startup)
+
+        def recover_system() -> None:
+            # processes a Network Gaming Mode paused before AKENO was closed unexpectedly run again
+            try:
+                services.system_tools.recover()
+            except Exception as exc:              # never keeps the suite from starting or quitting
+                logging.getLogger(__name__).warning("system tools recovery: %s", exc)
+        QTimer.singleShot(1500, recover_system)
+        app.aboutToQuit.connect(recover_system)
     return ctl, win
 
 

@@ -34,7 +34,8 @@ SECTIONS = [
         ("advanced", "Advanced", "gauge")]),
         ("booster", "FPS Booster", "gauge"), ("benchmark", "Benchmark", "chart"),
         ("installed", "Installed Mods", "layers")]),
-    ("SYSTEM", [("doctor", "System Doctor", "stethoscope"), ("cleaner", "Smart Cleaner", "broom")]),
+    ("SYSTEM", [("doctor", "System Doctor", "stethoscope"), ("cleaner", "Smart Cleaner", "broom"),
+                ("network", "Network Lab", "wifi")]),
     ("DESKTOP", [("wallpapers", "Wallpapers", "image"), ("dock", "Dock", "dock"), ("widgets", "Widgets", "grid"),
                  ("themes", "Theme Workshop", "palette")]),
     ("ONLINE", [("community", "Community", "globe"), ("sync", "Cloud Sync", "refresh")]),
@@ -441,6 +442,7 @@ class MainWindow(QMainWindow):
         from akeno.ui.pages.settings import SettingsPage
         from akeno.ui.pages.doctor import DoctorPage
         from akeno.ui.pages.cleaner import CleanerPage
+        from akeno.ui.pages.network import NetworkPage
 
         root = QWidget()
         root.setObjectName("Root")
@@ -467,7 +469,7 @@ class MainWindow(QMainWindow):
                 "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
                 "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage,
                 "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage, "home": HomePage,
-                "doctor": DoctorPage, "cleaner": CleanerPage}
+                "doctor": DoctorPage, "cleaner": CleanerPage, "network": NetworkPage}
         for key, _, _ in NAV:
             page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")

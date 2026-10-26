@@ -196,3 +196,72 @@ def test_maintenance_setting_persists(suite):
     page.show_tab("maintenance")
     page.maint.interval.setCurrentIndex(page.maint.interval.findData(7))
     assert svc.system_tools.cleaner.maintenance()["interval_days"] == 7
+
+
+def test_network_stability_and_bufferbloat_consent(suite, qtbot):
+    win, ctl, svc = suite
+    net = svc.system_tools.network
+    net._prober = lambda method, target: None if method == "icmp" else 21.0      # ICMP blocked, TCP works
+    win.go("network")
+    page = win.pages["network"]
+    page.show_tab("stability")
+    tab = page.tabs_w["stability"]
+    tab.duration.setCurrentIndex(0)
+    tab.run()
+    qtbot.waitUntil(lambda: not tab.task.running, timeout=30000)
+    assert tab.table.rowCount() >= 6
+    from akeno.ui.system_ui import FindingView
+    ids = [w.finding.id for w in tab.findings.findChildren(FindingView)]
+    assert "net.icmp_blocked" in ids and "net.offline" not in ids
+    page.show_tab("bufferbloat")
+    bb = page.tabs_w["bufferbloat"]
+    assert not bb.btn.isEnabled(), "no load test without consent"
+    bb.consent.setChecked(True)
+    assert bb.btn.isEnabled()
+
+
+def test_network_gaming_mode_pause_restore(suite, qtbot, monkeypatch):
+    import subprocess
+    import sys
+    win, ctl, svc = suite
+    net = svc.system_tools.network
+    proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        calls = []
+        net.gaming._suspend = lambda pid: calls.append(("s", pid)) or True
+        net.gaming._resume = lambda pid: calls.append(("r", pid)) or True
+        net._prober = lambda method, target: 20.0
+        monkeypatch.setattr(net, "gaming_candidates", lambda ctx=None: [
+            {"pid": proc.pid, "name": "OneDrive.exe", "title": "OneDrive", "tcp": 3, "udp": 0, "io_bps": 1e6,
+             "known": True, "remotes": []}])
+        monkeypatch.setattr("akeno.ui.pages.network.confirm", lambda *a, **k: True)
+        win.go("network")
+        page = win.pages["network"]
+        page.show_tab("gaming")
+        tab = page.tabs_w["gaming"]
+        tab.find()
+        qtbot.waitUntil(lambda: tab.table.rowCount() == 1, timeout=10000)
+        tab.table.selectRow(0)
+        tab.pause()
+        qtbot.waitUntil(lambda: net.gaming.active(), timeout=30000)
+        qtbot.waitUntil(lambda: not tab.task.running, timeout=30000)
+        assert ("s", proc.pid) in calls and tab.b_restore.isEnabled()
+        tab.restore()
+        qtbot.waitUntil(lambda: not net.gaming.active(), timeout=10000)
+        assert ("r", proc.pid) in calls
+    finally:
+        proc.kill()
+        proc.wait()
+
+
+def test_network_dns_benchmark_table(suite, qtbot, monkeypatch):
+    win, ctl, svc = suite
+    monkeypatch.setattr("akeno.system.network.dns.query", lambda server, name, timeout=2.0, sock_factory=None:
+                        (12.0 if server != "9.9.9.9" else None, "ok" if server != "9.9.9.9" else "timeout"))
+    win.go("network")
+    page = win.pages["network"]
+    page.show_tab("dns")
+    tab = page.tabs_w["dns"]
+    tab.run()
+    qtbot.waitUntil(lambda: tab.table.rowCount() >= 5, timeout=30000)
+    assert tab.results[-1]["server"] == "9.9.9.9"

@@ -61,7 +61,7 @@ class TabbedPage(QWidget):
         hl.addWidget(widget, 1)
         self.holders[key] = holder
         self.keys.append(key)
-        self.tabs.addTab(title)
+        self.tabs.addTab(title.replace("&", "&&"))          # "Ping & stability": no keyboard mnemonic
         if self.current is None:
             self._place(key)
 
