@@ -15,6 +15,9 @@ What runs where:
   (the installed release candidate, and ``--next``, a build of the same commit with a higher version number).
 The confirmation click on the Updates page is not automated: the updater is started the way the page starts it.
 
+With ``--installed-version 3.0.0 --next-version 3.1.0`` the published 3.0.0 installer is updated to this
+commit's build instead (the real upgrade path).
+
 Scenarios: update 3.0.0 → 3.0.1 with a second AKENO window open; broken updates (no window; failing its own start
 checks); a wrong build (another version reports back); a power cut right after the folder switch, recovered by the next start;
 a manipulated download and a forged signature (nothing changes); the manual rollback; uninstalling. Each checks the
@@ -296,7 +299,9 @@ def seed_user_data() -> dict:
     SecureStore().save({"e2e": "license state kept", "remember": True})
     home = app_home()
     files = {"desktop/themes/e2e-theme.json": b'{"name": "e2e"}', "desktop/wallpapers/e2e.png": os.urandom(4096),
-             "e2e-user-file.bin": os.urandom(1024)}
+             "e2e-user-file.bin": os.urandom(1024),
+             # a mod installation's backup of the original game file (Restore puts it back)
+             "backups/tx99999/files/bin/x64/nvngx_dlss.dll": os.urandom(8192)}
     for rel, data in files.items():
         (home / rel).parent.mkdir(parents=True, exist_ok=True)
         (home / rel).write_bytes(data)
@@ -311,7 +316,8 @@ def user_data_intact(report: Report, seeded: dict, when: str) -> None:
     home = app_home()
     files = all((home / rel).is_file() and hashlib.sha256((home / rel).read_bytes()).hexdigest() == h
                 for rel, h in seeded.items())
-    report.add(files, f"{when}: themes, wallpapers and user files unchanged", f"{len(seeded)} files, SHA-256")
+    report.add(files, f"{when}: themes, wallpapers, mod backups and user files unchanged",
+               f"{len(seeded)} files, SHA-256")
     store = SecureStore()
     try:
         state = store._decode(store.path.read_bytes())
@@ -339,8 +345,10 @@ class E2E:
         self.server: ReleaseServer | None = None
         self.sequence = 0
         from akeno import __version__
-        self.rc = __version__                                 # the release candidate the installer installs
+        # the version the installer installs: this commit's release candidate, or an older published release
+        self.rc = args.installed_version or __version__
         self.installed_version = self.rc
+        self.next_version = args.next_version or bump(self.rc, 1)   # the version of the --next build
 
     def service(self):
         from akeno.licensing import crypto
@@ -438,14 +446,14 @@ class E2E:
         from akeno.updater import apply
 
         def v(n: int) -> str:
-            return bump(self.rc, n)
+            return self.next_version if n == 1 else bump(self.next_version, n - 1)
         seeded = seed_user_data()
         if not self.install():
             return
         user_data_intact(r, seeded, "after installation")
         next_dist = Path(self.args.next)
 
-        # 1. 3.0.0 -> 3.0.1 with a second window open
+        # 1. the installed version -> the --next build, with a second window open
         # a file with a non-ASCII name (stored at the end, out of sorted order): content_sha256 by code point
         self.publish(v(1), next_dist, extra={"docs/e2e-ünïcode-日本.txt": "AKENO ✓".encode()})
         outcome, ctx = self.apply(v(1))
@@ -592,6 +600,8 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--installer", type=Path, required=True)
     ap.add_argument("--next", type=Path, required=True, help="program folder of the next version (3.0.1 build)")
+    ap.add_argument("--installed-version", help="version of --installer when it is not this commit (e.g. 3.0.0)")
+    ap.add_argument("--next-version", help="version the --next build reports (default: installed version + 0.0.1)")
     ap.add_argument("--work", type=Path, required=True)
     ap.add_argument("--report", type=Path)
     args = ap.parse_args(argv)

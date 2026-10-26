@@ -47,4 +47,4 @@ def test_files_installed_by_21_stay_recognised():
 
 def test_version_and_name():
     import akeno
-    assert akeno.__version__ == "3.0.0" and akeno.APP_NAME == "AKENO Gaming Suite"
+    assert akeno.__version__ == "3.1.0" and akeno.APP_NAME == "AKENO Gaming Suite"

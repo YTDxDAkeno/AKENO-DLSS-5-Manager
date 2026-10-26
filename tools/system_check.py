@@ -176,7 +176,14 @@ def main(argv=None) -> int:
     ap.add_argument("--json")
     ap.add_argument("--modules", default=",".join(MODULES))
     ap.add_argument("--eicar", action="store_true", help="CI only: ask Defender about the EICAR test file")
+    ap.add_argument("--print-summary", metavar="JSON", help="print the digest of an earlier --json run and exit")
     args = ap.parse_args(argv)
+    if args.print_summary:
+        try:
+            summary(json.loads(Path(args.print_summary).read_text(encoding="utf-8")))
+        except (OSError, ValueError) as exc:
+            print(f"no system check result: {exc}")
+        return 0
     import tempfile
     home = tempfile.mkdtemp(prefix="akeno-system-check-")
     import os

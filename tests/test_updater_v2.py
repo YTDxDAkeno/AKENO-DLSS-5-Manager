@@ -996,6 +996,11 @@ def test_release_tool_describes_and_verifies_against_the_built_files(tmp_path, s
     keys_file.write_text(json.dumps({"keys": [{"kid": tool.kid_of(public), "public_key": public}]}))
     assert release_v2.main(["verify", str(doc), "--zip", str(pkg), "--exe", str(exe), "--keys", str(keys_file)]) == 0
     assert "can install it itself" in capsys.readouterr().out
+    seq = signed["sequence"]                             # clients that saw the published release refuse an equal one
+    base = ["verify", str(doc), "--zip", str(pkg), "--exe", str(exe), "--keys", str(keys_file)]
+    assert release_v2.main(base + ["--previous-sequence", str(seq - 1)]) == 0
+    assert release_v2.main(base + ["--previous-sequence", str(seq)]) == 1
+    assert f"[FAIL] sequence {seq} after the published {seq}" in capsys.readouterr().out
     exe.write_bytes(b"MZ another installer")             # a file changed after the signing request
     assert release_v2.main(["verify", str(doc), "--zip", str(pkg), "--exe", str(exe), "--keys", str(keys_file)]) == 1
     assert "[FAIL] installer" in capsys.readouterr().out

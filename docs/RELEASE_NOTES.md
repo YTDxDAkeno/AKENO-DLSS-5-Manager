@@ -1,3 +1,55 @@
+# AKENO Gaming Suite 3.1.0
+
+A new **SYSTEM** section between GAMING and DESKTOP with four modules, and a new mod library. Everything of 3.0.0
+stays: DLSS 5 Manager, FPS Booster, Benchmark, Desktop Studio, Community, Cloud Sync, account, license and updates.
+AKENO measures before it claims anything, changes nothing without your confirmation and keeps every result on this
+PC.
+
+## New
+
+- **System Doctor.** Health dashboard (processor, memory, drives, graphics; temperatures only from real sensors),
+  an optional health indicator that shows every deduction, Slow PC Detective (what is measured, what is a possible
+  cause, what only happened at the same time), Startup Analyzer (disable and re-enable like Task Manager, with undo),
+  Crash Detective (event log, crash dumps, stop codes), Hardware Health (SMART/NVMe health of every drive) and a
+  guided repair with Windows' own DISM and SFC, only when they are needed.
+- **Smart Cleaner.** Junk categories with the reason, the risk and what you may notice afterwards; a preview of the
+  exact files before anything happens; the Recycle Bin by default; links, junctions, files in use and Windows'
+  own folders are never touched; browser caches only, never cookies, sign-ins or profiles; shader caches never
+  preselected; disk space analyser with duplicates; Smart Maintenance (off by default, never removes anything).
+- **Network Lab.** Connection dashboard; ping and stability to the router and three internet targets with loss,
+  jitter and spikes (a server that ignores ping is not an outage); bufferbloat test with your consent and a
+  data limit; bandwidth per adapter and the programs that are online; network gaming mode with a measurement
+  before and after; DNS benchmark (your DNS is changed only when you choose it, with a restore); connection
+  repair. No registry or TCP "tweaks". Your public IP address is looked up only when you ask.
+- **Universal Mod Scanner.** Installed Mods becomes the mod library for every game: mods installed by AKENO and by
+  you, Minecraft Java instances (official launcher, Prism/MultiMC, CurseForge, Modrinth, ATLauncher; Fabric,
+  Quilt, Forge, NeoForge), FiveM, BepInEx, MelonLoader, UE4SS, ASI loaders, ReShade, OptiScaler. Conflicts are
+  reported only when the mods' own data shows them. Mods AKENO did not install are shown read-only; AKENO's
+  installations keep their one-click restore.
+- **Security Center.** The protection status Windows Security reports (antivirus, firewall, definitions, Tamper
+  Protection), Microsoft Defender's own quick, full and folder scans, the threat history, a security check for mods,
+  downloads and tools (type, SHA-256, vendor, signature, origin, programs inside archives and Defender's verdict),
+  and a review of running programs that warns only with a concrete reason. AKENO is not an antivirus: it never
+  switches protection off, adds no exclusions, deletes nothing and respects another antivirus.
+- **Download protection.** Components AKENO downloads are checked by Microsoft Defender after their SHA-256 check;
+  a detection stops the installation.
+- **Restore game files without a license.** The welcome screen can put back the original game files, FPS Booster
+  settings and paused programs also when no license is active. It unlocks nothing else.
+- **Export report** in System Doctor, Network Lab and Security Center, without file paths, addresses, names or
+  serial numbers.
+
+## Fixed since the 3.1 preview
+
+- Hardware Health showed an empty drive table on Windows: the drive query was refused by Windows PowerShell 5.1.
+  The same fix applies to the memory/processor counters in System Doctor and to gateway and DNS in Network Lab. When
+  Windows Storage does not answer, the drives are still listed with their SMART status.
+
+## Updating from 3.0.0
+
+ACCOUNT → Updates offers 3.1.0. The update keeps your license, settings, games, mod backups, themes and wallpapers;
+the new version checks itself after the switch and the previous version comes back automatically if it does not
+start correctly.
+
 # AKENO Gaming Suite 3.0.0
 
 AKENO DLSS 5 Manager becomes the AKENO Gaming Suite. Everything of 2.1 stays as it was: the community DLSS 5 engine, FiveM Legacy, the RTX 4080/5090 profiles, the downloader, 32-bit support, configs, launcher, backups, game records, cache, settings, localization and diagnostics. It is now the DLSS 5 Manager group in GAMING.

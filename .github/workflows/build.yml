@@ -394,6 +394,11 @@ jobs:
           '```json' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           $described | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
           '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+      - name: Corresponding source code (GPL-3.0-or-later) of this exact commit
+        shell: pwsh
+        run: |
+          git archive --format=zip --prefix="AKENO-Gaming-Suite-$env:AKENO_VERSION-source/" -o "packaging\out\AKENO-Gaming-Suite-$env:AKENO_VERSION-source.zip" HEAD
+          if ($LASTEXITCODE -ne 0) { throw "git archive failed" }
       - name: Checksums
         shell: pwsh
         run: |
@@ -435,6 +440,16 @@ jobs:
             ${{ runner.temp }}/akeno-gui/logs/*
             ${{ runner.temp }}/akeno-smoke/logs/*
             ${{ runner.temp }}/akeno-exe/logs/*
+      - name: Release summary (checksums, Release Manager values, real Windows security check)
+        if: always()
+        shell: pwsh
+        run: |
+          "=== SHA256SUMS ==="
+          Get-Content packaging\out\SHA256SUMS.txt -ErrorAction SilentlyContinue
+          "=== Release Manager values ==="
+          python tools/release_v2.py describe "packaging\out\AKENO-Gaming-Suite-$env:AKENO_VERSION-portable-x64.zip" "packaging\out\AKENO-Gaming-Suite-$env:AKENO_VERSION-Setup-x64.exe"
+          "=== System tools on this runner ==="
+          python tools/system_check.py --print-summary system-check.json
 
   windows-update-e2e:
     # A disposable Windows runner: installs the tested installer, then updates, breaks, interrupts and rolls back
@@ -480,6 +495,30 @@ jobs:
           Copy-Item "$env:LOCALAPPDATA\AKENO\logs\*" e2e-logs -ErrorAction SilentlyContinue
           Copy-Item "$env:RUNNER_TEMP\e2e\setup.log" e2e-logs -ErrorAction SilentlyContinue
           if ($code -ne 0) { throw "update end-to-end test failed" }
+      - name: Upgrade path from the published stable release to this build (real 3.0.0 installer)
+        # The installer users have: downloaded read-only from the production download and checked against the
+        # SHA-256 its signed 3.0.0 release carries (sequence 1, key d6139235b220a4aa). Then the same scenarios as
+        # above update that installation to this commit's portable package.
+        shell: pwsh
+        env:
+          PUBLISHED_VERSION: "3.0.0"
+          PUBLISHED_SETUP_SHA256: fe919b720e7db4a7e3e8fce97555bb77cde23851d205de3f039d847b1e0dd20f
+        run: |
+          $v = (Select-String -Path akeno\__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          if ($v -eq $env:PUBLISHED_VERSION) { "this build is $v itself; nothing to upgrade from" ; exit 0 }
+          New-Item -ItemType Directory -Force published, next-build | Out-Null
+          Invoke-WebRequest "https://akeno.online/downloads/$env:PUBLISHED_VERSION/AKENO-Setup.exe" -OutFile published\AKENO-Setup.exe
+          $sha = (Get-FileHash published\AKENO-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          if ($sha -ne $env:PUBLISHED_SETUP_SHA256) { throw "the downloaded $env:PUBLISHED_VERSION installer is not the signed one ($sha)" }
+          $zip = Get-ChildItem rc -Filter '*-portable-x64.zip' | Select-Object -First 1
+          Expand-Archive $zip.FullName -DestinationPath next-build
+          python tools/update_e2e.py --installer published\AKENO-Setup.exe --installed-version $env:PUBLISHED_VERSION --next next-build --next-version $v --work "$env:RUNNER_TEMP\e2e-upgrade" --report e2e-upgrade-report.md
+          $code = $LASTEXITCODE
+          if (Test-Path e2e-upgrade-report.md) {
+            "## Upgrade $env:PUBLISHED_VERSION -> $v" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Get-Content e2e-upgrade-report.md | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          if ($code -ne 0) { throw "upgrade from $env:PUBLISHED_VERSION failed" }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -487,6 +526,7 @@ jobs:
           path: |
             e2e-report.md
             e2e-logs/*
+            e2e-upgrade-report.md
 
   publish-release:
     # Users download from the PUBLIC release repository (no GitHub login); this repository stays private.

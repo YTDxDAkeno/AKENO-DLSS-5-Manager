@@ -1,6 +1,6 @@
 # AKENO Gaming Suite
 
-**3.0** extends AKENO DLSS 5 Manager into a suite. One account and one license (24 hours, 72 hours, 30 days or Lifetime; codes stack) unlock every module:
+**3.1** adds the SYSTEM section (System Doctor, Smart Cleaner, Network Lab, Security Center) and the mod library to the suite that **3.0** made of AKENO DLSS 5 Manager. One account and one license (24 hours, 72 hours, 30 days or Lifetime; codes stack) unlock every module:
 
 | Section | Pages |
 |---|---|
@@ -19,7 +19,7 @@ The welcome screen's **Restore game files** puts back everything AKENO changed (
 
 Licenses are Ed25519-signed by that server, bound to the PC and checked against the public key built into the app. A Lifetime license keeps working offline for good ([license trust model](docs/SECURITY_LICENSING.md)). Sign-up, e-mail confirmation, password reset and sessions: [accounts](docs/ACCOUNT_SYSTEM.md).
 
-More: [3.1 system tools](docs/AKENO_3_1_SYSTEM_TOOLS.md) (German), [Desktop Studio](docs/DESKTOP_STUDIO.md), [Cloud Sync and Community](docs/CLOUD_SYNC_AND_COMMUNITY.md), [distribution and updates](docs/DISTRIBUTION_AND_UPDATES.md), [3.0 release notes](docs/AKENO_V3_RELEASE_NOTES.md).
+More: [3.1 system tools](docs/AKENO_3_1_SYSTEM_TOOLS.md) (German), [Desktop Studio](docs/DESKTOP_STUDIO.md), [Cloud Sync and Community](docs/CLOUD_SYNC_AND_COMMUNITY.md), [distribution and updates](docs/DISTRIBUTION_AND_UPDATES.md), [release notes](docs/RELEASE_NOTES.md).
 
 ## DLSS 5 Manager
 

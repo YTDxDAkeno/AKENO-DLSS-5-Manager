@@ -7,7 +7,7 @@
     # a signed release (the JSON GET /api/v1/releases/stable returns, or the admin panel's preview of it):
     # is it accepted by the app's own parser, and does it describe exactly these files?
     python tools/release_v2.py verify release.json --zip ...portable-x64.zip --exe ...Setup-x64.exe \
-        [--keys akeno/data/release-keys.json] [--installed 3.0.0]
+        [--keys akeno/data/release-keys.json] [--installed 3.0.0] [--previous-sequence 1]
 
 Read-only and offline: no network, no signing, no private key. ``describe`` also unpacks the portable ZIP with the
 app's own rules (``akeno/updater/staging.py``), so a package the updater would refuse is found before it is signed.
@@ -102,6 +102,11 @@ def verify(args) -> int:
     print(f"[OK  ] signature valid (key {release.kid}); version {release.release}, sequence {d.sequence}, "
           f"issued {d.issued_at}, expires {d.expires_at}, install mode {d.install_mode}")
     print(f"       signed fields: {', '.join(d.signed_fields)}")
+    if args.previous_sequence is not None:
+        # installed clients refuse a lower sequence, and the same sequence for a different release (anti-replay)
+        newer = d.sequence > args.previous_sequence
+        print(f"[{'OK  ' if newer else 'FAIL'}] sequence {d.sequence} after the published {args.previous_sequence}")
+        ok &= newer
     refusal = d.in_app_refusal(args.installed)
     if refusal:
         print(f"[INFO] AKENO {args.installed} shows it but does not install it itself: {refusal}")
@@ -146,6 +151,7 @@ def main(argv: list[str] | None = None) -> int:
     v.add_argument("--exe", type=Path)
     v.add_argument("--keys", type=Path, default=ROOT / "akeno" / "data" / "release-keys.json")
     v.add_argument("--installed", default="3.0.0", help="the version that would update (default 3.0.0)")
+    v.add_argument("--previous-sequence", type=int, help="sequence of the release the clients have seen (3.0.0: 1)")
     args = ap.parse_args(argv)
     return describe(args) if args.cmd == "describe" else verify(args)
 
