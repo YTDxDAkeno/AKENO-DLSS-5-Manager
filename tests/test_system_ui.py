@@ -76,6 +76,35 @@ def test_doctor_overview_and_slow_pc(suite, qtbot):
     assert page.slowpc.table.rowCount() == 1
 
 
+def test_system_doctor_reopens_saved_hardware_report_with_translated_cpu_note(suite, qtbot):
+    """A CPU sensor note serialized as {t, p} must not crash the entire GUI on next launch."""
+    from akeno import i18n
+    from akeno.system.model import Reading, Report
+    from akeno.ui.pages.doctor import HardwareTab
+
+    win, ctl, svc = suite
+    report = Report("doctor")
+    report.data = {
+        "drives": [],
+        "memory": {"total": 32 * 2**30, "used": 10 * 2**30, "percent": 31},
+        "temperatures": [],
+        "cpu_temperature": Reading.missing(
+            i18n.msg("Not available on this PC.")).to_dict(),
+    }
+    assert isinstance(report.data["cpu_temperature"]["note"], dict)
+    svc.system_tools.store.add_history("doctor.hardware", report.to_dict())
+
+    # The actual startup path constructs HardwareTab and loads svc.last("hardware")
+    # from the JSON persisted in system.sqlite3, not from a live probe.
+    for lang in ("en", "de"):
+        i18n.set_language(lang)
+        tab = HardwareTab(win.pages["doctor"])
+        qtbot.addWidget(tab)
+        assert tab.temp_grid.grid.rowCount() >= 1
+        tab.close()
+    i18n.set_language("en")
+
+
 def test_doctor_link_opens_other_module(suite):
     win, ctl, svc = suite
     from akeno.ui.system_ui import open_link
