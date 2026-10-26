@@ -34,6 +34,8 @@ SECTIONS = [
         ("advanced", "Advanced", "gauge")]),
         ("booster", "FPS Booster", "gauge"), ("benchmark", "Benchmark", "chart"),
         ("installed", "Installed Mods", "layers")]),
+    ("SYSTEM", [("doctor", "System Doctor", "stethoscope"), ("cleaner", "Smart Cleaner", "broom"),
+                ("network", "Network Lab", "wifi"), ("security", "Security Center", "shield")]),
     ("DESKTOP", [("wallpapers", "Wallpapers", "image"), ("dock", "Dock", "dock"), ("widgets", "Widgets", "grid"),
                  ("themes", "Theme Workshop", "palette")]),
     ("ONLINE", [("community", "Community", "globe"), ("sync", "Cloud Sync", "refresh")]),
@@ -438,6 +440,10 @@ class MainWindow(QMainWindow):
         from akeno.ui.pages.library import LibraryPage
         from akeno.ui.pages.profiles import ProfilesPage
         from akeno.ui.pages.settings import SettingsPage
+        from akeno.ui.pages.doctor import DoctorPage
+        from akeno.ui.pages.cleaner import CleanerPage
+        from akeno.ui.pages.network import NetworkPage
+        from akeno.ui.pages.security import SecurityPage
 
         root = QWidget()
         root.setObjectName("Root")
@@ -463,9 +469,19 @@ class MainWindow(QMainWindow):
                 "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage, "account": AccountPage,
                 "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
                 "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage,
-                "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage, "home": HomePage}
+                "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage, "home": HomePage,
+                "doctor": DoctorPage, "cleaner": CleanerPage, "network": NetworkPage,
+                "security": SecurityPage}
+        from akeno.ui.system_ui import UnavailablePage
         for key, _, _ in NAV:
-            page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
+            try:
+                page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
+            except Exception as exc:
+                # the SYSTEM tools read results saved on this PC; one that fails must not keep the rest of AKENO
+                # (games, mods, restores, updates) from starting. Every other page is required.
+                if key not in UnavailablePage.OPTIONAL:
+                    raise
+                page = UnavailablePage(key, exc)
             page.setObjectName(f"page_{key}")
             host = PageHost(page)
             self.pages[key] = page

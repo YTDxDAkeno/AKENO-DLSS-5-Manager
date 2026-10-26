@@ -9,8 +9,9 @@ CATEGORIES = {"tasks": "Installs, restores, benchmarks and scans finished",
               "updates": "A new AKENO version is available",
               "license": "License ends soon or needs a check",
               "sync": "Cloud Sync conflicts",
-              "games": "FPS Booster session settings when a game starts"}
-DEFAULT = {"tasks": True, "updates": True, "license": True, "sync": True, "games": False}
+              "games": "FPS Booster session settings when a game starts",
+              "system": "Smart Maintenance results and Security Center warnings"}
+DEFAULT = {"tasks": True, "updates": True, "license": True, "sync": True, "games": False, "system": True}
 
 
 class Notifier:

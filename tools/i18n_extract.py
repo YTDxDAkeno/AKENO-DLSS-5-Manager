@@ -64,6 +64,61 @@ def data_strings() -> set[str]:
     out |= {"Performance", "Balanced", "Quality", "Ultra", "Disabled"}
     out |= stack_strings()
     out |= suite_strings()
+    out |= system_strings()
+    return out
+
+
+def system_strings() -> set[str]:
+    """3.1 system tools: texts that reach t() / msg() through tables (explanations, labels, tab titles)."""
+    from akeno.system.doctor import crashes, repair, slowpc, startup
+    from akeno.system.model import EVIDENCE_LABELS
+    from akeno.ui import system_ui
+    from akeno.ui.pages import doctor
+    out = set(EVIDENCE_LABELS.values()) | set(system_ui.LEVEL_TEXT.values())
+    out |= set(slowpc.KNOWN_ACTIVITY.values()) | {"Driver installed", "Windows update", "Service installed"}
+    out |= set(crashes.EXCEPTIONS.values()) | {why for _, why in crashes.BUGCHECKS.values()}
+    out |= {"uncorrected read errors", "uncorrected write errors", "Healthy", "Warning", "Unhealthy", "drive"}
+    for s in repair.STEPS:
+        out |= {s.title, s.what, s.effect, s.duration}
+    out |= set(repair.DISM_CODES.values()) | {"SFC finished. Its window showed the result."}
+    out |= set(startup.SOURCE_LABELS.values())
+    out |= {title for _, title in doctor.TABS} | set(doctor.SIG_TEXT.values()) | {text for _, text in doctor.PERIODS}
+    from akeno.system.cleaner import engine as clean_engine, rules as clean_rules, service as clean_service
+    from akeno.ui.pages import cleaner
+    for c in clean_rules.categories({"LOCALAPPDATA": "L", "TEMP": "T", "SystemRoot": "W", "USERPROFILE": "U",
+                                     "APPDATA": "R"}, ["S"], "A"):
+        out |= {c.title, c.reason} | ({c.side_effect} if c.side_effect else set())
+    out |= set(clean_rules.GROUP_TITLES.values()) | set(clean_engine.SKIP_REASONS.values())
+    out |= {f"{name} cache" for name in clean_rules.CHROMIUM} | {"Firefox cache"}
+    out |= {"Copies of web pages, scripts and images the browser can download again. Cookies, sign-ins, passwords, "
+            "history and open tabs are not part of it.", "Copies of web pages, scripts and images Firefox can "
+            "download again. Cookies, sign-ins, passwords and history are in the profile folder, which is not "
+            "touched.", "Websites load a little slower the first time."}
+    out |= {"the program was running", "shader caches were not confirmed"} | set(clean_service.INTERVALS.values())
+    out |= {title for _, title in cleaner.TABS} | set(cleaner.RISK_TEXT.values()) | set(cleaner.STATUS_TEXT.values())
+    from akeno.system.network import bandwidth as net_bw, bufferbloat as net_bb
+    from akeno.ui.pages import network
+    out |= {title for _, title in network.TABS} | set(network.KIND_TEXT.values()) | {x for _, x in network.DURATIONS}
+    out |= set(net_bb.PHASE_TEXT.values()) | {"connected", "disconnected", "protected", "already ended",
+                                             "Windows refused (an elevated or protected process)",
+                                             "Median latency", "Jitter", "Loss", "Done", "Failed", "Restored",
+                                             "Windows did not report the signal."}
+    out |= {"Windows denied the Wi-Fi details (location access may be required)."}
+    from akeno.system.mods.model import SOURCE_TEXT
+    from akeno.ui.pages import installed
+    out |= set(SOURCE_TEXT.values()) | {x for _, x in installed.FILTERS} | {x for _, x in installed.SORTS}
+    out |= set(installed.PLATFORM_TEXT.values()) | set(installed.KIND_TEXT.values())
+    out |= {"Complete", "Some files could not be read", "Failed", "(disabled)", "unreadable"}
+    out |= {"Desktop", "Start menu", "Desktop (all users)", "Start menu (all users)", "Not available on this PC.",
+            "Only administrators can read this folder.", "No minidump folder.",
+            "ACPI thermal zone (not necessarily the processor)", "thermal slowdown active"}
+    from akeno.system.securitycenter import defender as sec_defender, filecheck as sec_files
+    from akeno.ui.pages import security
+    out |= set(sec_defender.ERRORS.values()) | set(sec_files.KIND_TEXT.values()) | set(sec_files.ZONES.values())
+    out |= {title for _, title in security.TABS} | set(security.STATE_TEXT.values()) | set(security.SCAN_TEXT.values())
+    out |= set(security.RESULT_TEXT.values()) | set(security.THREAT_STATUS_TEXT.values())
+    out |= set(security.SEVERITY_TEXT.values()) | set(security.LOCATION_TEXT.values())
+    out |= {"Antivirus", "Firewall", "Profiles", "Path", "The scan was stopped.", "Cancelled."}
     return out
 
 

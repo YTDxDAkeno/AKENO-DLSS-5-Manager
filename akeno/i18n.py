@@ -75,10 +75,43 @@ def msg(template: str, **params) -> Msg:
     return Msg(template, **params)
 
 
-def t(text: str, **fmt) -> str:
+def serialized(value) -> bool:
+    """A message as stored in JSON by ``akeno.system.model.enc``: ``{"t": template, "p": {name: value}}``."""
+    return isinstance(value, dict) and set(value) == {"t", "p"} and isinstance(value["t"], str) \
+        and isinstance(value["p"], dict)
+
+
+def _fill(template: str, params: dict) -> str | None:
+    """``template`` with ``params``, or None when its placeholders do not fit them."""
+    try:
+        return template.format(**params) if params else template
+    except (KeyError, IndexError, ValueError, AttributeError):
+        return None
+
+
+def t(text, **fmt) -> str:
+    """``text`` in the UI language. Never raises on what it is given: a message stored in JSON (see
+    ``serialized``) is translated like the message it was, ``None`` is "" and any other value its ``str``; a
+    translation whose placeholders do not match falls back to English, then to the template itself."""
+    if serialized(text):
+        text = Msg(text["t"]) if not text["p"] else _decoded(text)
+    if text is None:
+        return ""
+    if not isinstance(text, str):
+        text = str(text)
     if isinstance(text, Msg) and not fmt:
-        params = {k: (t(v) if isinstance(v, Msg) else v) for k, v in text.params.items()}
+        params = {k: (t(v) if isinstance(v, Msg) or serialized(v) else v) for k, v in text.params.items()}
         out = _german().get(text.template, text.template) if _lang == "de" else text.template
-        return out.format(**params) if params else out
+        return next((x for x in (_fill(out, params), _fill(text.template, params)) if x is not None), text.template)
     out = _german().get(text, text) if _lang == "de" else text
-    return out.format(**fmt) if fmt else out
+    if not fmt:
+        return out
+    return next((x for x in (_fill(out, fmt), _fill(text, fmt)) if x is not None), text)
+
+
+def _decoded(value: dict) -> "Msg":
+    params = {k: (_decoded(v) if serialized(v) else v) for k, v in value["p"].items()}
+    try:
+        return Msg(value["t"], **params)
+    except (KeyError, IndexError, ValueError, AttributeError):
+        return Msg(value["t"])

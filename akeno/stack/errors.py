@@ -12,7 +12,7 @@ import errno
 import urllib.error
 
 from akeno.security.archive import ArchiveError
-from akeno.security.downloads import Cancelled, DownloadError, VerificationError
+from akeno.security.downloads import Cancelled, DownloadError, ThreatDetected, VerificationError
 
 
 class StackError(Exception):
@@ -71,6 +71,10 @@ def explain(exc: BaseException) -> StackError:
     if isinstance(exc, (urllib.error.URLError, TimeoutError, ConnectionError)):
         return StackError("No connection to the download server.",
                           "Check your internet connection; cached versions still work offline.", "offline")
+    if isinstance(exc, ThreatDetected):
+        return StackError(str(exc), msg("Microsoft Defender decides what happens to the file (see Protection "
+                                        "history in Windows Security). If you are sure it is a false positive, "
+                                        "report it to the antivirus vendor."), "threat_detected")
     if isinstance(exc, DownloadError):
         return StackError(str(exc), "Check your connection and try again.", "download")
     if isinstance(exc, PermissionError):

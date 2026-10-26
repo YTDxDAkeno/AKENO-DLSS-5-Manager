@@ -28,10 +28,12 @@ class SuiteShell(QObject):
     view_changed = Signal(object)          # LicenseView, always delivered on the UI thread
 
     def __init__(self, manager: LicenseManager, build_suite: Callable[[], object],
-                 on_language: Callable[[str], None] | None = None, busy: Callable[[], bool] | None = None):
+                 on_language: Callable[[str], None] | None = None, busy: Callable[[], bool] | None = None,
+                 recovery: Callable[[], object] | None = None):
         super().__init__()
         self.m = manager
         self._build = build_suite
+        self._recovery = recovery
         self._on_language = on_language
         self._busy = busy or (lambda: False)
         self.gate = None
@@ -70,7 +72,7 @@ class SuiteShell(QObject):
     def show_gate(self, view: LicenseView | None = None) -> None:
         from akeno.ui.license_gate import LicenseGate
         if self.gate is None:
-            self.gate = LicenseGate(self.m)
+            self.gate = LicenseGate(self.m, recovery=self._recovery)
             self.gate.unlocked.connect(self.open_suite)
             self.gate.language_changed.connect(self._language)
         if view is not None:

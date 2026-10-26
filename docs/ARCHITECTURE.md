@@ -55,3 +55,13 @@ displays   parsers,   engine     hardware     NR, Feeder;  CSV/JSON
 
 Restore undoes the whole chain for that backend and folder, restoring originals from the oldest
 transaction and removing created files, after warning about files changed since installation.
+
+## System tools (3.1)
+
+`akeno/system/` holds System Doctor, Smart Cleaner, Network Lab, Universal Mod Scanner and Security Center
+without Qt: providers (real Windows implementation and stand-ins for tests) feed pure diagnosis functions that
+return `Finding`s with evidence (measured / possible cause / correlation). Confirmed actions are journalled in
+`%LOCALAPPDATA%\AKENO\system.sqlite3` (separate from `akeno.sqlite3` and Cloud Sync) and can be undone where
+Windows allows it. `AppServices.system_tools` creates the modules on first use. Downloads pass an optional
+antivirus veto (`DownloadManager.antivirus`) after their SHA-256 check. `akeno/recovery.py` restores what AKENO
+changed without an active license. Details: [AKENO_3_1_SYSTEM_TOOLS.md](AKENO_3_1_SYSTEM_TOOLS.md).

@@ -1,0 +1,31 @@
+AKENO Gaming Suite 3.1.0
+
+Neu: der Bereich SYSTEM
+- System Doctor: Gesundheits-Dashboard, Slow PC Detective, Autostart-Analyse mit Rückgängig, Absturzanalyse, Laufwerksgesundheit (SMART/NVMe) und geführte Reparatur mit DISM/SFC.
+- Smart Cleaner: Datenmüll mit Begründung und Risiko, Vorschau der genauen Dateien, Papierkorb als Standard, Speicherplatz-Analyse mit Duplikaten. Cookies, Anmeldungen und Windows-Ordner werden nie angefasst.
+- Network Lab: Ping und Stabilität (Verlust, Jitter), Bufferbloat-Test mit Zustimmung, Bandbreite, Netzwerk-Gaming-Modus mit Messung vorher/nachher, DNS-Benchmark, Verbindungsreparatur. Keine Registry- oder TCP-Tweaks.
+- Universal Mod Scanner: „Installierte Mods“ zeigt jetzt alle Mods – AKENO-Installationen, eigene Mods, Minecraft (Fabric, Quilt, Forge, NeoForge), FiveM, BepInEx, MelonLoader, ASI, ReShade, OptiScaler – mit Konflikthinweisen. Fremde Mods bleiben unverändert.
+- Security Center: Status von Windows-Sicherheit und Microsoft Defender, Defender-Scans, Bedrohungsverlauf, Sicherheitsprüfung für Mods und Downloads, Prüfung laufender Programme. AKENO ist kein Virenschutz und schaltet nie Schutz ab.
+- Download-Schutz: Heruntergeladene Komponenten prüft Microsoft Defender zusätzlich zur SHA-256-Prüfung.
+- „Spieldateien wiederherstellen“ auf dem Willkommensbildschirm, auch ohne aktive Lizenz.
+- Bericht exportieren ohne Pfade, Adressen und Namen.
+
+Korrigiert: Die Laufwerkstabelle unter Hardware Health blieb leer (Abfrage von Windows PowerShell 5.1 abgelehnt).
+
+Lizenz, Einstellungen, Spiele, Mod-Backups, Themes und Wallpaper bleiben beim Update erhalten. Startet die neue Version nicht korrekt, kehrt die vorherige automatisch zurück.
+
+---
+
+New: the SYSTEM section
+- System Doctor: health dashboard, Slow PC Detective, startup analyser with undo, crash analysis, drive health (SMART/NVMe) and guided repair with DISM/SFC.
+- Smart Cleaner: junk with reason and risk, a preview of the exact files, Recycle Bin by default, disk space analyser with duplicates. Cookies, sign-ins and Windows folders are never touched.
+- Network Lab: ping and stability (loss, jitter), bufferbloat test with consent, bandwidth, network gaming mode measured before and after, DNS benchmark, connection repair. No registry or TCP tweaks.
+- Universal Mod Scanner: Installed Mods now lists every mod - AKENO installations, your own mods, Minecraft (Fabric, Quilt, Forge, NeoForge), FiveM, BepInEx, MelonLoader, ASI, ReShade, OptiScaler - with conflict hints. Other mods stay untouched.
+- Security Center: Windows Security and Microsoft Defender status, Defender scans, threat history, a security check for mods and downloads, a review of running programs. AKENO is not an antivirus and never switches protection off.
+- Download protection: Microsoft Defender checks downloaded components in addition to their SHA-256 check.
+- "Restore game files" on the welcome screen, also without an active license.
+- Export report without paths, addresses and names.
+
+Fixed: the Hardware Health drive table stayed empty (query refused by Windows PowerShell 5.1).
+
+Your license, settings, games, mod backups, themes and wallpapers are kept. If the new version does not start correctly, the previous one comes back automatically.
