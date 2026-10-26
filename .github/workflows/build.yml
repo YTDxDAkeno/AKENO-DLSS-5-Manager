@@ -505,6 +505,9 @@ jobs:
         run: |
           $v = (Select-String -Path akeno\__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
           if ($v -eq $env:PUBLISHED_VERSION) { "this build is $v itself; nothing to upgrade from" ; exit 0 }
+          # a 3.0.0 user's PC: no update state from the test above (it has seen test versions up to 3.1.10,
+          # and the updater's anti-replay rightly refuses anything older)
+          Remove-Item "$env:LOCALAPPDATA\AKENO" -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force published, next-build | Out-Null
           Invoke-WebRequest "https://akeno.online/downloads/$env:PUBLISHED_VERSION/AKENO-Setup.exe" -OutFile published\AKENO-Setup.exe
           $sha = (Get-FileHash published\AKENO-Setup.exe -Algorithm SHA256).Hash.ToLower()
