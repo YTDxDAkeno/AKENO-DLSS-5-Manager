@@ -1008,6 +1008,106 @@ def test_release_tool_describes_and_verifies_against_the_built_files(tmp_path, s
     assert "does not trust" in capsys.readouterr().out
 
 
+def test_release_tool_verifies_the_offline_signature_against_the_tested_build(tmp_path, signing, capsys):
+    """Before publishing: the signing request's signed_payload and the offline signature, against the recorded
+    describe values of the tested build (no download of the files needed)."""
+    import release_v2
+    key, keys = signing
+    pkg = portable_zip(tmp_path, "3.1.0")
+    exe = tmp_path / "AKENO-Gaming-Suite-3.1.0-Setup-x64.exe"
+    exe.write_bytes(b"MZ installer")
+    assert release_v2.main(["describe", str(pkg), str(exe)]) == 0
+    expect = json.loads(capsys.readouterr().out)
+    expect["version"] = "3.1.0"
+    expect_file = tmp_path / "values.json"
+    expect_file.write_text(json.dumps(expect))
+    now = datetime.now(timezone.utc)
+    signed = fields(pkg=pkg, sequence=2, issued_at=iso(now - timedelta(hours=1)),
+                    expires_at=iso(now + timedelta(days=29)), release_date=(now - timedelta(hours=1)).date().isoformat(),
+                    sha256=expect["installer"]["sha256"], size_bytes=expect["installer"]["size_bytes"])
+    doc = envelope(key, signed)
+    payload = tmp_path / "signed_payload.txt"
+    payload.write_bytes(doc["signed_payload"].encode("utf-8"))
+    public = tool.public_of(key)
+    keys_file = tmp_path / "keys.json"
+    keys_file.write_text(json.dumps({"keys": [{"kid": tool.kid_of(public), "public_key": public}]}))
+    base = ["verify", "--payload", str(payload), "--keys", str(keys_file), "--key-id", tool.kid_of(public),
+            "--expect", str(expect_file), "--installed", "3.0.0", "--previous-sequence", "1"]
+    assert release_v2.main(base + ["--signature", doc["signature"]["value"]]) == 0
+    out = capsys.readouterr().out
+    assert "[OK  ] signature valid" in out and "[OK  ] sequence 2 after the published 1" in out
+    assert "[OK  ] content_sha256" in out and "[OK  ] installer" in out and "FAIL" not in out
+    other = base64.urlsafe_b64encode(key.sign(b"something else")).rstrip(b"=").decode()
+    assert release_v2.main(base + ["--signature", other]) == 1                 # a signature over other bytes
+    assert "signature does not match" in capsys.readouterr().out
+    payload.write_bytes(doc["signed_payload"].encode("utf-8") + b"\n")        # one byte more than was signed
+    assert release_v2.main(base + ["--signature", doc["signature"]["value"]]) == 1
+    capsys.readouterr()
+    payload.write_bytes(doc["signed_payload"].encode("utf-8"))
+    expect["portable"]["content_sha256"] = "0" * 64                          # not the tested package
+    expect_file.write_text(json.dumps(expect))
+    assert release_v2.main(base + ["--signature", doc["signature"]["value"]]) == 1
+    assert "[FAIL] content_sha256" in capsys.readouterr().out
+    manual = envelope(key, fields(pkg=None, sequence=2, issued_at=iso(now - timedelta(hours=1)),
+                                  expires_at=iso(now + timedelta(days=29)),
+                                  release_date=(now - timedelta(hours=1)).date().isoformat()))
+    payload.write_bytes(manual["signed_payload"].encode("utf-8"))            # no portable package: no in-app update
+    assert release_v2.main(base + ["--signature", manual["signature"]["value"]]) == 1
+    assert "does not install it itself" in capsys.readouterr().out
+
+
+def test_live_check_reports_what_installed_3_0_0_clients_are_offered(tmp_path, signing, monkeypatch, capsys):
+    """tools/live_release_check.py with the production answers replaced by test-signed ones (no network)."""
+    import live_release_check
+    key, keys = signing
+    pkg = portable_zip(tmp_path, "3.1.0")
+    now = datetime.now(timezone.utc)
+    when = dict(issued_at=iso(now - timedelta(hours=1)), expires_at=iso(now + timedelta(days=29)),
+                release_date=(now - timedelta(hours=1)).date().isoformat())
+    new = envelope(key, fields(pkg=pkg, sequence=2, **when))
+    pub = live_release_check.PUBLISHED
+    old = envelope(key, fields("3.0.0", sequence=1, sha256=pub["installer_sha256"], size_bytes=pub["installer_size"],
+                               portable={**portable_info(pkg, "3.0.0"), "sha256": pub["portable_sha256"],
+                                         "size_bytes": pub["portable_size"]}, install_mode="portable-directory-swap",
+                               **when))
+    live = {"stable": new}
+    answers = {f"{API}/releases/stable": lambda: live["stable"], f"{API}/releases/3.0.0": lambda: old}
+    monkeypatch.setattr(service, "fetch_json", lambda url, trusted=None: answers[url]())
+    monkeypatch.setattr(manifest, "release_keys", lambda: keys)
+    monkeypatch.setattr(distribution, "load", lambda: RM)
+    expect = {"version": "3.1.0", "ci_run": 1, "portable": {
+        "size_bytes": pkg.stat().st_size, "sha256": hashlib.sha256(pkg.read_bytes()).hexdigest(),
+        "file_count": 3, "uncompressed_size_bytes": portable_info(pkg)["uncompressed_size_bytes"],
+        "content_sha256": reference_content_sha256(pkg)},
+        "installer": {"size_bytes": 123456789, "sha256": "cd" * 32}}
+    values = tmp_path / "values.json"
+    values.write_text(json.dumps(expect))
+    assert live_release_check.main(["--expect", str(values)]) == 0
+    out = capsys.readouterr().out
+    assert "FAIL" not in out
+    assert "AKENO 3.0.0, first check after installing: KONTO → Updates offers 3.1.0" in out
+    assert "AKENO 3.0.0, after having seen 3.0.0 (sequence 1): KONTO → Updates offers 3.1.0" in out
+    assert "installs it itself after the user confirms" in out
+    assert "release 3.0.0 unchanged" in out
+    live["stable"] = old                                       # before publishing: 3.0.0 is still live
+    assert live_release_check.main(["--expect", str(values)]) == 0
+    assert "3.1.0 is not the live stable release yet" in capsys.readouterr().out
+    assert live_release_check.main(["--expect", str(values), "--require"]) == 1
+    capsys.readouterr()
+    live["stable"] = envelope(key, fields(pkg=pkg, sequence=1, **when))   # the published sequence used again
+    assert live_release_check.main(["--expect", str(values)]) == 1
+    assert "same sequence 1" in capsys.readouterr().out
+
+
+def test_recorded_release_values_of_3_1_0_match_the_release_report():
+    values = json.loads((ROOT / "docs" / "release" / "3.1.0" / "release-manager-values.json").read_text("utf-8"))
+    report = (ROOT / "docs" / "release" / "3.1.0" / "RELEASE_BERICHT.md").read_text("utf-8")
+    assert values["version"] == "3.1.0"
+    for kind in ("portable", "installer"):
+        assert values[kind]["sha256"] in report
+    assert values["portable"]["content_sha256"] in report
+
+
 def test_the_kept_previous_version_stays_known_after_a_failed_update(tmp_path, signing, akeno_home):
     key, keys = signing
     target = installed(tmp_path, "3.0.0")

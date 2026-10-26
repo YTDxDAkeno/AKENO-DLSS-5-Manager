@@ -4,8 +4,11 @@ name: Production read-only check
 # - GET of health, version, license keys and the website's link pages;
 # - every endpoint the app uses, probed WITHOUT credentials and with an empty body (the server answers 401/422
 #   before any endpoint code runs);
-# - no account, no e-mail, no license, no session is created or changed.
-# Runs when this workflow or the acceptance tool changes on a development branch, or by hand.
+# - no account, no e-mail, no license, no session is created or changed;
+# - the live stable release as an installed AKENO 3.0.0 sees it (tools/live_release_check.py): the release and its
+#   downloads are read with the app's own code; on a disposable Windows runner the published 3.0.0 installer is
+#   installed and updated from production through the real AKENO.exe files (nothing is sent to the server).
+# Runs when this workflow, the acceptance tools or the release records change on a development branch, or by hand.
 
 on:
   push:
@@ -17,6 +20,8 @@ on:
       - "tools/api_contract.py"
       - "akeno/updater/manifest.py"
       - "akeno/data/*.json"
+      - "tools/live_release_check.py"
+      - "docs/release/**"
   workflow_dispatch:
 
 permissions:
@@ -77,3 +82,38 @@ jobs:
               echo "$channel: no channel manifest published at $RELEASE_BASE/channels/$channel.json" | tee -a "$GITHUB_STEP_SUMMARY"
             fi
           done
+      - name: What an installed AKENO 3.0.0 is offered by the live Release Manager (read-only, real downloads)
+        # Until 3.1.0 is the live stable release this reports the live release and that 3.1.0 is not published yet.
+        run: |
+          set -o pipefail
+          python tools/live_release_check.py --expect docs/release/3.1.0/release-manager-values.json --download 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+  live-upgrade:
+    # A disposable Windows runner plays a user's PC with the published 3.0.0: the real installer from akeno.online,
+    # checked against its signed SHA-256, keeps the production release key; the update comes from production.
+    name: Installed AKENO 3.0.0 updates itself from production (disposable Windows runner)
+    runs-on: windows-2022
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QT_QPA_FONTDIR: 'C:\Windows\Fonts'
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - name: Install 3.0.0, update it to the live stable release, roll back, uninstall
+        shell: pwsh
+        run: |
+          Remove-Item "$env:LOCALAPPDATA\AKENO" -Recurse -Force -ErrorAction SilentlyContinue
+          python tools/live_release_check.py --expect docs/release/3.1.0/release-manager-values.json --upgrade-from https://akeno.online/downloads/3.0.0/AKENO-Setup.exe --upgrade-from-sha256 fe919b720e7db4a7e3e8fce97555bb77cde23851d205de3f039d847b1e0dd20f --work "$env:RUNNER_TEMP\live" --report live-upgrade-report.md
+          $code = $LASTEXITCODE
+          if (Test-Path live-upgrade-report.md) { Get-Content live-upgrade-report.md | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
+          if ($code -ne 0) { throw "the installed 3.0.0 did not update from production" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-upgrade-report
+          path: live-upgrade-report.md
+          if-no-files-found: ignore

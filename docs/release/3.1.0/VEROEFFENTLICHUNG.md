@@ -1,6 +1,6 @@
 # AKENO Gaming Suite 3.1.0 – Veröffentlichung als Stable-Update
 
-Diese Schritte schalten 3.1.0 für alle Nutzer frei. **Erst nach ausdrücklicher Freigabe ausführen.** Sie nutzen
+Diese Schritte schalten 3.1.0 für alle Nutzer frei. **Freigabe des Inhabers: erteilt am 2026-10-26.** Sie nutzen
 ausschließlich den bestehenden Release Manager (Admin-Panel, Release-Schema 2 unter
 `https://api.akeno.online/api/v1/releases/*`) und den bestehenden Offline-Signaturweg mit dem Schlüssel
 `d6139235b220a4aa`. Es wird kein Schlüssel erzeugt, kein privater Schlüssel kommt in GitHub, CI oder Logs.
@@ -48,30 +48,62 @@ Artefakt: Run 203 (ID `40349701652`) → `AKENO-Gaming-Suite-windows-x64` (ID `1
    `python tools/release_v2.py describe AKENO-Gaming-Suite-3.1.0-portable-x64.zip AKENO-Gaming-Suite-3.1.0-Setup-x64.exe`
    Die Werte müssen der Tabelle oben entsprechen (`file_count`, `uncompressed_size_bytes`, `content_sha256`,
    Größen, SHA-256).
-4. **Admin-Panel:** neues Release **3.1.0**, Kanal `stable`, Plattform `windows-x64`. Setup-EXE und Portable-ZIP
-   hochladen (Ziel `https://akeno.online/downloads/3.1.0/AKENO-Setup.exe` und `…/AKENO-Portable.zip`).
-   `install_mode` = `portable-directory-swap` (mit Portable-Paket), `minimum_supported_version` = leer oder
-   ≤ 3.0.0, `unattended_install_allowed` = nein. Versionshinweise: `docs/release/3.1.0/release-notes.txt`.
-   Die Sequenz muss **größer als 1** sein (3.0.0-Clients lehnen eine gleiche Sequenz mit anderem Inhalt ab).
-5. **Signaturanfrage** im Admin-Panel erzeugen und **offline** mit dem bestehenden Schlüssel signieren (privater
-   Schlüssel nur im eigenen Tresor). Signatur im Admin-Panel hinterlegen. Noch **nicht** veröffentlichen.
-6. **Vorab prüfen** mit der Vorschau-JSON des Admin-Panels (genau die Antwort, die `GET /api/v1/releases/stable`
-   liefern wird):
-   `python tools/release_v2.py verify release-3.1.0.json --zip …portable-x64.zip --exe …Setup-x64.exe --installed 3.0.0 --previous-sequence 1`
-   Erwartet: `[OK] signature valid (key d6139235b220a4aa)`, `[OK] sequence … after the published 1`,
-   `[OK] AKENO 3.0.0 can install it itself`, `[OK]` für Installer, Portable, `file_count`,
-   `uncompressed_size_bytes`, `content_sha256`.
-7. **Freigabe einholen**, dann im Admin-Panel veröffentlichen.
-8. **Nachprüfung:** GitHub Actions → „Production read-only check“ → „Run workflow“. Erwartet:
-   `[OK] stable 3.1.0 verified (key d6139235b220a4aa)` für Portable und Installer, `install mode
-   portable-directory-swap`, `AKENO 3.0.0 installs it after confirmation`.
+4. **Admin-Panel – neues Release anlegen** (nicht das 3.0.0-Release bearbeiten):
+
+   | Feld | Wert |
+   |---|---|
+   | Version | `3.1.0` |
+   | Kanal / Plattform | `stable` / `windows-x64` |
+   | Installer | `AKENO-Gaming-Suite-3.1.0-Setup-x64.exe` → `https://akeno.online/downloads/3.1.0/AKENO-Setup.exe` |
+   | Portable | `AKENO-Gaming-Suite-3.1.0-portable-x64.zip` → `https://akeno.online/downloads/3.1.0/AKENO-Portable.zip` |
+   | `install_mode` | `portable-directory-swap` |
+   | `minimum_supported_version` | leer (null) – sonst bekommt 3.0.0 das Update nur als Installer |
+   | `unattended_install_allowed` | nein |
+   | Versionshinweise | Inhalt von `docs/release/3.1.0/release-notes.txt` |
+   | Sequenz | **größer als 1** (vom Release Manager vergeben; 3.0.0-Clients haben Sequenz 1 gesehen) |
+   | Gültigkeit | höchstens 30 Tage ab Ausstellung |
+
+   Nach dem Upload zeigt der Release Manager SHA-256, Größe, `file_count`, `uncompressed_size_bytes` und
+   `content_sha256`. Sie müssen der Tabelle oben entsprechen; sonst abbrechen.
+5. **Signaturanfrage** im Admin-Panel erzeugen, den `signed_payload` **unverändert** als Datei speichern
+   (z. B. `signed_payload-3.1.0.txt`, genau die Bytes der Anfrage, keine Zeile anhängen) und **offline** mit dem
+   bestehenden Schlüssel `d6139235b220a4aa` signieren, wie bei 3.0.0. Der private Schlüssel bleibt im eigenen Tresor;
+   er kommt nicht in GitHub, CI, Chat oder Logs. Die Signatur im Admin-Panel hinterlegen. Noch **nicht**
+   veröffentlichen.
+6. **Signatur vor der Freischaltung prüfen** (offline, ohne Schlüssel, mit dem Parser der App):
+
+   ```
+   python tools/release_v2.py verify --payload signed_payload-3.1.0.txt --signature <Signaturwert> ^
+       --expect docs/release/3.1.0/release-manager-values.json --installed 3.0.0 --previous-sequence 1
+   ```
+
+   Zusätzlich mit den echten Dateien aus Run 203: `--zip …portable-x64.zip --exe …Setup-x64.exe`.
+   Erwartet, alles `[OK]`, kein `[FAIL]`:
+   - `signature valid (key d6139235b220a4aa); version 3.1.0, sequence N, … install mode portable-directory-swap`
+   - `sequence N after the published 1`
+   - `version 3.1.0`, `portable: …`, `installer: …`, `file_count`, `uncompressed_size_bytes`, `content_sha256`
+   - `AKENO 3.0.0 can install it itself (after the user confirms)`
+
+   Alternativ den `signed_payload`-Text und den Signaturwert in die Sitzung geben (beides ist öffentlich, kein
+   Geheimnis); Claude prüft dann genau so. Ein `[FAIL]`: nicht veröffentlichen, Ursache klären, neue
+   Signaturanfrage.
+7. **Veröffentlichen** im Admin-Panel (Freigabe des Inhabers liegt vor).
+8. **Produktionscheck** (nur lesend): startet bei jedem Push auf diesen Branch, der `docs/release/` ändert (z. B. den
+   Veröffentlichungsbericht). „Run workflow“ gibt es erst, wenn der Workflow auf `main` liegt. Erwartet:
+   - Job „akeno.online, api.akeno.online“: `[OK] stable 3.1.0 verified (key d6139235b220a4aa)`, `AKENO 3.0.0
+     installs it after confirmation`; im Schritt „What an installed AKENO 3.0.0 is offered …“: `release 3.0.0
+     unchanged`, alle Werte = Run 203, `KONTO → Updates offers 3.1.0` (erster Check und nach Sequenz 1), Download
+     beider Dateien mit signiertem SHA-256, Entpacken mit signiertem Inhalt.
+   - Job „Installed AKENO 3.0.0 updates itself from production“: echter 3.0.0-Installer von akeno.online, Update
+     auf 3.1.0 aus der Produktion mit den echten AKENO.exe-Dateien, Startprüfung, Programmordner = signiertes Paket,
+     Lizenz/Einstellungen/Mod-Backups erhalten, Rückweg auf 3.0.0, Deinstallation.
 9. **Auf einem eigenen 3.0.0-PC:** KONTO → Updates → „Nach Updates suchen“ → 3.1.0 → herunterladen → „Jetzt
    installieren“. Danach: Lizenz aktiv, Einstellungen, Spiele, installierte Mods und Backups vorhanden; unter
    KONTO → Updates steht „Zurück zu 3.0.0“.
 
 ## Zurücknehmen
 
-- Vor Schritt 7: Entwurf im Admin-Panel verwerfen; nichts erreicht Nutzer.
+- Vor Schritt 7: Entwurf im Admin-Panel verwerfen; nichts erreicht Nutzer. Das 3.0.0-Release bleibt live.
 - Nach Schritt 7: Ein „Restore as Latest“ auf 3.0.0 hilft Clients, die 3.1.0 gesehen haben, nicht (Anti-Replay,
   Version nie kleiner). Korrektur nur über einen höheren Build (3.1.1). Auf einem PC selbst: KONTO → Updates →
   „Zurück zu 3.0.0“ (die vorherige Version wird nach jedem Update aufbewahrt).

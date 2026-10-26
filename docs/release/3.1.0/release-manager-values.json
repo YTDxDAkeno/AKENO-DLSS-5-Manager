@@ -1,0 +1,22 @@
+{
+ "version": "3.1.0",
+ "commit": "e2c65993fe0121f10a9bbc00b1187201b4b33d1c",
+ "ci_run": 40349701652,
+ "portable": {
+  "file": "AKENO-Gaming-Suite-3.1.0-portable-x64.zip",
+  "size_bytes": 223583996,
+  "sha256": "ed51a967f42e221371793ff62139f32f72e6957adb1daf05f2355391aee52640",
+  "file_count": 2907,
+  "uncompressed_size_bytes": 493999889,
+  "pe_files": 356,
+  "top_folder": "(none)",
+  "accepted_by_the_updater": true,
+  "content_sha256": "beec2fc7da449f4231e4ccf51af1f225bb89970ad53cc897122ed99d8a20755d"
+ },
+ "installer": {
+  "file": "AKENO-Gaming-Suite-3.1.0-Setup-x64.exe",
+  "size_bytes": 157960587,
+  "sha256": "56d33da6c8ad35ed2afffdbb820a9f882231455ef93c759ab02afc04e92b8ca0"
+ },
+ "within_the_release_manager_limits": true
+}

@@ -9,6 +9,11 @@
     python tools/release_v2.py verify release.json --zip ...portable-x64.zip --exe ...Setup-x64.exe \
         [--keys akeno/data/release-keys.json] [--installed 3.0.0] [--previous-sequence 1]
 
+    # before publishing: the admin panel's signed_payload (exactly the text that was signed) and the offline
+    # signature, against the recorded values of the tested build instead of the files themselves
+    python tools/release_v2.py verify --payload signed_payload.txt --signature <value> \
+        --expect docs/release/3.1.0/release-manager-values.json --installed 3.0.0 --previous-sequence 1
+
 Read-only and offline: no network, no signing, no private key. ``describe`` also unpacks the portable ZIP with the
 app's own rules (``akeno/updater/staging.py``), so a package the updater would refuse is found before it is signed.
 ``content_sha256`` is computed exactly as the updater checks it (``akeno/updater/staging.py: content_sha256``).
@@ -82,8 +87,50 @@ def load_keys(path: Path) -> dict:
             if crypto.kid_for(k["public_key"]) == k["kid"]}
 
 
+def envelope(payload: Path, signature: str, key_id: str) -> dict:
+    """The release as the API serves it, from the signed text and its signature: outer fields are optional and,
+    when present, must equal the signed ones, so the signed text alone decides what the app accepts. The file is
+    read as bytes and used unchanged (no newline added or removed: the signature covers exactly these bytes)."""
+    text = payload.read_bytes().decode("utf-8")
+    return {"schema_version": 2, "signed_payload": text,
+            "signature": {"algorithm": "Ed25519", "key_id": key_id, "value": signature.strip()}}
+
+
+def compare_expected(release, expect: dict) -> list[tuple[bool, str]]:
+    """The signed release against the recorded ``describe`` values of the tested build (version, both files and
+    the portable package's contents). Equal SHA-256 and size mean the same bytes as the tested files."""
+    rows = []
+    if expect.get("version"):
+        rows.append((release.release == expect["version"], f"version {release.release}, expected {expect['version']}"))
+    for kind in ("portable", "installer"):
+        want, f = expect.get(kind), release.file(kind)
+        if not want:
+            continue
+        if f is None:
+            rows.append((False, f"the release has no {kind} file"))
+            continue
+        rows.append((f.size == want["size_bytes"] and f.sha256 == want["sha256"],
+                     f"{kind}: signed {f.size} bytes, sha256 {f.sha256}; tested file {want['size_bytes']} bytes, "
+                     f"sha256 {want['sha256']}"))
+    d, want = release.v2, expect.get("portable")
+    if want and d is not None and d.portable is not None:
+        for name, signed, mine in (("file_count", d.portable.file_count, want["file_count"]),
+                                   ("uncompressed_size_bytes", d.portable.uncompressed_size,
+                                    want["uncompressed_size_bytes"]),
+                                   ("content_sha256", d.portable.content_sha256, want["content_sha256"])):
+            rows.append((signed == mine, f"{name}: signed {signed}, tested package {mine}"))
+    return rows
+
+
 def verify(args) -> int:
-    doc = json.loads(args.release.read_text(encoding="utf-8"))
+    if args.payload:
+        if not args.signature:
+            raise SystemExit("--payload needs --signature")
+        doc = envelope(args.payload, args.signature, args.key_id)
+    elif args.release:
+        doc = json.loads(args.release.read_text(encoding="utf-8"))
+    else:
+        raise SystemExit("give the release JSON, or --payload with --signature")
     dist = distribution.load()
     if dist.source != "akeno-api":
         dist = distribution.from_dict({"update_source": "akeno-api", "release_api": "https://api.akeno.online/api/v1",
@@ -102,6 +149,12 @@ def verify(args) -> int:
     print(f"[OK  ] signature valid (key {release.kid}); version {release.release}, sequence {d.sequence}, "
           f"issued {d.issued_at}, expires {d.expires_at}, install mode {d.install_mode}")
     print(f"       signed fields: {', '.join(d.signed_fields)}")
+    days = (d.expires_ts - time.time()) / 86400
+    print(f"[INFO] valid for another {days:.1f} days (re-issue it with a new sequence before {d.expires_at})")
+    if args.expect:
+        for same, line in compare_expected(release, json.loads(args.expect.read_text(encoding="utf-8"))):
+            print(f"[{'OK  ' if same else 'FAIL'}] {line}")
+            ok &= same
     if args.previous_sequence is not None:
         # installed clients refuse a lower sequence, and the same sequence for a different release (anti-replay)
         newer = d.sequence > args.previous_sequence
@@ -109,7 +162,9 @@ def verify(args) -> int:
         ok &= newer
     refusal = d.in_app_refusal(args.installed)
     if refusal:
-        print(f"[INFO] AKENO {args.installed} shows it but does not install it itself: {refusal}")
+        print(f"[{'FAIL' if args.expect else 'INFO'}] AKENO {args.installed} shows it but does not install it "
+              f"itself: {refusal}")
+        ok &= not args.expect                 # a stable update for installed versions must install in the app
     else:
         print(f"[OK  ] AKENO {args.installed} can install it itself (after the user confirms)")
     for kind, path in (("portable", args.zip), ("installer", args.exe)):
@@ -146,7 +201,11 @@ def main(argv: list[str] | None = None) -> int:
     d.add_argument("zip", type=Path)
     d.add_argument("exe", type=Path, nargs="?")
     v = sub.add_parser("verify")
-    v.add_argument("release", type=Path)
+    v.add_argument("release", type=Path, nargs="?")
+    v.add_argument("--payload", type=Path, help="file with exactly the signed_payload text (instead of a release)")
+    v.add_argument("--signature", help="the Ed25519 signature value of --payload (base64url, base64 or hex)")
+    v.add_argument("--key-id", default="d6139235b220a4aa", help="key id of --signature")
+    v.add_argument("--expect", type=Path, help="recorded describe values of the tested build (version, files)")
     v.add_argument("--zip", type=Path)
     v.add_argument("--exe", type=Path)
     v.add_argument("--keys", type=Path, default=ROOT / "akeno" / "data" / "release-keys.json")

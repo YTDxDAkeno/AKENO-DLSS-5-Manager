@@ -357,7 +357,10 @@ class E2E:
         return service.UpdateService(None, keys={self.kid: crypto.public_key(self.public)},
                                      version=self.installed_version, folder=self.folder)
 
-    def install(self) -> bool:
+    def install(self, test_key: bool = True) -> bool:
+        """Run the installer silently. ``test_key``: replace the release key of this test installation by the
+        disposable test key (the local test Release Manager signs with it); without it the installation keeps the
+        production key it shipped with."""
         r = self.report
         p = subprocess.run([str(self.args.installer), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER",
                             f"/DIR={self.target}", f"/LOG={self.work / 'setup.log'}"], timeout=600)
@@ -370,8 +373,9 @@ class E2E:
         keys = self.target / "_internal" / "akeno" / "data" / "release-keys.json"
         if not r.add(keys.is_file(), "release keys file inside the installed build", str(keys)):
             return False
-        keys.write_text(json.dumps({"keys": [{"kid": self.kid, "public_key": self.public}]}), encoding="utf-8")
-        r.add(None, "test installation only: release key replaced by a disposable test key", self.kid)
+        if test_key:
+            keys.write_text(json.dumps({"keys": [{"kid": self.kid, "public_key": self.public}]}), encoding="utf-8")
+            r.add(None, "test installation only: release key replaced by a disposable test key", self.kid)
         self.rc_exe = hashlib.sha256((self.target / "AKENO.exe").read_bytes()).hexdigest()
         return True
 
@@ -441,6 +445,62 @@ class E2E:
         """What the started suite does after an update: report the outcome (here without a license)."""
         svc.after_start()
 
+    def updated(self, outcome: dict | None, ctx: dict, version: str, seeded: dict) -> bool:
+        """The installed version was updated to ``version``: health check, journal, program folder file by file,
+        the kept previous version, Windows' entry, user data."""
+        from akeno.updater import apply
+        r = self.report
+        ok = r.add(bool(outcome and outcome.get("ok")), f"update {self.rc} → {version} installed and passed its "
+                   "health check", json.dumps(outcome))
+        phases = [p for p, _ in apply.Journal(self.folder / "journal.json").load().get("history", [])]
+        r.add(phases[-8:] == ["prepared", "stopping", "copying", "swapping", "swapped", "health", "committing",
+                              "committed"], "journal phases of the update", " → ".join(phases[-8:]))
+        self.program_is(ctx["content"], f"program folder is exactly the verified {version} package")
+        r.add(file_version(self.target / "AKENO.exe") == version, f"installed AKENO.exe reports {version}")
+        r.add(bool(apply.processes_in(self.target)), f"{version} is running after the update (started by the updater)")
+        prev = self.folder / "previous" / "AKENO.exe"
+        r.add(prev.is_file() and hashlib.sha256(prev.read_bytes()).hexdigest() == self.rc_exe,
+              f"previous version {self.rc} kept for a rollback")
+        r.add((self.target / "unins000.exe").is_file(), "uninstaller kept in the program folder")
+        r.add(display_version(self.target) == version, f"Windows shows {version} in Installed apps",
+              str(display_version(self.target)))
+        r.add(runonce() is None, "no recovery entry left in RunOnce")
+        user_data_intact(r, seeded, "after the update")
+        end_all(self.target)
+        self.report_start(ctx["svc"])
+        return ok
+
+    def manual_rollback(self, seeded: dict) -> None:
+        """KONTO → Updates → "Back to <previous>": the kept version returns through the same updater."""
+        r = self.report
+        svc = self.service()
+        plan = svc.rollback_plan()
+        plan.update(pid=None, timeout=180)
+        result = Path(plan["result"])
+        result.unlink(missing_ok=True)
+        svc.launch(plan)
+        end = time.monotonic() + 420
+        while time.monotonic() < end and not result.exists():
+            time.sleep(1)
+        outcome = json.loads(result.read_text(encoding="utf-8")) if result.exists() else {}
+        r.add(bool(outcome.get("ok")), f"manual rollback to {self.rc} passed its health check", json.dumps(outcome))
+        r.add(hashlib.sha256((self.target / "AKENO.exe").read_bytes()).hexdigest() == self.rc_exe,
+              "program folder holds the release candidate's AKENO.exe again")
+        user_data_intact(r, seeded, "after the manual rollback")
+        end_all(self.target)
+
+    def uninstall(self, seeded: dict) -> None:
+        """Uninstalling keeps the user data."""
+        r = self.report
+        p = subprocess.run([str(self.target / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
+                           timeout=300)
+        end = time.monotonic() + 180            # the uninstaller continues from a copy of itself
+        while time.monotonic() < end and (self.target / "AKENO.exe").exists():
+            time.sleep(1)
+        r.add(p.returncode == 0 and not (self.target / "AKENO.exe").exists(), "uninstaller removes the program",
+              f"exit code {p.returncode}")
+        user_data_intact(r, seeded, "after uninstalling")
+
     def run(self) -> None:
         r = self.report
         from akeno.updater import apply
@@ -457,25 +517,7 @@ class E2E:
         # a file with a non-ASCII name (stored at the end, out of sorted order): content_sha256 by code point
         self.publish(v(1), next_dist, extra={"docs/e2e-ünïcode-日本.txt": "AKENO ✓".encode()})
         outcome, ctx = self.apply(v(1))
-        ok = r.add(bool(outcome and outcome.get("ok")), f"update {self.rc} → {v(1)} installed and passed its health check",
-                   json.dumps(outcome))
-        phases = [p for p, _ in apply.Journal(self.folder / "journal.json").load().get("history", [])]
-        r.add(phases[-8:] == ["prepared", "stopping", "copying", "swapping", "swapped", "health", "committing",
-                              "committed"], "journal phases of the update", " → ".join(phases[-8:]))
-        self.program_is(ctx["content"], f"program folder is exactly the verified {v(1)} package")
-        r.add(file_version(self.target / "AKENO.exe") == v(1), f"installed AKENO.exe reports {v(1)}")
-        r.add(bool(apply.processes_in(self.target)), f"{v(1)} is running after the update (started by the updater)")
-        prev = self.folder / "previous" / "AKENO.exe"
-        r.add(prev.is_file() and hashlib.sha256(prev.read_bytes()).hexdigest() == self.rc_exe,
-              f"previous version {self.rc} kept for a rollback")
-        r.add((self.target / "unins000.exe").is_file(), "uninstaller kept in the program folder")
-        r.add(display_version(self.target) == v(1), f"Windows shows {v(1)} in Installed apps",
-              str(display_version(self.target)))
-        r.add(runonce() is None, "no recovery entry left in RunOnce")
-        user_data_intact(r, seeded, "after the update")
-        end_all(self.target)
-        self.report_start(ctx["svc"])
-        if not ok:
+        if not self.updated(outcome, ctx, v(1), seeded):
             return
         self.installed_version = v(1)
         good = ctx["content"]
@@ -566,31 +608,10 @@ class E2E:
         self.program_is(good, f"program folder still {v(1)} after the refused releases")
 
         # 6. the manual rollback to the kept version
-        svc = self.service()
-        plan = svc.rollback_plan()
-        plan.update(pid=None, timeout=180)
-        result = Path(plan["result"])
-        result.unlink(missing_ok=True)
-        svc.launch(plan)
-        end = time.monotonic() + 420
-        while time.monotonic() < end and not result.exists():
-            time.sleep(1)
-        outcome = json.loads(result.read_text(encoding="utf-8")) if result.exists() else {}
-        r.add(bool(outcome.get("ok")), f"manual rollback to {self.rc} passed its health check", json.dumps(outcome))
-        r.add(hashlib.sha256((self.target / "AKENO.exe").read_bytes()).hexdigest() == self.rc_exe,
-              "program folder holds the release candidate's AKENO.exe again")
-        user_data_intact(r, seeded, "after the manual rollback")
-        end_all(self.target)
+        self.manual_rollback(seeded)
 
         # 7. uninstalling keeps the user data
-        p = subprocess.run([str(self.target / "unins000.exe"), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"],
-                           timeout=300)
-        end = time.monotonic() + 180            # the uninstaller continues from a copy of itself
-        while time.monotonic() < end and (self.target / "AKENO.exe").exists():
-            time.sleep(1)
-        r.add(p.returncode == 0 and not (self.target / "AKENO.exe").exists(), "uninstaller removes the program",
-              f"exit code {p.returncode}")
-        user_data_intact(r, seeded, "after uninstalling")
+        self.uninstall(seeded)
 
 
 def main(argv: list[str] | None = None) -> int:
