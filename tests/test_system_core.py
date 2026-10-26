@@ -187,3 +187,30 @@ def test_report_leaves_out_private_details(tmp_path):
     assert rep["module"] == "security" and rep["overview"]["title"] == "Virus protection is on"
     assert "target" not in rep["security.scan"][0] and rep["security.scan"][0]["status"] == "clean"
     store.close()
+
+
+def test_json_pipe_follows_the_last_statement(monkeypatch):
+    """Windows PowerShell 5.1 refuses a line that starts with "|"; multi-line scripts end with a newline."""
+    from akeno.system import commands
+    from akeno.system.doctor.providers import DISK_SCRIPT
+    seen = []
+    monkeypatch.setattr(commands, "powershell", lambda script, timeout=60, ctx=None: seen.append(script) or
+                        commands.CommandResult(0, '{"a": 1}', "", False, False))
+    commands.powershell_json(DISK_SCRIPT)
+    commands.powershell_json("$a = 1\n[pscustomobject]@{a=$a}\n\n")
+    for script in seen:
+        assert not any(line.lstrip().startswith("|") for line in script.splitlines()), script[-120:]
+        assert script.endswith("} | ConvertTo-Json -Depth 5 -Compress")
+
+
+def test_powershell_errors_are_readable():
+    """What Windows PowerShell 5.1 wrote to stderr on the CI runner for the refused drive query."""
+    from akeno.system.commands import first_line
+    clixml = ('#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
+              '<S S="Error">At line:20 char:2_x000D__x000A_</S><S S="Error">+  | ConvertTo-Json -Depth 5 -Compress'
+              '_x000D__x000A_</S><S S="Error">An empty pipe element is not allowed._x000D__x000A_</S></Objs>')
+    assert first_line(clixml) == "An empty pipe element is not allowed."
+    from akeno.system.commands import clixml_text
+    assert "An empty pipe element is not allowed." in clixml_text(clixml)
+    assert first_line("#< CLIXML\r\nnot xml") == ""
+    assert first_line("plain error\nsecond") == "plain error"

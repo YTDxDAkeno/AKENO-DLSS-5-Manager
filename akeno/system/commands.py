@@ -122,7 +122,9 @@ class QueryError(OSError):
 def powershell_json(script: str, timeout: float = 60.0, ctx: TaskContext | None = None) -> Any:
     """Run ``script`` and parse its ``ConvertTo-Json`` output. Raises :class:`QueryError` with the tool's own
     message when it fails, :class:`Cancelled` / :class:`TimedOut` when stopped."""
-    res = powershell(script + " | ConvertTo-Json -Depth 5 -Compress", timeout, ctx)
+    # The pipe must follow the script's last statement on the same line: Windows PowerShell 5.1 refuses a line
+    # that starts with "|" ("An empty pipe element is not allowed"), so a script ending in a newline failed.
+    res = powershell(script.rstrip() + " | ConvertTo-Json -Depth 5 -Compress", timeout, ctx)
     if res.cancelled:
         raise Cancelled("Cancelled.")
     if res.timed_out:
@@ -145,7 +147,27 @@ def as_list(value: Any) -> list:
     return value if isinstance(value, list) else [value]
 
 
+def clixml_text(text: str) -> str:
+    """PowerShell writes errors to a redirected stderr as CLIXML ("#< CLIXML" and an <Objs> document); the readable
+    message is in its <S S="Error"> elements, with line breaks escaped as _x000D__x000A_."""
+    import re
+    import xml.etree.ElementTree as ET
+    body = text.split("#< CLIXML", 1)[1].strip()
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return ""
+    parts = [e.text or "" for e in root.iter() if e.tag.endswith("}S") and e.get("S") == "Error"]
+    joined = re.sub(r"_x([0-9A-Fa-f]{4})_", lambda m: chr(int(m.group(1), 16)), "".join(parts))
+    return "\n".join(line.strip() for line in joined.splitlines() if line.strip())
+
+
 def first_line(text: str) -> str:
+    if (text or "").lstrip().startswith("#< CLIXML"):
+        # the message itself, not the position and code lines PowerShell puts around it
+        text = "\n".join(line for line in clixml_text(text).splitlines()
+                         if not line.startswith(("At line:", "At char:", "+", "~", "CategoryInfo",
+                                                 "FullyQualifiedErrorId")))
     for line in (text or "").splitlines():
         line = line.strip()
         if line:

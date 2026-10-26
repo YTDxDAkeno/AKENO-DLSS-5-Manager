@@ -81,6 +81,23 @@ def analyse_drives(data: dict[str, Any] | None) -> tuple[list[dict[str, Any]], l
                             msg("Back up important data and check the drive with its manufacturer's tool."))
                 f.measured(msg("{n} {what}", n=int(v), what=msg(label)), "Get-StorageReliabilityCounter")
                 findings.append(f)
+    # Windows Storage did not answer (or listed fewer drives): the SMART prediction flag still names each drive
+    listed = {r["name"].strip().lower() for r in rows}
+    for model, s in smart.items():
+        if not model or model in listed:
+            continue
+        name = str(s.get("Model") or "?").strip()
+        status = s.get("Status") or ""
+        rows.append({"name": name, "media": "", "bus": s.get("InterfaceType") or "", "size": s.get("Size"),
+                     "health": "", "operational": [], "smart_status": status, "temperature": None,
+                     "temperature_max": None, "wear": None, "read_errors": None, "write_errors": None,
+                     "power_on_hours": None, "counters_note": str(msg("Only the SMART status is available."))})
+        if status.lower() == "pred fail":
+            f = Finding("drive.failing." + name, "doctor", Level.PROBLEM, msg("{d} reports a problem", d=name),
+                        msg("The drive's own health monitoring reports it as failing."),
+                        msg("Back up important data from this drive now and plan to replace it."))
+            f.measured(msg("SMART failure prediction: Pred Fail"), "Win32_DiskDrive")
+            findings.append(f)
     return rows, findings
 
 

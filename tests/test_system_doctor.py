@@ -219,6 +219,19 @@ def test_drive_health_tolerates_garbage():
     assert "Storage module missing" in str(rep.errors[0]) and rep.findings == []
 
 
+
+def test_drive_table_falls_back_to_smart_when_storage_does_not_answer():
+    data = {"disks": [], "error": "Invalid class", "smart": [
+        {"Model": "Samsung SSD 990 PRO 2TB", "Status": "OK", "InterfaceType": "SCSI", "Size": 2000396321280},
+        {"Model": "ST2000DM008", "Status": "Pred Fail", "InterfaceType": "IDE", "Size": 2000396321280}]}
+    rows, found = hardware.analyse_drives(data)
+    assert [r["name"] for r in rows] == ["Samsung SSD 990 PRO 2TB", "ST2000DM008"]
+    assert rows[0]["smart_status"] == "OK" and "SMART" in rows[0]["counters_note"]
+    assert [f.id for f in found] == ["drive.failing.ST2000DM008"]
+    rows, _ = hardware.analyse_drives({"disks": [{"name": "ST2000DM008", "health": "Healthy"}],
+                                       "smart": [{"Model": "ST2000DM008", "Status": "OK"}]})
+    assert len(rows) == 1, "a drive Windows Storage lists is not listed twice"
+
 # -- startup --------------------------------------------------------------------------------------------------------
 def _analyzer(tmp_path, store, entries=None, exists=None):
     tool = tmp_path / "Tool" / "tool.exe"
