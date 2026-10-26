@@ -1,11 +1,25 @@
-AKENO Gaming Suite 3.1.1 — Wichtige Fehlerbehebung
+AKENO Gaming Suite 3.1.1 – Wichtige Fehlerbehebung
 
-- Behebt einen Absturz beim Start von AKENO nach Version 3.1.0, wenn der System Doctor gespeicherte Hardware-Analysen mit einer übersetzbaren CPU-Temperaturmeldung lädt.
-- Vorhandene Lizenz, Spiele, Mod-Backups, Einstellungen und Diagnosehistorie bleiben erhalten. Es ist keine Bereinigung der Datenbanken erforderlich.
-- Die Korrektur wurde um einen Regressionstest für gespeicherte Diagnoseberichte auf Deutsch und Englisch ergänzt.
+Behoben
+- AKENO 3.1.0 startete nicht mehr, nachdem System Doctor → Hardware-Gesundheit einmal einen Bericht gespeichert hatte und Windows keine CPU-Temperatur meldet (TypeError: unhashable type: 'dict'). Gespeicherte Berichte werden wieder korrekt geöffnet.
 
-AKENO Gaming Suite 3.1.1 — Critical startup fix
+Schutz vor Startabstürzen
+- Ein gespeichertes Ergebnis, das nicht angezeigt werden kann, verhindert nie mehr den Start; es bleibt gespeichert.
+- Startschutz: Wenn ein Start nicht fertig wird, startet AKENO beim nächsten Mal im abgesicherten Modus und öffnet KONTO → Updates mit Update-Suche und Rückkehr zur vorherigen Version. Startmenü: „AKENO Gaming Suite (Safe mode)“.
+- Updates werden vor dem Abschluss mit deinen gespeicherten Daten geprüft und sonst automatisch zurückgerollt.
 
-- Fixes a startup crash introduced in 3.1.0 when System Doctor reopens cached hardware measurements containing a localized CPU temperature note.
-- Existing license, games, mod backups, settings, and diagnostic history are kept. No database deletion is necessary.
-- Adds a regression test for persisted hardware reports in English and German.
+Wenn 3.1.0 bei dir nicht mehr startet
+- Lade den 3.1.1-Installer von akeno.online herunter und führe ihn aus (ohne Administratorrechte). Lizenz, Einstellungen, Spiele, Mods, Backups, gespeicherte Analysen und Rückgängig-Protokolle bleiben erhalten. Bitte nichts löschen.
+
+AKENO Gaming Suite 3.1.1 – Critical fix
+
+Fixed
+- AKENO 3.1.0 no longer started after System Doctor → Hardware Health had saved a report and Windows reports no CPU temperature (TypeError: unhashable type: 'dict'). Saved reports open correctly again.
+
+Protection against start crashes
+- A saved result that cannot be shown never stops the start any more; it stays stored.
+- Start guard: if a start does not finish, the next start runs in safe mode and opens ACCOUNT → Updates with the update check and the way back to the previous version. Start menu: "AKENO Gaming Suite (Safe mode)".
+- Updates are checked with your saved data before they are kept, and rolled back otherwise.
+
+If 3.1.0 no longer starts on your PC
+- Download the 3.1.1 installer from akeno.online and run it (no administrator rights needed). License, settings, games, mods, backups, saved analyses and undo records stay. Please do not delete anything.

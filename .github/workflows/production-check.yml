@@ -82,16 +82,16 @@ jobs:
               echo "$channel: no channel manifest published at $RELEASE_BASE/channels/$channel.json" | tee -a "$GITHUB_STEP_SUMMARY"
             fi
           done
-      - name: What an installed AKENO 3.0.0 is offered by the live Release Manager (read-only, real downloads)
-        # Until 3.1.0 is the live stable release this reports the live release and that 3.1.0 is not published yet.
+      - name: What installed AKENO 3.0.0 and 3.1.0 are offered by the live Release Manager (read-only, real downloads)
+        # Until 3.1.1 is the live stable release this reports the live release and that 3.1.1 is not published yet.
         run: |
           set -o pipefail
-          python tools/live_release_check.py --expect docs/release/3.1.0/release-manager-values.json --download 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          python tools/live_release_check.py --expect docs/release/3.1.1/release-manager-values.json --download 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
 
   live-upgrade:
     # A disposable Windows runner plays a user's PC with the published 3.0.0: the real installer from akeno.online,
     # checked against its signed SHA-256, keeps the production release key; the update comes from production.
-    name: Installed AKENO 3.0.0 updates itself from production (disposable Windows runner)
+    name: Installed AKENO 3.0.0 and 3.1.0 update themselves from production (disposable Windows runner)
     runs-on: windows-2022
     env:
       QT_QPA_PLATFORM: offscreen
@@ -103,17 +103,27 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
-      - name: Install 3.0.0, update it to the live stable release, roll back, uninstall
+      - name: Install 3.0.0 and 3.1.0, update each to the live stable release, roll back, uninstall
         shell: pwsh
         run: |
-          Remove-Item "$env:LOCALAPPDATA\AKENO" -Recurse -Force -ErrorAction SilentlyContinue
-          python tools/live_release_check.py --expect docs/release/3.1.0/release-manager-values.json --upgrade-from https://akeno.online/downloads/3.0.0/AKENO-Setup.exe --upgrade-from-sha256 fe919b720e7db4a7e3e8fce97555bb77cde23851d205de3f039d847b1e0dd20f --work "$env:RUNNER_TEMP\live" --report live-upgrade-report.md
-          $code = $LASTEXITCODE
-          if (Test-Path live-upgrade-report.md) { Get-Content live-upgrade-report.md | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
-          if ($code -ne 0) { throw "the installed 3.0.0 did not update from production" }
+          $published = @(
+            @{ version = "3.0.0"; sha = "fe919b720e7db4a7e3e8fce97555bb77cde23851d205de3f039d847b1e0dd20f" },
+            @{ version = "3.1.0"; sha = "56d33da6c8ad35ed2afffdbb820a9f882231455ef93c759ab02afc04e92b8ca0" })
+          $failed = @()
+          foreach ($p in $published) {
+            Remove-Item "$env:LOCALAPPDATA\AKENO" -Recurse -Force -ErrorAction SilentlyContinue
+            $report = "live-upgrade-$($p.version)-report.md"
+            python tools/live_release_check.py --expect docs/release/3.1.1/release-manager-values.json --installed $p.version --upgrade-from "https://akeno.online/downloads/$($p.version)/AKENO-Setup.exe" --upgrade-from-sha256 $p.sha --work "$env:RUNNER_TEMP\live-$($p.version)" --report $report
+            if ($LASTEXITCODE -ne 0) { $failed += $p.version }
+            if (Test-Path $report) {
+              "## Installed $($p.version)" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              Get-Content $report | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
+          }
+          if ($failed) { throw "installed $($failed -join ', ') did not update from production" }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: live-upgrade-report
-          path: live-upgrade-report.md
+          path: live-upgrade-*-report.md
           if-no-files-found: ignore

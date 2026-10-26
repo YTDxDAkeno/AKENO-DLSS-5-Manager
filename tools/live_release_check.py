@@ -33,11 +33,18 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "tools"))
 
-PUBLISHED = {"version": "3.0.0", "sequence": 1,      # the release installed clients have seen (2026-10-26)
+# the releases installed clients have seen; each stays published unchanged (the newest one last)
+RELEASES = [{"version": "3.0.0", "sequence": 1,
              "installer_sha256": "fe919b720e7db4a7e3e8fce97555bb77cde23851d205de3f039d847b1e0dd20f",
              "installer_size": 157148888,
              "portable_sha256": "d4c5701988f9f21841e1bd8a2c059c32e02b6e1de3f50180849837b7eb95e9f9",
-             "portable_size": 222769069}
+             "portable_size": 222769069},
+            {"version": "3.1.0", "sequence": 2,          # CI run 203 (commit e2c6599), published 2026-10-26
+             "installer_sha256": "56d33da6c8ad35ed2afffdbb820a9f882231455ef93c759ab02afc04e92b8ca0",
+             "installer_size": 157960587,
+             "portable_sha256": "ed51a967f42e221371793ff62139f32f72e6957adb1daf05f2355391aee52640",
+             "portable_size": 223583996}]
+PUBLISHED = RELEASES[-1]
 
 
 def live_release(dist):
@@ -48,29 +55,35 @@ def live_release(dist):
 
 
 def published_unchanged(report, dist) -> None:
-    """The release installed clients have seen is still published as it was (nothing overwritten)."""
+    """The releases installed clients have seen are still published as they were (nothing overwritten)."""
+    for pub in RELEASES:
+        one_unchanged(report, dist, pub)
+
+
+def one_unchanged(report, dist, pub: dict) -> None:
     from akeno.updater import api_v2, service
     base = dist.channel_manifest("stable").rsplit("/", 1)[0]
     try:
-        doc = service.fetch_json(f"{base}/{PUBLISHED['version']}", dist.trusted)
+        doc = service.fetch_json(f"{base}/{pub['version']}", dist.trusted)
         m = api_v2.signed_document(doc["signed_payload"])
     except service.NoRelease:
-        report.add(None, f"release {PUBLISHED['version']}: the API serves no per-version page (404)")
+        report.add(None, f"release {pub['version']}: the API serves no per-version page (404)")
         return
     except Exception as exc:
-        report.add(False, f"release {PUBLISHED['version']} is still published", f"{type(exc).__name__}: {exc}")
+        report.add(False, f"release {pub['version']} is still published", f"{type(exc).__name__}: {exc}")
         return
     portable = m.get("portable") or {}
-    same = (m.get("version") == PUBLISHED["version"] and m.get("sequence") == PUBLISHED["sequence"]
-            and m.get("sha256") == PUBLISHED["installer_sha256"] and m.get("size_bytes") == PUBLISHED["installer_size"]
-            and portable.get("sha256") == PUBLISHED["portable_sha256"]
-            and portable.get("size_bytes") == PUBLISHED["portable_size"])
-    report.add(same, f"release {PUBLISHED['version']} unchanged (sequence, installer and portable SHA-256 and size)",
+    same = (m.get("version") == pub["version"] and m.get("sequence") == pub["sequence"]
+            and m.get("sha256") == pub["installer_sha256"] and m.get("size_bytes") == pub["installer_size"]
+            and portable.get("sha256") == pub["portable_sha256"]
+            and portable.get("size_bytes") == pub["portable_size"])
+    report.add(same, f"release {pub['version']} unchanged (sequence, installer and portable SHA-256 and size)",
                f"sequence {m.get('sequence')}, installer {m.get('sha256')}, portable {portable.get('sha256')}")
 
 
 def client_checks(report, args, dist, release, expect: dict) -> None:
-    """What installed clients of ``args.installed`` see: a first check, and one after seeing the published release."""
+    """What installed clients of each published version see: a first check, and one after having seen the newest
+    published release (its sequence)."""
     import release_v2
     from akeno.updater import service
     d = release.v2
@@ -87,24 +100,26 @@ def client_checks(report, args, dist, release, expect: dict) -> None:
         seen = {"highest_seen_stable": PUBLISHED["version"],
                 "sequence_seen": {"sequence": PUBLISHED["sequence"], "fingerprint": ["published", "", ""]},
                 "newest_issued": 0}
-        for name, state in (("first check after installing", {}),
-                            (f"after having seen {PUBLISHED['version']} (sequence {PUBLISHED['sequence']})", seen)):
-            folder = Path(tmp) / str(len(name))
-            folder.mkdir()
-            (folder / "state.json").write_text(json.dumps(state), encoding="utf-8")
-            svc = service.UpdateService(None, dist=dist, version=args.installed, folder=folder,
-                                        fetch=lambda url: service.fetch_json(url, dist.trusted))
-            try:
-                offered = svc.check()
-            except Exception as exc:
-                report.add(False, f"AKENO {args.installed}, {name}: KONTO → Updates refuses the release", str(exc))
-                continue
-            report.add(offered is not None and offered.release == release.release,
-                       f"AKENO {args.installed}, {name}: KONTO → Updates offers {release.release}",
-                       offered.release if offered else "no update offered")
-        why = d.in_app_refusal(args.installed)
-        report.add(not why, f"AKENO {args.installed} installs it itself after the user confirms (Install now)",
-                   why or "portable-directory-swap with a portable package")
+        for installed in args.installed or [r["version"] for r in RELEASES]:
+            for name, state in (("first check after installing", {}),
+                                (f"after having seen {PUBLISHED['version']} (sequence {PUBLISHED['sequence']})",
+                                 seen)):
+                folder = Path(tmp) / f"{installed}-{len(name)}"
+                folder.mkdir()
+                (folder / "state.json").write_text(json.dumps(state), encoding="utf-8")
+                svc = service.UpdateService(None, dist=dist, version=installed, folder=folder,
+                                            fetch=lambda url: service.fetch_json(url, dist.trusted))
+                try:
+                    offered = svc.check()
+                except Exception as exc:
+                    report.add(False, f"AKENO {installed}, {name}: KONTO → Updates refuses the release", str(exc))
+                    continue
+                report.add(offered is not None and offered.release == release.release,
+                           f"AKENO {installed}, {name}: KONTO → Updates offers {release.release}",
+                           offered.release if offered else "no update offered")
+            why = d.in_app_refusal(installed)
+            report.add(not why, f"AKENO {installed} installs it itself after the user confirms (Install now)",
+                       why or "portable-directory-swap with a portable package")
         if args.download:
             download_and_unpack(report, Path(tmp), dist, release)
 
@@ -166,9 +181,10 @@ def upgrade(report, args, expect: dict) -> None:
     name = args.upgrade_from.rsplit("/", 1)[-1]
     setup = DownloadManager(["akeno.online"], cache=args.work / "published").fetch(
         args.upgrade_from, args.upgrade_from_sha256, name)
-    report.add(True, f"published {args.installed} installer downloaded and checked against its signed SHA-256",
+    installed = (args.installed or [PUBLISHED["version"]])[0]
+    report.add(True, f"published {installed} installer downloaded and checked against its signed SHA-256",
                f"{setup.size} bytes")
-    e2e_args = argparse.Namespace(installer=Path(setup.path), installed_version=args.installed,
+    e2e_args = argparse.Namespace(installer=Path(setup.path), installed_version=installed,
                                   next_version=expect["version"], work=args.work, next=None)
     LiveUpgrade(e2e_args, report).run()
 
@@ -176,7 +192,8 @@ def upgrade(report, args, expect: dict) -> None:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--expect", type=Path, required=True, help="recorded release values of the tested build")
-    ap.add_argument("--installed", default=PUBLISHED["version"], help="the installed version (default 3.0.0)")
+    ap.add_argument("--installed", action="append", help="an installed version (repeatable; default: each published "
+                    "release; --upgrade-from: the first)")
     ap.add_argument("--download", action="store_true", help="download and unpack both files of the live release")
     ap.add_argument("--upgrade-from", help="installer URL of the installed version (disposable Windows machine)")
     ap.add_argument("--upgrade-from-sha256", help="its signed SHA-256")

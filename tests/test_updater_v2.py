@@ -1056,26 +1056,30 @@ def test_release_tool_verifies_the_offline_signature_against_the_tested_build(tm
     assert "does not install it itself" in capsys.readouterr().out
 
 
-def test_live_check_reports_what_installed_3_0_0_clients_are_offered(tmp_path, signing, monkeypatch, capsys):
+def test_live_check_reports_what_installed_clients_are_offered(tmp_path, signing, monkeypatch, capsys):
     """tools/live_release_check.py with the production answers replaced by test-signed ones (no network)."""
     import live_release_check
     key, keys = signing
-    pkg = portable_zip(tmp_path, "3.1.0")
+    pkg = portable_zip(tmp_path, "3.1.1")
     now = datetime.now(timezone.utc)
     when = dict(issued_at=iso(now - timedelta(hours=1)), expires_at=iso(now + timedelta(days=29)),
                 release_date=(now - timedelta(hours=1)).date().isoformat())
-    new = envelope(key, fields(pkg=pkg, sequence=2, **when))
-    pub = live_release_check.PUBLISHED
-    old = envelope(key, fields("3.0.0", sequence=1, sha256=pub["installer_sha256"], size_bytes=pub["installer_size"],
-                               portable={**portable_info(pkg, "3.0.0"), "sha256": pub["portable_sha256"],
-                                         "size_bytes": pub["portable_size"]}, install_mode="portable-directory-swap",
-                               **when))
+    new = envelope(key, fields("3.1.1", pkg=pkg, sequence=3, **when))
+
+    def published(pub):
+        return envelope(key, fields(pub["version"], sequence=pub["sequence"], sha256=pub["installer_sha256"],
+                                    size_bytes=pub["installer_size"],
+                                    portable={**portable_info(pkg, pub["version"]), "sha256": pub["portable_sha256"],
+                                              "size_bytes": pub["portable_size"]},
+                                    install_mode="portable-directory-swap", **when))
+    old = {pub["version"]: published(pub) for pub in live_release_check.RELEASES}
     live = {"stable": new}
-    answers = {f"{API}/releases/stable": lambda: live["stable"], f"{API}/releases/3.0.0": lambda: old}
+    answers = {f"{API}/releases/stable": lambda: live["stable"]}
+    answers.update({f"{API}/releases/{v}": (lambda doc=doc: doc) for v, doc in old.items()})
     monkeypatch.setattr(service, "fetch_json", lambda url, trusted=None: answers[url]())
     monkeypatch.setattr(manifest, "release_keys", lambda: keys)
     monkeypatch.setattr(distribution, "load", lambda: RM)
-    expect = {"version": "3.1.0", "ci_run": 1, "portable": {
+    expect = {"version": "3.1.1", "ci_run": 1, "portable": {
         "size_bytes": pkg.stat().st_size, "sha256": hashlib.sha256(pkg.read_bytes()).hexdigest(),
         "file_count": 3, "uncompressed_size_bytes": portable_info(pkg)["uncompressed_size_bytes"],
         "content_sha256": reference_content_sha256(pkg)},
@@ -1085,18 +1089,19 @@ def test_live_check_reports_what_installed_3_0_0_clients_are_offered(tmp_path, s
     assert live_release_check.main(["--expect", str(values)]) == 0
     out = capsys.readouterr().out
     assert "FAIL" not in out
-    assert "AKENO 3.0.0, first check after installing: KONTO → Updates offers 3.1.0" in out
-    assert "AKENO 3.0.0, after having seen 3.0.0 (sequence 1): KONTO → Updates offers 3.1.0" in out
-    assert "installs it itself after the user confirms" in out
-    assert "release 3.0.0 unchanged" in out
-    live["stable"] = old                                       # before publishing: 3.0.0 is still live
+    for installed in ("3.0.0", "3.1.0"):
+        assert f"AKENO {installed}, first check after installing: KONTO → Updates offers 3.1.1" in out
+        assert f"AKENO {installed}, after having seen 3.1.0 (sequence 2): KONTO → Updates offers 3.1.1" in out
+        assert f"AKENO {installed} installs it itself after the user confirms" in out
+    assert "release 3.0.0 unchanged" in out and "release 3.1.0 unchanged" in out
+    live["stable"] = old["3.1.0"]                               # before publishing: 3.1.0 is still live
     assert live_release_check.main(["--expect", str(values)]) == 0
-    assert "3.1.0 is not the live stable release yet" in capsys.readouterr().out
+    assert "3.1.1 is not the live stable release yet" in capsys.readouterr().out
     assert live_release_check.main(["--expect", str(values), "--require"]) == 1
     capsys.readouterr()
-    live["stable"] = envelope(key, fields(pkg=pkg, sequence=1, **when))   # the published sequence used again
+    live["stable"] = envelope(key, fields("3.1.1", pkg=pkg, sequence=2, **when))   # the published sequence again
     assert live_release_check.main(["--expect", str(values)]) == 1
-    assert "same sequence 1" in capsys.readouterr().out
+    assert "same sequence 2" in capsys.readouterr().out
 
 
 def test_recorded_release_values_of_3_1_0_match_the_release_report():

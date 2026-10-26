@@ -1,9 +1,28 @@
-# AKENO Gaming Suite 3.1.1 — Critical startup hotfix
+# AKENO Gaming Suite 3.1.1 — critical start-up fix
 
-- **Fixes a startup crash** (\`TypeError: unhashable type: 'dict'\`) when System Doctor reopens a previously saved hardware report and the PC has no available CPU temperature sensor.
-- Existing System Doctor history, licenses, mod backups, settings, games and user files are kept. Do not erase \`system.sqlite3\` to work around this defect.
-- The System Doctor regression test covers the saved JSON message in both German and English.
-- **Important:** 3.1.1 supersedes the already published 3.1.0. Users who have seen release sequence 2 must receive a strictly newer signed release (sequence > 2) through the existing API-v2 Release Manager.
+**Fixed**
+- 3.1.0 no longer started on a PC where System Doctor → Hardware Health had saved a report and Windows reports no
+  CPU temperature (the normal case without a vendor driver): `TypeError: unhashable type: 'dict'` in
+  `HardwareTab._show`. The saved note is a translatable message stored as JSON; it is decoded again before it is
+  translated. Saved reports of 3.1.0 open unchanged.
+- Translating a stored message never raises any more, whatever was saved.
+
+**Protection against start crashes**
+- A saved result of the System tools that cannot be shown is logged, stays stored, and the tab says so; it never
+  stops the start. A System page that cannot be built is replaced by a notice; games, mods, restores and updates
+  keep working.
+- Start guard: if a start does not get its window up, the next start runs in **safe mode** (saved System results
+  are not shown, nothing is deleted) and opens ACCOUNT → Updates with the update check and the rollback. A crash
+  while starting is written to `logs\crash.log` and explained in a message box. Start menu: "AKENO Gaming Suite
+  (Safe mode)", or `AKENO.exe --safe-mode`.
+- The update's start check also builds the main window with this PC's saved data; an update that cannot show it
+  is rolled back automatically.
+
+**Updating**
+- From 3.0.0, and from a 3.1.0 that starts: ACCOUNT → Updates → install 3.1.1.
+- From a 3.1.0 that no longer starts: download the 3.1.1 installer from akeno.online and run it. It installs over
+  3.1.0 without administrator rights. License, settings, games, mods, backups, saved System results and undo
+  records stay. Do not delete `system.sqlite3` or `%LOCALAPPDATA%\AKENO`.
 
 ---
 

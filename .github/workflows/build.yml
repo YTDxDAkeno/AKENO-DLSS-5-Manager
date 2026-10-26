@@ -494,33 +494,54 @@ jobs:
           Copy-Item "$env:LOCALAPPDATA\AKENO\logs\*" e2e-logs -ErrorAction SilentlyContinue
           Copy-Item "$env:RUNNER_TEMP\e2e\setup.log" e2e-logs -ErrorAction SilentlyContinue
           if ($code -ne 0) { throw "update end-to-end test failed" }
-      - name: Upgrade path from the published stable release to this build (real 3.0.0 installer)
-        # The installer users have: downloaded read-only from the production download and checked against the
-        # SHA-256 its signed 3.0.0 release carries (sequence 1, key d6139235b220a4aa). Then the same scenarios as
-        # above update that installation to this commit's portable package.
+      - name: Upgrade paths from the published releases to this build (real 3.0.0 and 3.1.0 installers)
+        # The installers users have: downloaded read-only from the production download and checked against the
+        # SHA-256 their signed releases carry (3.0.0: sequence 1, 3.1.0: sequence 2, key d6139235b220a4aa). Then
+        # the same scenarios as above update that installation to this commit's portable package.
         shell: pwsh
-        env:
-          PUBLISHED_VERSION: "3.0.0"
-          PUBLISHED_SETUP_SHA256: fe919b720e7db4a7e3e8fce97555bb77cde23851d205de3f039d847b1e0dd20f
         run: |
           $v = (Select-String -Path akeno\__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
-          if ($v -eq $env:PUBLISHED_VERSION) { "this build is $v itself; nothing to upgrade from" ; exit 0 }
-          # a 3.0.0 user's PC: no update state from the test above (it has seen test versions up to 3.1.10,
-          # and the updater's anti-replay rightly refuses anything older)
-          Remove-Item "$env:LOCALAPPDATA\AKENO" -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force published, next-build | Out-Null
-          Invoke-WebRequest "https://akeno.online/downloads/$env:PUBLISHED_VERSION/AKENO-Setup.exe" -OutFile published\AKENO-Setup.exe
-          $sha = (Get-FileHash published\AKENO-Setup.exe -Algorithm SHA256).Hash.ToLower()
-          if ($sha -ne $env:PUBLISHED_SETUP_SHA256) { throw "the downloaded $env:PUBLISHED_VERSION installer is not the signed one ($sha)" }
           $zip = Get-ChildItem rc -Filter '*-portable-x64.zip' | Select-Object -First 1
-          Expand-Archive $zip.FullName -DestinationPath next-build
-          python tools/update_e2e.py --installer published\AKENO-Setup.exe --installed-version $env:PUBLISHED_VERSION --next next-build --next-version $v --work "$env:RUNNER_TEMP\e2e-upgrade" --report e2e-upgrade-report.md
-          $code = $LASTEXITCODE
-          if (Test-Path e2e-upgrade-report.md) {
-            "## Upgrade $env:PUBLISHED_VERSION -> $v" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-            Get-Content e2e-upgrade-report.md | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          New-Item -ItemType Directory -Force published, next-build | Out-Null
+          Expand-Archive $zip.FullName -DestinationPath next-build -Force
+          $published = @(
+            @{ version = "3.0.0"; sha = "fe919b720e7db4a7e3e8fce97555bb77cde23851d205de3f039d847b1e0dd20f" },
+            @{ version = "3.1.0"; sha = "56d33da6c8ad35ed2afffdbb820a9f882231455ef93c759ab02afc04e92b8ca0" })
+          $failed = @()
+          foreach ($p in $published) {
+            if ($v -eq $p.version) { continue }
+            # a user's PC with that version: no update state from the tests before (anti-replay would rightly
+            # refuse anything older than what they have seen)
+            Remove-Item "$env:LOCALAPPDATA\AKENO" -Recurse -Force -ErrorAction SilentlyContinue
+            $setup = "published\AKENO-Setup-$($p.version).exe"
+            Invoke-WebRequest "https://akeno.online/downloads/$($p.version)/AKENO-Setup.exe" -OutFile $setup
+            $sha = (Get-FileHash $setup -Algorithm SHA256).Hash.ToLower()
+            if ($sha -ne $p.sha) { throw "the downloaded $($p.version) installer is not the signed one ($sha)" }
+            $report = "e2e-upgrade-$($p.version)-report.md"
+            python tools/update_e2e.py --installer $setup --installed-version $p.version --next next-build --next-version $v --work "$env:RUNNER_TEMP\e2e-upgrade-$($p.version)" --report $report
+            if ($LASTEXITCODE -ne 0) { $failed += $p.version }
+            if (Test-Path $report) {
+              "## Upgrade $($p.version) -> $v" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+              Get-Content $report | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
           }
-          if ($code -ne 0) { throw "upgrade from $env:PUBLISHED_VERSION failed" }
+          if ($failed) { throw "upgrade from $($failed -join ', ') failed" }
+      - name: Repair of a 3.1.0 that no longer starts (installer over it, saved Hardware Health report)
+        # 3.1.0 ends while building its pages once Hardware Health has saved a report (CPU temperature not
+        # available). That installation can only be repaired from outside: the new installer over it, with the
+        # user's data, saved results and undo records kept.
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path akeno\__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          if ($v -eq "3.1.0") { "this build is 3.1.0 itself"; exit 0 }
+          Remove-Item "$env:LOCALAPPDATA\AKENO" -Recurse -Force -ErrorAction SilentlyContinue
+          $setup = Get-ChildItem rc -Filter '*-Setup-x64.exe' | Select-Object -First 1
+          python tools/repair_e2e.py --broken-installer published\AKENO-Setup-3.1.0.exe --installer $setup.FullName --work "$env:RUNNER_TEMP\repair" --report repair-report.md
+          $code = $LASTEXITCODE
+          if (Test-Path repair-report.md) {
+            Get-Content repair-report.md | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          if ($code -ne 0) { throw "the repair of a 3.1.0 that no longer starts failed" }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -528,7 +549,8 @@ jobs:
           path: |
             e2e-report.md
             e2e-logs/*
-            e2e-upgrade-report.md
+            e2e-upgrade-*-report.md
+            repair-report.md
 
   publish-release:
     # Users download from the PUBLIC release repository (no GitHub login); this repository stays private.
