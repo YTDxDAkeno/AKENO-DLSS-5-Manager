@@ -1,0 +1,424 @@
+"""Shared building blocks of the SYSTEM pages (System Doctor, Smart Cleaner, Network Lab, Security Center) and the
+Universal Mod Scanner.
+
+* :class:`TabbedPage`: a page title over a tab strip; only the visible tab sits in the layout (like Advanced), so
+  the window's minimum size follows that tab and the page host is the only scroll area.
+* :class:`TaskBar`: runs one long operation on a worker thread with a real Cancel button, its time limit and
+  the progress the operation reports (a bar only when the total is known).
+* :class:`FindingView`: a finding with its observation, the evidence grouped by kind (measured, possible cause,
+  same time) and buttons that open the module that can act on it.
+* :class:`ReadingTile`: a value with its source, or "—" and why it is not available.
+* :class:`Sparkline`: recorded history, drawn only from stored samples.
+"""
+
+from __future__ import annotations
+
+from typing import Callable, Iterable
+
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import (QAbstractItemView, QFrame, QHBoxLayout, QHeaderView, QLabel, QProgressBar, QTabBar,
+                               QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+
+from akeno.i18n import t
+from akeno.system.model import EVIDENCE_LABELS, EvidenceKind, Finding, Level, Reading
+from akeno.system.tasks import Cancelled, Progress, TaskContext, TimedOut
+from akeno.ui import theme
+from akeno.ui.widgets import (Card, FlowLayout, PageHeader, Spinner, StatusPill, button, clear_layout, label,
+                              status_badge)
+
+LEVEL_TEXT = {"ok": "OK", "info": "Note", "warn": "Warning", "fail": "Problem", "unknown": "Unknown"}
+
+
+class TabbedPage(QWidget):
+    """Title, description, tab strip and the visible tab's widget."""
+
+    def __init__(self, title: str, subtitle: str, actions: Iterable[QWidget] = ()):
+        super().__init__()
+        self._lay = QVBoxLayout(self)
+        self._lay.setContentsMargins(0, 0, 0, 0)
+        self._lay.setSpacing(10)
+        self.header = PageHeader(title, subtitle, actions)
+        self._lay.addWidget(self.header)
+        self.tabs = QTabBar()
+        self.tabs.setExpanding(False)
+        self.tabs.setAccessibleName(title)
+        self._lay.addWidget(self.tabs)
+        self.area = QVBoxLayout()
+        self._lay.addLayout(self.area, 1)
+        self.keys: list[str] = []
+        self.holders: dict[str, QWidget] = {}
+        self.pool = QWidget(self)
+        self.pool.hide()
+        self.current: str | None = None
+        self.tabs.currentChanged.connect(self._shown)
+
+    def add_tab(self, key: str, title: str, widget: QWidget) -> None:
+        holder = QWidget(self.pool)
+        hl = QVBoxLayout(holder)
+        hl.setContentsMargins(0, 6, 0, 0)
+        hl.setSpacing(14)
+        hl.addWidget(widget, 1)
+        self.holders[key] = holder
+        self.keys.append(key)
+        self.tabs.addTab(title)
+        if self.current is None:
+            self._place(key)
+
+    def _place(self, key: str) -> None:
+        if self.current == key:
+            return
+        if self.current is not None:
+            old = self.holders[self.current]
+            self.area.removeWidget(old)
+            old.setParent(self.pool)
+        new = self.holders[key]
+        new.setParent(self)
+        self.area.addWidget(new, 1)
+        new.show()
+        self.current = key
+
+    def show_tab(self, key: str) -> None:
+        if key in self.keys:
+            self.tabs.setCurrentIndex(self.keys.index(key))
+            self._shown(self.keys.index(key))
+
+    def show_target(self, target: str) -> None:
+        """A link from another module ("startup", "scan:C:\\") opens the matching tab."""
+        self.show_tab(target.split(":", 1)[0])
+
+    def _shown(self, index: int) -> None:
+        if 0 <= index < len(self.keys):
+            key = self.keys[index]
+            self._place(key)
+            hook = getattr(self, "tab_shown", None)
+            if hook:
+                hook(key)
+
+
+class _Relay(QObject):
+    progress = Signal(object)
+
+
+class TaskBar(QWidget):
+    """One long operation at a time: spinner, what it is doing, a bar when the total is known, Cancel."""
+
+    finished = Signal(bool)                 # True when it completed (not cancelled, no error)
+
+    def __init__(self, ctl, key: str, cancel_text: str | None = None):
+        super().__init__()
+        self.ctl, self.key = ctl, key
+        self.ctx: TaskContext | None = None
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(10)
+        self.spinner = Spinner(18)
+        lay.addWidget(self.spinner)
+        self.text = label("", "dim", shrink=True)
+        lay.addWidget(self.text, 1)
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 1000)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedWidth(180)
+        self.bar.setFixedHeight(8)
+        self.bar.setAccessibleName(t("Progress"))
+        self.bar.hide()
+        lay.addWidget(self.bar)
+        self.cancel = button(cancel_text or t("Cancel"), "stop", "ghost", on_click=self.stop)
+        self.cancel.hide()
+        lay.addWidget(self.cancel)
+        self._relay = _Relay()
+        self._relay.progress.connect(self._progress)
+        self.setVisible(False)
+
+    @property
+    def running(self) -> bool:
+        return self.ctx is not None
+
+    def start(self, fn: Callable[[TaskContext], object], on_done: Callable[[object], None] | None = None,
+              on_error: Callable[[Exception], None] | None = None, text: str = "", timeout: float | None = None,
+              cancellable: bool = True) -> bool:
+        if self.ctx is not None:
+            return False
+        ctx = TaskContext(progress=self._relay.progress.emit, timeout=timeout)
+
+        def done(res):
+            self._stop_ui()
+            self.finished.emit(True)
+            if on_done:
+                on_done(res)
+
+        def failed(exc):
+            self._stop_ui()
+            self.finished.emit(False)
+            if isinstance(exc, Cancelled):
+                self.show_message(t("Cancelled."))
+            elif isinstance(exc, TimedOut):
+                self.show_message(t("Stopped: the time limit was reached."))
+            elif on_error:
+                on_error(exc)
+            else:
+                self.show_message(str(exc), error=True)
+
+        if not self.ctl.run(self.key, lambda: fn(ctx), done, failed, silent=True):
+            return False
+        self.ctx = ctx
+        self.text.setStyleSheet("")
+        self.text.setText(text or t("Working…"))
+        self.spinner.start()
+        self.cancel.setVisible(cancellable)
+        self.cancel.setEnabled(True)
+        self.bar.hide()
+        self.setVisible(True)
+        return True
+
+    def stop(self) -> None:
+        if self.ctx is not None:
+            self.ctx.cancel()
+            self.cancel.setEnabled(False)
+            self.text.setText(t("Cancelling…"))
+
+    def _progress(self, p: Progress) -> None:
+        if self.ctx is None or not isinstance(p, Progress):
+            return
+        self.text.setText(t(p.text))
+        if p.fraction is not None:
+            self.bar.setValue(int(p.fraction * 1000))
+            self.bar.show()
+        else:
+            self.bar.hide()
+
+    def _stop_ui(self) -> None:
+        self.ctx = None
+        self.spinner.stop()
+        self.cancel.hide()
+        self.bar.hide()
+        self.setVisible(False)
+
+    def show_message(self, text: str, error: bool = False) -> None:
+        self.setVisible(True)
+        self.spinner.stop()
+        self.cancel.hide()
+        self.bar.hide()
+        self.text.setText(text)
+        self.text.setStyleSheet(f"color: {theme.RED};" if error else "")
+
+
+class FindingView(QFrame):
+    """One finding. Evidence is grouped by kind so a correlation is never read as a measurement."""
+
+    def __init__(self, f: Finding, on_link: Callable[[str, str], None] | None = None, compact: bool = False):
+        super().__init__()
+        self.setObjectName("SubCard")
+        self.finding = f
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(14, 12, 14, 12)
+        lay.setSpacing(6)
+        head = QHBoxLayout()
+        head.setSpacing(10)
+        badge = QLabel()
+        badge.setPixmap(status_badge(f.level.value if f.level != Level.UNKNOWN else "unknown", 20))
+        badge.setFixedSize(22, 22)
+        head.addWidget(badge, 0, Qt.AlignmentFlag.AlignTop)
+        title = label(t(f.title), "h3", wrap=True)
+        head.addWidget(title, 1)
+        head.addWidget(StatusPill(t(LEVEL_TEXT.get(f.level.value, "")), f.level.value), 0, Qt.AlignmentFlag.AlignTop)
+        lay.addLayout(head)
+        if f.observation:
+            lay.addWidget(label(t(f.observation), wrap=True))
+        if not compact:
+            for kind in (EvidenceKind.MEASURED, EvidenceKind.POSSIBLE_CAUSE, EvidenceKind.CORRELATION):
+                items = [e for e in f.evidence if e.kind == kind]
+                if not items:
+                    continue
+                lay.addWidget(label(t(EVIDENCE_LABELS[kind]).upper(), "overline"))
+                for e in items[:8]:
+                    text = "• " + t(e.text) + (f"  ({e.source})" if e.source else "")
+                    lb = label(text, "dim" if kind != EvidenceKind.MEASURED else None, wrap=True, selectable=True)
+                    if kind == EvidenceKind.CORRELATION:
+                        lb.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-style: italic;")
+                    lay.addWidget(lb)
+        if f.recommendation:
+            rec = label(t("Recommendation: {rec}", rec=t(f.recommendation)), wrap=True)
+            rec.setStyleSheet(f"color: {theme.ACCENT_TEXT};")
+            lay.addWidget(rec)
+        if f.links and on_link:
+            row = FlowLayout(spacing=8)
+            for link in f.links:
+                row.addWidget(button(t(link.label), "chevron-right", "ghost",
+                                     on_click=lambda _=False, m=link.module, x=link.target: on_link(m, x)))
+            holder = QWidget()
+            holder.setLayout(row)
+            lay.addWidget(holder)
+        self.setAccessibleName(t(f.title))
+
+
+class FindingList(QWidget):
+    """Findings sorted by severity, with an empty text when there are none."""
+
+    def __init__(self, on_link=None, empty: str = ""):
+        super().__init__()
+        self.on_link = on_link
+        self.empty = empty
+        self.lay = QVBoxLayout(self)
+        self.lay.setContentsMargins(0, 0, 0, 0)
+        self.lay.setSpacing(10)
+
+    def set_findings(self, findings: list[Finding], errors: list | None = None) -> None:
+        clear_layout(self.lay)
+        for f in sorted(findings, key=lambda x: -x.level.rank):
+            self.lay.addWidget(FindingView(f, self.on_link))
+        if not findings and self.empty:
+            self.lay.addWidget(label(self.empty, "dim", wrap=True))
+        if errors:
+            box = QFrame()
+            box.setObjectName("SubCard")
+            bl = QVBoxLayout(box)
+            bl.setContentsMargins(14, 10, 14, 10)
+            bl.addWidget(label(t("NOT CHECKED"), "overline"))
+            for e in list(dict.fromkeys(str(x) for x in errors))[:8]:
+                bl.addWidget(label("• " + t(e), "muted", wrap=True))
+            self.lay.addWidget(box)
+
+
+class ReadingTile(QWidget):
+    """A reading: the value with its unit, its name, and the source (or the reason it is missing) as tooltip."""
+
+    def __init__(self, name: str):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(2)
+        self.value = label("—", "stat")
+        self.name = label(name, "muted")
+        self.note = label("", "muted", wrap=True)
+        self.note.setStyleSheet("font-size: 8.5pt;")
+        self.note.hide()
+        lay.addWidget(self.value)
+        lay.addWidget(self.name)
+        lay.addWidget(self.note)
+        self.setAccessibleName(name)
+
+    def set(self, r: Reading | None, text: str | None = None) -> None:
+        if r is None or not r.available:
+            self.value.setText("—")
+            reason = t(r.note) if r is not None and r.note else t("Not available on this PC.")
+            self.note.setText(reason)
+            self.note.show()
+            self.setToolTip(reason)
+            return
+        self.value.setText(text if text is not None else f"{r.value} {r.unit}".strip())
+        self.note.setText(t(r.note) if r.note else "")
+        self.note.setVisible(bool(r.note))
+        self.setToolTip(t("Source: {s}", s=r.source) if r.source else "")
+
+
+class Sparkline(QWidget):
+    """Recorded values over time (0-100 scale unless ``top`` is given). Draws nothing it was not given."""
+
+    def __init__(self, color: str | None = None, top: float | None = 100.0, height: int = 46):
+        super().__init__()
+        self.values: list[float | None] = []
+        self.color = color or theme.ACCENT
+        self.top = top
+        self.setFixedHeight(height)
+        self.setMinimumWidth(120)
+
+    def set_values(self, values: list[float | None]) -> None:
+        self.values = list(values)
+        self.update()
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(self.rect()).adjusted(1, 3, -1, -3)
+        p.setPen(QPen(QColor(theme.BORDER), 1))
+        p.drawLine(QPointF(r.left(), r.bottom()), QPointF(r.right(), r.bottom()))
+        vals = [v for v in self.values if v is not None]
+        if len(vals) < 2:
+            p.setPen(QColor(theme.TEXT_MUTED))
+            p.drawText(r, Qt.AlignmentFlag.AlignCenter, t("No history yet"))
+            return
+        top = self.top or max(vals) * 1.1 or 1
+        n = len(self.values)
+        path = QPainterPath()
+        started = False
+        for i, v in enumerate(self.values):
+            if v is None:
+                started = False
+                continue
+            x = r.left() + r.width() * i / max(1, n - 1)
+            y = r.bottom() - r.height() * min(v, top) / top
+            if not started:
+                path.moveTo(x, y)
+                started = True
+            else:
+                path.lineTo(x, y)
+        p.setPen(QPen(QColor(self.color), 1.6))
+        p.drawPath(path)
+
+
+def make_table(headers: list[str], min_height: int = 160, stretch_last: bool = False) -> QTableWidget:
+    tbl = QTableWidget(0, len(headers))
+    tbl.setHorizontalHeaderLabels(headers)
+    hh = tbl.horizontalHeader()
+    hh.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    if stretch_last:
+        hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        hh.setStretchLastSection(True)
+    tbl.verticalHeader().setVisible(False)
+    tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+    tbl.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+    tbl.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+    tbl.setWordWrap(False)
+    tbl.setMinimumHeight(min_height)
+    tbl.setAlternatingRowColors(False)
+    return tbl
+
+
+def fill_table(tbl: QTableWidget, rows: list[list], data: list | None = None, tips: list[list] | None = None) -> None:
+    """Rows of text (or (text, state) pairs, which get a state dot); ``data`` is kept on column 0 (UserRole)."""
+    tbl.setSortingEnabled(False)
+    tbl.setRowCount(len(rows))
+    for i, row in enumerate(rows):
+        for j, cell in enumerate(row):
+            state = None
+            if isinstance(cell, tuple):
+                cell, state = cell
+            item = QTableWidgetItem(str(cell))
+            if state:
+                item.setForeground(QColor(theme.STATE_COLORS.get(state, theme.TEXT)))
+            if tips and i < len(tips) and j < len(tips[i]) and tips[i][j]:
+                item.setToolTip(str(tips[i][j]))
+            elif len(str(cell)) > 40:
+                item.setToolTip(str(cell))
+            if j == 0 and data is not None and i < len(data):
+                item.setData(Qt.ItemDataRole.UserRole, data[i])
+            tbl.setItem(i, j, item)
+
+
+def selected_data(tbl: QTableWidget):
+    rows = tbl.selectionModel().selectedRows() if tbl.selectionModel() else []
+    if not rows:
+        return None
+    item = tbl.item(rows[0].row(), 0)
+    return item.data(Qt.ItemDataRole.UserRole) if item else None
+
+
+def open_link(window, module: str, target: str = "") -> None:
+    """Open another module's page (and its tab) from a finding's link."""
+    window.go(module)
+    page = getattr(window, "pages", {}).get(module)
+    if target and page is not None and hasattr(page, "show_target"):
+        page.show_target(target)
+
+
+def card(title: str, icon: str, *widgets: QWidget, right: QWidget | None = None) -> Card:
+    c = Card(title, icon, right=right)
+    for w in widgets:
+        c.body.addWidget(w)
+    return c
+
+
+def level_pill(level: Level) -> StatusPill:
+    return StatusPill(t(LEVEL_TEXT.get(level.value, "")), level.value)

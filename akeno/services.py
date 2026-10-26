@@ -104,6 +104,16 @@ class AppServices:
 
         from akeno.stack.service import StackManager
         self.stack = StackManager(self)
+        self._system_tools = None
+
+    @property
+    def system_tools(self):
+        """System Doctor, Smart Cleaner, Network Lab, Universal Mod Scanner and Security Center (3.1), created on
+        first use; their data lives in ``system.sqlite3`` beside the main database."""
+        if self._system_tools is None:
+            from akeno.system.suite import SystemTools
+            self._system_tools = SystemTools(self)
+        return self._system_tools
 
     # -- hardware ------------------------------------------------------------------------------
     def scan_hardware(self) -> SystemInfo:

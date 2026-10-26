@@ -64,6 +64,28 @@ def data_strings() -> set[str]:
     out |= {"Performance", "Balanced", "Quality", "Ultra", "Disabled"}
     out |= stack_strings()
     out |= suite_strings()
+    out |= system_strings()
+    return out
+
+
+def system_strings() -> set[str]:
+    """3.1 system tools: texts that reach t() / msg() through tables (explanations, labels, tab titles)."""
+    from akeno.system.doctor import crashes, repair, slowpc, startup
+    from akeno.system.model import EVIDENCE_LABELS
+    from akeno.ui import system_ui
+    from akeno.ui.pages import doctor
+    out = set(EVIDENCE_LABELS.values()) | set(system_ui.LEVEL_TEXT.values())
+    out |= set(slowpc.KNOWN_ACTIVITY.values()) | {"Driver installed", "Windows update", "Service installed"}
+    out |= set(crashes.EXCEPTIONS.values()) | {why for _, why in crashes.BUGCHECKS.values()}
+    out |= {"uncorrected read errors", "uncorrected write errors", "Healthy", "Warning", "Unhealthy", "drive"}
+    for s in repair.STEPS:
+        out |= {s.title, s.what, s.effect, s.duration}
+    out |= set(repair.DISM_CODES.values()) | {"SFC finished. Its window showed the result."}
+    out |= set(startup.SOURCE_LABELS.values())
+    out |= {title for _, title in doctor.TABS} | set(doctor.SIG_TEXT.values()) | {text for _, text in doctor.PERIODS}
+    out |= {"Desktop", "Start menu", "Desktop (all users)", "Start menu (all users)", "Not available on this PC.",
+            "Only administrators can read this folder.", "No minidump folder.",
+            "ACPI thermal zone (not necessarily the processor)", "thermal slowdown active"}
     return out
 
 
