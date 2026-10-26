@@ -179,6 +179,19 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           AKENO_HOME: ${{ runner.temp }}\akeno-smoke
+      - name: AKENO 3.1 system tools against the real runner (read-only Windows providers)
+        shell: pwsh
+        run: |
+          python tools/system_check.py --json system-check.json | Tee-Object -Variable out
+          $code = $LASTEXITCODE
+          "### AKENO 3.1 system tools on the Windows runner (read-only)" | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          $out | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          '```' | Out-File $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          if ($code -ne 0) { throw "the system tools raised a Python error on Windows" }
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PYTHONIOENCODING: utf-8
       - name: Screenshots of the running app (runner hardware, no NVIDIA GPU)
         run: |
           python -m akeno --screenshot screenshots\windows-runner
@@ -396,6 +409,8 @@ jobs:
           path: |
             test-results.xml
             v141-ui-150pct.xml
+            system-check.json
+            screenshots/system-fixtures/*.png
             screenshots/v141-150pct/*.png
             screenshots/v14-fixtures/*.png
             screenshots/v15-fixtures/*.png
