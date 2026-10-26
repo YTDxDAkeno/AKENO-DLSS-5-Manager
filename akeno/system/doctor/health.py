@@ -205,7 +205,7 @@ def findings(snap: HealthSnapshot, system_drive: str) -> list[Finding]:
             if system:
                 f.cause(msg("A nearly full system drive slows updates, the page file and programs that write "
                             "temporary files."))
-            f.link("cleaner", msg("Analyse with Smart Cleaner"), v["mount"])
+            f.link("cleaner", msg("Analyse with Smart Cleaner"), "space:" + v["mount"])
             out.append(f)
     ram = snap.memory.get("percent")
     if ram is not None and ram.available and ram.value >= 90:

@@ -122,9 +122,10 @@ class LicenseGate(QWidget):
               "devices": ("Too many PCs", ""),
               "server": ("License server", "")}
 
-    def __init__(self, manager: LicenseManager, parent=None, probe: bool = True):
+    def __init__(self, manager: LicenseManager, parent=None, probe: bool = True, recovery=None):
         super().__init__(parent)
         self.m = manager
+        self._recovery = recovery                 # () -> AppServices: "Restore game files" without a license
         self.setWindowTitle(t(SUITE_NAME))
         self.setWindowIcon(QIcon(art.app_icon_pixmap(256)))
         self.setObjectName("Root")
@@ -185,6 +186,11 @@ class LicenseGate(QWidget):
         self.server_link = button(t("License server…"), kind="link", on_click=lambda: self.show_page("server"))
         self.server_link.setVisible(not self.m.config.locked)     # a built AKENO talks to its own server only
         foot.addWidget(self.server_link)
+        self.restore_link = button(t("Restore game files…"), kind="link", on_click=self._restore)
+        self.restore_link.setToolTip(t("Put back the original game files and settings AKENO changed. Works without "
+                                       "an active license."))
+        self.restore_link.setVisible(recovery is not None)
+        foot.addWidget(self.restore_link)
         foot.addStretch(1)
         self.lang = QComboBox()
         self.lang.addItem("English", "en")
@@ -963,6 +969,12 @@ class LicenseGate(QWidget):
         self._say(t("Saved."))
         self._probed = False
         self.refresh(self.m.view())
+
+    def _restore(self) -> None:
+        if self._recovery is None:
+            return
+        from akeno.ui.recovery_dialog import RecoveryDialog
+        RecoveryDialog(self._recovery, self).exec()
 
     def _language(self) -> None:
         self.language_changed.emit(self.lang.currentData())

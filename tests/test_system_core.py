@@ -162,3 +162,28 @@ def test_shortcut_roundtrip_and_garbage():
     assert sc.target == r"C:\Games\Tool\tool.exe" and sc.arguments == "--fast"
     assert lnk.parse(b"not a shortcut") is None
     assert lnk.parse(data[:90]) is None or lnk.parse(data[:90]).target is None
+
+
+def test_report_leaves_out_private_details(tmp_path):
+    from akeno.system import report
+    from akeno.system.store import SystemStore
+    env = {"USERNAME": "PlayerOne", "COMPUTERNAME": "GAMING-RIG"}
+    data = {"gateway": "192.168.178.1", "dns": ["1.1.1.1", "fd00::1"], "public_ip": "203.0.113.7",
+            "text": "Router 192.168.178.1 at aa:bb:cc:dd:ee:ff answered PlayerOne on GAMING-RIG",
+            "exe": "C:\\Users\\PlayerOne\\AppData\\Roaming\\svchost.exe", "path": "C:\\Games\\x",
+            "signature_version": "1.439.120.0", "time": "2026-10-26T10:00:00", "serial": "S4EVNX0N",
+            "url": "https://example.com/mod.zip"}
+    out = report.scrub(data, env)
+    assert out["gateway"] == "[address omitted]" and out["dns"] == ["1.1.1.1", "[address omitted]"]
+    assert "public_ip" not in out and "serial" not in out and "path" not in out
+    assert "aa:bb" not in out["text"] and "PlayerOne" not in out["text"] and "GAMING-RIG" not in out["text"]
+    assert "PlayerOne" not in out["exe"]
+    assert out["signature_version"] == "1.439.120.0" and out["time"] == "2026-10-26T10:00:00"
+    assert out["url"] == "https://example.com/mod.zip"
+    store = SystemStore(tmp_path / "s.sqlite3")
+    store.add_history("security.scan", {"kind": "custom", "target": "C:\\Users\\PlayerOne\\Downloads",
+                                        "status": "clean"})
+    rep = report.build(store, "security", {"overview": {"title": {"t": "Virus protection is on", "p": {}}}}, env=env)
+    assert rep["module"] == "security" and rep["overview"]["title"] == "Virus protection is on"
+    assert "target" not in rep["security.scan"][0] and rep["security.scan"][0]["status"] == "clean"
+    store.close()

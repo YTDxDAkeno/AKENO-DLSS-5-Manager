@@ -13,8 +13,8 @@ from akeno.system import commands
 from akeno.system.model import human_bytes
 from akeno.system.network import bufferbloat, repair
 from akeno.ui import theme
-from akeno.ui.system_ui import (FindingList, Sparkline, TabbedPage, TaskBar, fill_table, make_table, open_link,
-                                selected_data)
+from akeno.ui.system_ui import (FindingList, Sparkline, TabbedPage, TaskBar, export_button, fill_table, make_table,
+                                open_link, selected_data)
 from akeno.ui.widgets import (Card, EmptyAware, EmptyState, FlowLayout, KeyValueGrid, ResponsiveRow, StatusPill,
                               StatTile, button, confirm, form_row, info, label)
 
@@ -89,6 +89,7 @@ class OverviewTab(QWidget):
         lay.setSpacing(14)
         top = QHBoxLayout()
         top.addWidget(button(t("Refresh"), "refresh", on_click=self.refresh))
+        top.addWidget(export_button(self, page.svc.store, "network"))
         self.task = TaskBar(page.ctl, "network:overview")
         top.addWidget(self.task, 1)
         top.addStretch(0)

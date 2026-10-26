@@ -43,7 +43,7 @@ def test_low_disk_space_links_to_cleaner():
     snap = health.collect(probe, None, sample_s=0)
     found = health.findings(snap, "C:\\")
     assert found and found[0].id.startswith("disk.low") and found[0].level == Level.PROBLEM
-    assert found[0].links[0].module == "cleaner"
+    assert (found[0].links[0].module, found[0].links[0].target) == ("cleaner", "space:C:\\")
     sc = health.score(found)
     assert sc.value == 85 and sc.deductions[0][0] == 15
 

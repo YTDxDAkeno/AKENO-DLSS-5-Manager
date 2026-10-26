@@ -34,6 +34,13 @@ def suite(qtbot, akeno_home, tmp_path):
         events={"app_crash": [{"time": f"2026-10-2{i}T10:00:00+00:00", "props": ["Game.exe", "1.0", "", "dxgi.dll",
                                                                                 "", "", "0xc0000005"]}
                               for i in range(3)]})
+    from akeno.system.securitycenter.providers import FakeSecurity, defender_active_status
+    tools.security.provider = FakeSecurity(
+        health={"antivirus": "good", "firewall": "good"},
+        products={"antivirus": [{"name": "Microsoft Defender Antivirus", "state": "on", "signature": "up_to_date"}]},
+        firewall=[{"name": "Domain", "enabled": True}, {"name": "Public", "enabled": True}],
+        defender_status=defender_active_status(), history=[],
+        procs=[{"pid": 41, "name": "svchost.exe", "exe": "C:\\Users\\p\\AppData\\Roaming\\svchost.exe"}])
     ctl = Controller(svc)
     win = MainWindow(ctl)
     qtbot.addWidget(win)
@@ -74,6 +81,8 @@ def test_doctor_link_opens_other_module(suite):
     from akeno.ui.system_ui import open_link
     open_link(win, "cleaner", "scan")
     assert win.current_page() == "cleaner"
+    open_link(win, "cleaner", "space:C:\\")                  # a full drive: what fills it
+    assert win.pages["cleaner"].current == "space" and win.pages["cleaner"].space.path.text() == "C:\\"
     win.go("doctor")
     win.pages["doctor"].link("doctor", "crashes")
     assert win.pages["doctor"].current == "crashes"
@@ -322,3 +331,99 @@ def test_installed_mods_empty_state_is_centered(suite, qtbot):
     win.go("installed")
     assert page.empty_box.isVisible() and not page.library.isVisible()
     assert page.empty_box.minimumHeight() >= 360
+
+
+def test_security_overview_and_navigation(suite, qtbot):
+    win, ctl, svc = suite
+    from akeno.ui.main_window import SECTIONS
+    assert [k for k, _, _ in dict(SECTIONS)["SYSTEM"]] == ["doctor", "cleaner", "network", "security"]
+    win.go("security")
+    page = win.pages["security"]
+    tab = page.tabs_w["overview"]
+    qtbot.waitUntil(lambda: tab.loaded_at > 0, timeout=15000)
+    from akeno.ui.system_ui import FindingView
+    ids = {w.finding.id for w in tab.findings.findChildren(FindingView)}
+    assert {"sec.av.on", "sec.firewall.on"} <= ids
+    assert tab.products.rowCount() == 1 and tab.t_av.value.text() == "OK"
+
+
+def test_security_third_party_disables_defender_scans(suite, qtbot):
+    win, ctl, svc = suite
+    from akeno.system.securitycenter.providers import FakeSecurity
+    svc.system_tools.security.provider = FakeSecurity(
+        health={"antivirus": "good", "firewall": "good"},
+        products={"antivirus": [{"name": "Contoso Antivirus", "state": "on"}]}, firewall=[], defender_status=None,
+        history=[])
+    svc.system_tools.security._status = None
+    win.go("security")
+    page = win.pages["security"]
+    page.show_tab("scan")
+    scan = page.tabs_w["scan"]
+    qtbot.waitUntil(lambda: not scan.b_quick.isEnabled(), timeout=10000)
+    assert "antivirus" in scan.ready.text()
+    page.show_tab("overview")
+    tab = page.tabs_w["overview"]
+    tab.refresh()
+    qtbot.waitUntil(lambda: not tab.task.running and tab.loaded_at > 0, timeout=15000)
+    from akeno.ui.system_ui import FindingView
+    assert "sec.av.third_party" in {w.finding.id for w in tab.findings.findChildren(FindingView)}
+
+
+def test_security_quick_scan_and_full_scan_confirmation(suite, qtbot, monkeypatch):
+    win, ctl, svc = suite
+    win.go("security")
+    page = win.pages["security"]
+    page.show_tab("scan")
+    scan = page.tabs_w["scan"]
+    monkeypatch.setattr("akeno.ui.pages.security.confirm", lambda *a, **k: False)
+    scan.run("full")
+    assert not scan.task.running and svc.system_tools.security.provider.scans == []
+    scan.run("quick")
+    qtbot.waitUntil(lambda: not scan.task.running and bool(scan.result.text()), timeout=10000)
+    assert scan.result.text().startswith("No threats found")
+    assert svc.system_tools.security.provider.scans == [("quick", None, False)]
+    assert scan.table.rowCount() == 1
+
+
+def test_security_file_check_from_mod_link(suite, qtbot, tmp_path):
+    win, ctl, svc = suite
+    mod = tmp_path / "dinput8.dll"
+    mod.write_bytes(b"MZ" + b"\0" * 200)
+    from akeno.ui.system_ui import open_link
+    open_link(win, "security", "file:" + str(mod))
+    page = win.pages["security"]
+    files = page.tabs_w["files"]
+    assert page.current == "files"
+    qtbot.waitUntil(lambda: not files.task.running and files.table.rowCount() == 1, timeout=15000)
+    assert files.b_open.isEnabled()
+    rows = {files.kv.grid.itemAtPosition(i, 0).widget().text(): files.kv.grid.itemAtPosition(i, 1).widget()
+            for i in range(files.kv.grid.rowCount()) if files.kv.grid.itemAtPosition(i, 0)}
+    assert "SHA-256" in rows
+    assert svc.system_tools.security.provider.scans == [("custom", str(mod), True)]   # report only
+
+
+def test_security_process_review(suite, qtbot):
+    win, ctl, svc = suite
+    win.go("security")
+    page = win.pages["security"]
+    page.show_tab("processes")
+    tab = page.tabs_w["processes"]
+    tab.refresh()
+    qtbot.waitUntil(lambda: not tab.task.running and tab.table.rowCount() == 1, timeout=15000)
+    from akeno.ui.system_ui import FindingView
+    assert [w.finding.id for w in tab.findings.findChildren(FindingView)] == ["proc.masquerade.svchost.exe"]
+
+
+def test_security_report_export(suite, qtbot, tmp_path, monkeypatch):
+    import json
+    win, ctl, svc = suite
+    win.go("security")
+    tab = win.pages["security"].tabs_w["overview"]
+    qtbot.waitUntil(lambda: tab.loaded_at > 0, timeout=15000)
+    target = tmp_path / "report.json"
+    monkeypatch.setattr("akeno.ui.system_ui.choose_save_path", lambda *a: str(target))
+    monkeypatch.setattr("akeno.ui.widgets.info", lambda *a, **k: None)
+    from akeno.ui.system_ui import export_report
+    assert export_report(tab, svc.system_tools.store, "security", {"overview": tab.last}) == str(target)
+    data = json.loads(target.read_text(encoding="utf-8"))
+    assert data["module"] == "security" and data["overview"]["findings"]

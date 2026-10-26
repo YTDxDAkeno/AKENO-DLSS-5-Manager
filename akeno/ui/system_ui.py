@@ -422,3 +422,36 @@ def card(title: str, icon: str, *widgets: QWidget, right: QWidget | None = None)
 
 def level_pill(level: Level) -> StatusPill:
     return StatusPill(t(LEVEL_TEXT.get(level.value, "")), level.value)
+
+
+def export_report(parent, store, module: str, extra: dict | None = None) -> str | None:
+    """Save the module's latest results as JSON for support. Private details are left out (``system.report``)."""
+    import json
+    from pathlib import Path
+    from PySide6.QtWidgets import QFileDialog
+    from akeno.system import report
+    path = choose_save_path(parent, t("Export report"), f"akeno-{module}-report.json")
+    if not path:
+        return None
+    data = report.build(store, module, extra)
+    Path(path).write_text(json.dumps(data, indent=1, ensure_ascii=False, default=str), encoding="utf-8")
+    return path
+
+
+def choose_save_path(parent, title: str, name: str) -> str:
+    from PySide6.QtWidgets import QFileDialog
+    return QFileDialog.getSaveFileName(parent, title, name, "JSON (*.json)")[0]
+
+
+def export_button(parent, store, module: str, extra: Callable[[], dict] | None = None):
+    """"Export report…": what the report contains is said in the tooltip; the file stays on this PC."""
+    def run() -> None:
+        path = export_report(parent, store, module, extra() if extra else None)
+        if path:
+            from akeno.ui.widgets import info
+            info(parent, t("Export report"), t("The report was saved. File paths, addresses, user and PC names "
+                                               "and serial numbers are left out."), path)
+    b = button(t("Export report…"), "export", "ghost", on_click=run)
+    b.setToolTip(t("Saves the latest results as a file for support. Nothing is sent; private details are left "
+                   "out."))
+    return b

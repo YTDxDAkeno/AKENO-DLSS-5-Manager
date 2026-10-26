@@ -128,16 +128,31 @@ def main(argv: list[str] | None = None) -> int:
     from akeno.ui.shell import SuiteShell
     holder: dict = {}
 
+    def services():
+        # one AppServices for the suite and the welcome screen's "Restore game files" (which only undoes)
+        if "services" not in holder:
+            from akeno.services import AppServices
+            holder["services"] = AppServices()
+        return holder["services"]
+
     def build():
-        ctl, win = build_suite(app, args, lic)
+        ctl, win = build_suite(app, args, lic, services())
         holder["ctl"] = ctl
         return win
+
+    try:
+        # programs a Network Gaming Mode paused run again, whatever the license state
+        from akeno.recovery import resume_paused_processes
+        resume_paused_processes()
+    except Exception as exc:                     # never keeps AKENO from starting
+        logging.getLogger(__name__).warning("resume paused programs: %s", exc)
 
     def language(lang: str) -> None:
         prefs.set("language", lang)
         i18n.set_language(lang)
 
-    shell = SuiteShell(lic, build, language, busy=lambda: bool(holder.get("ctl") and holder["ctl"].busy))
+    shell = SuiteShell(lic, build, language, busy=lambda: bool(holder.get("ctl") and holder["ctl"].busy),
+                       recovery=services)
     shell.minimized = args.minimized
     shell.start()
     from PySide6.QtCore import QTimer
@@ -146,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     return app.exec()
 
 
-def build_suite(app, args, lic):
+def build_suite(app, args, lic, services=None):
     """Everything behind the license: services (database, game library, mod engine), controller, main window,
     tray icon and the start-up scans."""
     from PySide6.QtCore import QTimer
@@ -159,7 +174,7 @@ def build_suite(app, args, lic):
     from akeno.ui.controller import Controller
     from akeno.ui.main_window import MainWindow
 
-    services = AppServices()
+    services = services or AppServices()
     ctl = Controller(services)
     win = MainWindow(ctl, lic)
 

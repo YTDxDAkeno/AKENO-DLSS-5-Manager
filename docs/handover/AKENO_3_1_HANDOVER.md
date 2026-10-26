@@ -1,43 +1,57 @@
 # AKENO 3.1 – Übergabe / Handover
 
-Stand: laufend aktualisiert während der Entwicklung (Branch `claude/adoring-shannon-2d4qb4`).
+Stand 2026-10-26, Branch `claude/adoring-shannon-2d4qb4`. Nichts veröffentlicht, nichts gemergt, kein Release,
+kein VPS-Deployment, keine Änderung an Lizenzsystem, Schlüsseln oder Benutzerkonten.
 
 ## Basis
 
-- Branch-Basis: `claude/blissful-wright-8zj111` @ `7b461d3` (Updater Schema 2, CI-Run 188 grün). Alle
-  früheren Branches (v1.2 … Desktop Studio 2.0, Accounts, 3.0) sind lineare Vorfahren dieser Spitze.
-- `main` enthält nur den Initial-Commit; alle PRs (#1 … #17) sind gestapelte Draft-PRs.
+- Branch-Basis: `claude/blissful-wright-8zj111` @ `7b461d3` (Updater Schema 2, CI-Run 188 grün). `main` enthält
+  nur den Initial-Commit; alle PRs sind gestapelte Draft-PRs, der 3.1-PR zielt auf `claude/blissful-wright-8zj111`.
 - Baseline-Tests (Linux, offscreen): 1039 bestanden, 13 übersprungen.
 
-## Architektur 3.1 (neu)
+## Commits
 
-```
-akeno/system/            Kern ohne Qt
-  model.py               Finding / Evidence (gemessen | mögliche Ursache | Korrelation) / Reading / Report
-  tasks.py               TaskContext: Abbruch, Zeitlimit, Fortschritt
-  commands.py            Windows-Werkzeuge ohne Shell, PowerShell kodiert, UAC nur nach Bestätigung
-  store.py               system.sqlite3 (Journal, Historie, Zustand) – getrennt von akeno.sqlite3
-  fs.py                  sicheres Durchlaufen (keine Links/Junctions), Containment, Identität, Papierkorb
-  signatures.py          Authenticode eingebettet + Katalog (Get-AuthenticodeSignature)
-  lnk.py                 .lnk-Parser (nur lesen)
-  suite.py               SystemTools an AppServices.system_tools (lazy)
-  doctor/                System Doctor
-akeno/ui/system_ui.py    gemeinsame UI-Bausteine (TabbedPage, TaskBar, FindingView, ReadingTile, Sparkline)
-akeno/ui/pages/doctor.py System Doctor Seite
-tools/system_check.py    echte Provider auf dem Windows-CI-Runner (nur lesend)
-```
+| Commit | Inhalt |
+|---|---|
+| `06fad15` | gemeinsamer Kern `akeno/system/` + System Doctor |
+| `2d3edc2` | CI: `tools/system_check.py` gegen den echten Windows-Runner; Handover |
+| `5154ae4` | Smart Cleaner |
+| `13c2f5b` | Network Lab |
+| `99765a8` | Universal Mod Scanner + neue Mod-Bibliothek (CI-Run 192 komplett grün inkl. Windows) |
+| folgt | Security Center, Download-Schutz, Wiederherstellung ohne Lizenz, Testdaten-Screenshots, Doku |
 
 ## Status
 
 | Modul | Status |
 |---|---|
 | Gemeinsame Infrastruktur | fertig, getestet |
-| System Doctor | fertig (Dashboard, Slow PC, Startup, Crashes, Hardware, Repair), getestet mit Stand-in-Providern |
-| Smart Cleaner | in Arbeit |
-| Network Lab | offen |
-| Universal Mod Scanner | offen |
-| Security Center | offen |
+| System Doctor | fertig, getestet (Stand-ins + echter Runner) |
+| Smart Cleaner | fertig, getestet |
+| Network Lab | fertig, getestet; VPN bewusst nur Erkennung (siehe `docs/AKENO_3_1_SYSTEM_TOOLS.md`) |
+| Universal Mod Scanner | fertig, getestet |
+| Security Center | fertig, getestet mit `FakeSecurity`; echter Defender/WSC über `system_check.py --eicar` in CI |
+| Download-Schutz | `DownloadManager.antivirus` nach SHA-256; Fund stoppt Installation; Tests mit Stand-in |
+| Wiederherstellung ohne Lizenz | Willkommensbildschirm „Spieldateien wiederherstellen…“, `akeno/recovery.py` |
+| Deutsch | vollständig (Coverage-Test), durchgehend „du“ wie der Rest der App |
+
+Technische Beschreibung: `docs/AKENO_3_1_SYSTEM_TOOLS.md`.
+
+## Prüfen nach dem nächsten Push
+
+1. CI-Run des Security-Commits: Windows-Job „AKENO 3.1 system tools against the real runner“ – Abschnitt
+   `Security` und `EICAR` im Step Summary bzw. `system-check.json` (Artefakt). Erwartung: WSC-Status gelesen,
+   Defender-Modus angezeigt; EICAR-Urteil `threats`, falls Defender auf dem Runner aktiv ist, sonst
+   `not_checked` mit Grund. Beides ist korrektes Verhalten; ein Python-Fehler wäre ein Bug.
+2. Artefakt `screenshots/system-fixtures/*.png` (Testdaten mit rotem Banner).
+
+## Offene Punkte / bekannte Grenzen
+
+- Kein Virenschutz-Urteil, wenn ein fremdes Produkt aktiv und Defender aus ist (wird als „nicht geprüft“ gezeigt).
+- Pro-Programm-Netzwerkverkehr nur als Verbindungen + Gesamt-I/O (ohne ETW/Admin nicht genauer).
+- Der signierte AKENO-Updater läuft bewusst nicht durch den Download-Virenscan (eigene Ed25519-Kette).
+- Lokale Komponenten-Importe (`import_file`) sind nicht an den Download-Schutz angeschlossen.
 
 ## Nächster Schritt
 
-Siehe Abschnitt „Status“; die Aufgabenliste im PR-Bericht ist maßgeblich.
+Security-Commit pushen, CI abwarten, Draft-PR mit dem deutschen Abschlussbericht (A–J) gegen
+`claude/blissful-wright-8zj111` öffnen.

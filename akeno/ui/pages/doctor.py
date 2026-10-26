@@ -16,8 +16,8 @@ from akeno.system.doctor.repair import STEPS
 from akeno.system.doctor.startup import SOURCE_LABELS
 from akeno.system.model import Level, Reading, human_bytes, human_duration
 from akeno.ui import theme
-from akeno.ui.system_ui import (FindingList, ReadingTile, Sparkline, TabbedPage, TaskBar, card, fill_table,
-                                make_table, open_link, selected_data)
+from akeno.ui.system_ui import (FindingList, ReadingTile, Sparkline, TabbedPage, TaskBar, card, export_button,
+                                fill_table, make_table, open_link, selected_data)
 from akeno.ui.widgets import (Card, EmptyAware, EmptyState, FlowLayout, KeyValueGrid, Meter, ResponsiveRow, StatusPill,
                               SubCard, button, clear_layout, confirm, info, label)
 
@@ -76,6 +76,7 @@ class OverviewTab(QWidget):
         super().__init__()
         self.page = page
         self.loaded_at = 0.0
+        self.last: dict = {}
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(14)
@@ -83,6 +84,7 @@ class OverviewTab(QWidget):
         top = QHBoxLayout()
         self.btn = button(t("Refresh"), "refresh", on_click=self.refresh)
         top.addWidget(self.btn)
+        top.addWidget(export_button(self, page.tools.store, "doctor", lambda: {"overview": self.last}))
         top.addWidget(self.task, 1)
         top.addStretch(0)
         lay.addLayout(top)
@@ -164,11 +166,12 @@ class OverviewTab(QWidget):
 
     def _show(self, out: dict) -> None:
         self.loaded_at = time.time()
+        self.last = {"snapshot": out["snapshot"].to_dict(), "score": out["score"].to_dict()}
         snap = out["snapshot"]
         score = out["score"]
         self.score_value.setText(f"{score.value} / 100")
         self.score_text.setText(t("No problem found in the last analyses.") if not score.deductions else
-                                t("{n} findings lower the indicator:", n=len(score.deductions)))
+                                t("Findings that lower the indicator: {n}", n=len(score.deductions)))
         clear_layout(self.score_list)
         for points, reason in score.deductions[:8]:
             self.score_list.addWidget(label(f"−{points}  {t(reason)}", "dim", wrap=True))
