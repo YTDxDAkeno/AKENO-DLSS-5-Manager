@@ -1,3 +1,12 @@
+# AKENO Gaming Suite 3.1.1 — Critical startup hotfix
+
+- **Fixes a startup crash** (\`TypeError: unhashable type: 'dict'\`) when System Doctor reopens a previously saved hardware report and the PC has no available CPU temperature sensor.
+- Existing System Doctor history, licenses, mod backups, settings, games and user files are kept. Do not erase \`system.sqlite3\` to work around this defect.
+- The System Doctor regression test covers the saved JSON message in both German and English.
+- **Important:** 3.1.1 supersedes the already published 3.1.0. Users who have seen release sequence 2 must receive a strictly newer signed release (sequence > 2) through the existing API-v2 Release Manager.
+
+---
+
 # AKENO Gaming Suite 3.1.0
 
 A new **SYSTEM** section between GAMING and DESKTOP with four modules, and a new mod library. Everything of 3.0.0
