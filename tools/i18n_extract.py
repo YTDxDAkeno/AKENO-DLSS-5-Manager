@@ -112,6 +112,13 @@ def system_strings() -> set[str]:
     out |= {"Desktop", "Start menu", "Desktop (all users)", "Start menu (all users)", "Not available on this PC.",
             "Only administrators can read this folder.", "No minidump folder.",
             "ACPI thermal zone (not necessarily the processor)", "thermal slowdown active"}
+    from akeno.system.securitycenter import defender as sec_defender, filecheck as sec_files
+    from akeno.ui.pages import security
+    out |= set(sec_defender.ERRORS.values()) | set(sec_files.KIND_TEXT.values()) | set(sec_files.ZONES.values())
+    out |= {title for _, title in security.TABS} | set(security.STATE_TEXT.values()) | set(security.SCAN_TEXT.values())
+    out |= set(security.RESULT_TEXT.values()) | set(security.THREAT_STATUS_TEXT.values())
+    out |= set(security.SEVERITY_TEXT.values()) | set(security.LOCATION_TEXT.values())
+    out |= {"Antivirus", "Firewall", "Profiles", "Path", "The scan was stopped.", "Cancelled."}
     return out
 
 

@@ -4,7 +4,7 @@ Read-only: nothing is cleaned, disabled, scanned with changes or repaired. The o
 real Windows providers behave (event logs, performance counters, the storage stack, Defender, the network), as
 opposed to the unit tests, which run the analyses on stand-in data.
 
-    python tools/system_check.py [--json out.json] [--modules doctor,cleaner,network,mods,security]
+    python tools/system_check.py [--json out.json] [--modules doctor,cleaner,network,mods,security] [--eicar]
 
 Exit code 1 means a Python error in AKENO's code (a bug); a Windows answer like "access denied" is reported and
 is not an error.
@@ -110,19 +110,78 @@ def run_mods(out: dict) -> None:
     svc.db.close()
 
 
-MODULES = {"doctor": run_doctor, "cleaner": run_cleaner, "network": run_network, "mods": run_mods}
+def _eicar() -> bytes:
+    """The industry-standard antivirus test file (harmless text every antivirus reports as a test detection),
+    assembled at run time so this script itself is not a detection."""
+    head = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$"
+    return (head + "-".join(["EICAR", "STANDARD", "ANTIVIRUS", "TEST", "FILE!$H+H*"])).encode("ascii")
+
+
+def run_security(out: dict) -> None:
+    """Status, history, the process review, a report-only file check and, with ``--eicar``, Defender's verdict on
+    the EICAR test file plus the download veto. Nothing on the runner is changed: no scan with remediation, no
+    setting, no exclusion."""
+    import os
+    import zipfile
+    from akeno.system.securitycenter.service import SecurityService
+    from akeno.system.store import SystemStore
+    store = SystemStore(Path(out["_home"]) / "system.sqlite3")
+    svc = SecurityService(store)
+    t0 = time.monotonic()
+    rep = svc.overview()
+    out["security.overview"] = {"seconds": round(time.monotonic() - t0, 1), "report": rep.to_dict(),
+                                "state": rep.data["state"]}
+    t0 = time.monotonic()
+    out["security.ready"] = list(svc.defender_ready())
+    rep = svc.processes()
+    out["security.processes"] = {"seconds": round(time.monotonic() - t0, 1), "report": rep.to_dict()}
+    work = Path(out["_home"]) / "security-check"
+    work.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(work / "sample-mod.jar", "w") as z:
+        z.writestr("fabric.mod.json", "{}")
+        z.writestr("natives/helper.dll", b"MZ")
+    t0 = time.monotonic()
+    reports, errors = svc.check_files([sys.executable, str(work)])
+    out["security.files"] = {"seconds": round(time.monotonic() - t0, 1), "errors": errors,
+                             "reports": [r.to_dict() for r in reports]}
+    if out.get("_eicar"):
+        folder = Path(out["_home"]) / "eicar-test"
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / "eicar-test-file.txt"
+        try:
+            target.write_bytes(_eicar())
+            written = target.is_file()
+        except OSError as exc:                          # real-time protection may block the write itself
+            written = f"blocked: {exc}"
+        time.sleep(2)
+        still = target.is_file()
+        t0 = time.monotonic()
+        verdict = svc.verdict(str(folder))
+        download = svc.check_download(str(folder), None, "eicar-test-file.txt")
+        out["security.eicar"] = {"seconds": round(time.monotonic() - t0, 1), "written": written,
+                                 "present_before_scan": still, "verdict": verdict, "download_check": download}
+        try:
+            target.unlink(missing_ok=True)              # the test file this script created, nothing else
+        except OSError:
+            pass
+    store.close()
+
+
+MODULES = {"doctor": run_doctor, "cleaner": run_cleaner, "network": run_network, "mods": run_mods,
+           "security": run_security}
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--json")
     ap.add_argument("--modules", default=",".join(MODULES))
+    ap.add_argument("--eicar", action="store_true", help="CI only: ask Defender about the EICAR test file")
     args = ap.parse_args(argv)
     import tempfile
     home = tempfile.mkdtemp(prefix="akeno-system-check-")
     import os
     os.environ.setdefault("AKENO_HOME", home)
-    out: dict = {"_home": home, "platform": sys.platform}
+    out: dict = {"_home": home, "platform": sys.platform, "_eicar": args.eicar}
     failed = []
     for name in args.modules.split(","):
         fn = MODULES.get(name.strip())
@@ -202,6 +261,34 @@ def summary(out: dict) -> None:
     ms = out.get("mods.scan")
     if ms:
         print(f"Mod scan ({ms['seconds']} s): {ms['games']} library games, {len(ms['groups'])} with mods")
+    so = out.get("security.overview")
+    if so:
+        st = so["state"]
+        d = st.get("defender") or {}
+        print(f"Security ({so['seconds']} s): health={st.get('health')} antivirus={st.get('antivirus')} "
+              f"firewall={st.get('firewall')} defender mode={d.get('mode')} realtime={d.get('realtime')} "
+              f"signature age={d.get('signature_age_days')} tamper={d.get('tamper')} "
+              f"history={len(st.get('history') or [])} errors={st.get('errors')}")
+        print("  " + "; ".join(f"[{f['level']}] {dec(f['title'])}" for f in so["report"]["findings"]))
+        print(f"  Defender ready for scans: {out.get('security.ready')}")
+    sp = out.get("security.processes")
+    if sp:
+        rep = sp["report"]
+        procs = rep["data"]["processes"]
+        print(f"Process review ({sp['seconds']} s): {len(procs)} processes, {rep['data']['signed_checked']} "
+              f"signatures; " + "; ".join(f"[{f['level']}] {dec(f['title'])}" for f in rep["findings"]))
+    sf = out.get("security.files")
+    if sf:
+        print(f"File check ({sf['seconds']} s): " + "; ".join(
+            f"{Path(r['path']).name} {r['kind']} sig={r['signature'].get('status')} "
+            f"signer={r['signature'].get('signer')} av={r['av'].get('status')} {str(r['av'].get('detail'))[:60]}"
+            for r in sf["reports"]))
+    se = out.get("security.eicar")
+    if se:
+        v = se["verdict"]
+        print(f"EICAR ({se['seconds']} s): written={se['written']} present={se['present_before_scan']} "
+              f"verdict={v.get('status')} threats={[t.get('name') for t in v.get('threats', [])]} "
+              f"detail={str(v.get('detail'))[:100]} download check={se['download_check'].get('status')}")
     if "doctor.shortcuts" in out:
         print(f"Broken shortcuts: {len(out['doctor.shortcuts'])}")
 

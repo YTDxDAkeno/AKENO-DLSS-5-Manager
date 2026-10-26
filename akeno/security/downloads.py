@@ -25,6 +25,7 @@ from typing import Callable
 
 from akeno import __version__
 from akeno.core.db import iter_chunks
+from akeno.i18n import msg
 from akeno.paths import cache_dir
 
 log = logging.getLogger(__name__)
@@ -42,6 +43,15 @@ class VerificationError(DownloadError):
 
 class Cancelled(DownloadError):
     pass
+
+
+class ThreatDetected(DownloadError):
+    """The antivirus recognised a verified download as harmful; it is not installed (the file is left for the
+    antivirus to handle - AKENO deletes nothing)."""
+
+    def __init__(self, message: str, threats: list[str] | None = None):
+        super().__init__(message)
+        self.threats = threats or []
 
 
 def sha256_file(path: str | os.PathLike) -> str:
@@ -90,6 +100,10 @@ class DownloadManager:
         self.retries = retries
         self.timeout = timeout
         self._opener = opener
+        # Optional antivirus check after the hash check (Security Center): (path, token) -> verdict dict.
+        # It never replaces the SHA-256 and signature checks; it only adds a veto on a confirmed detection.
+        self.antivirus: Callable[[Path, CancelToken | None], dict] | None = None
+        self._av_clean: set[str] = set()
 
     def check_url(self, url: str) -> None:
         u = urllib.parse.urlsplit(url)
@@ -119,7 +133,7 @@ class DownloadManager:
         dest = self.cached_path(sha256, name)
         if dest.is_file():
             if sha256_file(dest) == sha256:
-                return DownloadResult(dest, sha256, dest.stat().st_size, True)
+                return self._scanned(DownloadResult(dest, sha256, dest.stat().st_size, True), token)
             log.warning("cached file %s is corrupt; downloading again", dest)
             dest.unlink()
         limit = min(self.hard_limit, int(expected_size * 1.05) + 4096) if expected_size else self.hard_limit
@@ -128,7 +142,7 @@ class DownloadManager:
             if token and token.cancelled:
                 raise Cancelled("Download cancelled.")
             try:
-                return self._attempt(url, sha256, dest, limit, progress, token)
+                res = self._attempt(url, sha256, dest, limit, progress, token)
             except (Cancelled, VerificationError):
                 raise
             except DownloadError as exc:
@@ -141,6 +155,8 @@ class DownloadManager:
                 last = exc
             except (urllib.error.URLError, OSError, TimeoutError) as exc:
                 last = exc
+            else:
+                return self._scanned(res, token)
             log.info("download attempt %d failed: %s", attempt, last)
             if attempt < self.retries:
                 for _ in range(int(2 ** attempt * 10)):
@@ -248,9 +264,24 @@ class DownloadManager:
             digest = h.hexdigest()
             dest = self.cached_path(digest, name)
             os.replace(tmp, dest)
-            return DownloadResult(dest, digest, size, False)
+            return self._scanned(DownloadResult(dest, digest, size, False), token)
         finally:
             tmp.unlink(missing_ok=True)
+
+    def _scanned(self, res: DownloadResult, token: CancelToken | None) -> DownloadResult:
+        """The antivirus verdict on a verified download: a detection stops here, anything else passes (a PC
+        without a usable antivirus keeps working; the hash check above already ran)."""
+        if self.antivirus is None or res.sha256 in self._av_clean:
+            return res
+        verdict = self.antivirus(res.path, token) or {}
+        if verdict.get("status") == "threats":
+            names = [str(t.get("name") or "?") for t in verdict.get("threats", [])] or ["?"]
+            raise ThreatDetected(msg("{engine} reports {threat} in {file}. AKENO does not install it.",
+                                     engine=verdict.get("engine") or "The antivirus", threat=", ".join(names),
+                                     file=res.path.name), names)
+        if verdict.get("status") == "clean":
+            self._av_clean.add(res.sha256)
+        return res
 
     def cache_size(self) -> int:
         return sum(p.stat().st_size for p in self.cache.glob("*") if p.is_file())

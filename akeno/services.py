@@ -105,6 +105,9 @@ class AppServices:
         from akeno.stack.service import StackManager
         self.stack = StackManager(self)
         self._system_tools = None
+        # Security Center download protection: the antivirus verdict after the hash check, never instead of it
+        self.downloads.antivirus = self._antivirus_check
+        self.stack.store.downloads.antivirus = self._antivirus_check
 
     @property
     def system_tools(self):
@@ -114,6 +117,19 @@ class AppServices:
             from akeno.system.suite import SystemTools
             self._system_tools = SystemTools(self)
         return self._system_tools
+
+    def _antivirus_check(self, path, token=None) -> dict:
+        """Microsoft Defender's report-only verdict on a verified download (see ``DownloadManager._scanned``)."""
+        from akeno.security.downloads import Cancelled
+        from akeno.system.tasks import Cancelled as TaskCancelled, TimedOut
+        if not is_windows():
+            return {"status": "not_checked", "engine": "", "threats": [], "detail": "no Windows antivirus"}
+        try:
+            return self.system_tools.security.check_download(str(path), token, os.path.basename(str(path)))
+        except TaskCancelled as exc:
+            raise Cancelled("Download cancelled.") from exc
+        except TimedOut:
+            return {"status": "error", "engine": "", "threats": [], "detail": "the antivirus did not answer in time"}
 
     # -- hardware ------------------------------------------------------------------------------
     def scan_hardware(self) -> SystemInfo:

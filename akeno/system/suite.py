@@ -84,3 +84,8 @@ class SystemTools:
     def mods(self):
         from akeno.system.mods.service import ModScanner
         return ModScanner(self.s, self.store)
+
+    @cached_property
+    def security(self):
+        from akeno.system.securitycenter.service import SecurityService
+        return SecurityService(self.store)
