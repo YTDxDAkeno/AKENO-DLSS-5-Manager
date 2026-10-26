@@ -55,7 +55,23 @@ def run_doctor(out: dict) -> None:
     store.close()
 
 
-MODULES = {"doctor": run_doctor}
+def run_cleaner(out: dict) -> None:
+    """Scan only: the check never removes a file."""
+    from akeno.system.cleaner.service import CleanerService
+    from akeno.system.store import SystemStore
+    store = SystemStore(Path(out["_home"]) / "system.sqlite3")
+    svc = CleanerService(store)
+    t0 = time.monotonic()
+    res = svc.scan()
+    out["cleaner.scan"] = {"seconds": round(time.monotonic() - t0, 1),
+                           "categories": [c.summary() for c in res.categories]}
+    folder = svc.folder(str(ROOT))
+    out["cleaner.folder"] = {"root": folder.root, "total": folder.total, "files": folder.files,
+                             "children": len(folder.children)}
+    store.close()
+
+
+MODULES = {"doctor": run_doctor, "cleaner": run_cleaner}
 
 
 def main(argv=None) -> int:
@@ -116,6 +132,13 @@ def summary(out: dict) -> None:
             print(f"  {e['name']}: {e['source']} enabled={e['enabled']} sig={e['signature'].get('status')} "
                   f"signer={e['signature'].get('signer')} protected={bool(e['protected_reason'])} "
                   f"problems={e['problems']}")
+    sc = out.get("cleaner.scan")
+    if sc:
+        print(f"Cleaner scan ({sc['seconds']} s):")
+        for c in sc["categories"]:
+            if c["status"] != "not_found":
+                print(f"  {c['id']}: {c['status']} {c['count']} files {c['bytes']} bytes running={c['running']} "
+                      f"errors={len(c['errors'])}")
     if "doctor.shortcuts" in out:
         print(f"Broken shortcuts: {len(out['doctor.shortcuts'])}")
 

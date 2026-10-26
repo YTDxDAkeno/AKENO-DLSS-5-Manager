@@ -34,7 +34,7 @@ SECTIONS = [
         ("advanced", "Advanced", "gauge")]),
         ("booster", "FPS Booster", "gauge"), ("benchmark", "Benchmark", "chart"),
         ("installed", "Installed Mods", "layers")]),
-    ("SYSTEM", [("doctor", "System Doctor", "stethoscope")]),
+    ("SYSTEM", [("doctor", "System Doctor", "stethoscope"), ("cleaner", "Smart Cleaner", "broom")]),
     ("DESKTOP", [("wallpapers", "Wallpapers", "image"), ("dock", "Dock", "dock"), ("widgets", "Widgets", "grid"),
                  ("themes", "Theme Workshop", "palette")]),
     ("ONLINE", [("community", "Community", "globe"), ("sync", "Cloud Sync", "refresh")]),
@@ -440,6 +440,7 @@ class MainWindow(QMainWindow):
         from akeno.ui.pages.profiles import ProfilesPage
         from akeno.ui.pages.settings import SettingsPage
         from akeno.ui.pages.doctor import DoctorPage
+        from akeno.ui.pages.cleaner import CleanerPage
 
         root = QWidget()
         root.setObjectName("Root")
@@ -466,7 +467,7 @@ class MainWindow(QMainWindow):
                 "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
                 "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage,
                 "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage, "home": HomePage,
-                "doctor": DoctorPage}
+                "doctor": DoctorPage, "cleaner": CleanerPage}
         for key, _, _ in NAV:
             page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             page.setObjectName(f"page_{key}")

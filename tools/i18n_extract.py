@@ -83,6 +83,19 @@ def system_strings() -> set[str]:
     out |= set(repair.DISM_CODES.values()) | {"SFC finished. Its window showed the result."}
     out |= set(startup.SOURCE_LABELS.values())
     out |= {title for _, title in doctor.TABS} | set(doctor.SIG_TEXT.values()) | {text for _, text in doctor.PERIODS}
+    from akeno.system.cleaner import engine as clean_engine, rules as clean_rules, service as clean_service
+    from akeno.ui.pages import cleaner
+    for c in clean_rules.categories({"LOCALAPPDATA": "L", "TEMP": "T", "SystemRoot": "W", "USERPROFILE": "U",
+                                     "APPDATA": "R"}, ["S"], "A"):
+        out |= {c.title, c.reason} | ({c.side_effect} if c.side_effect else set())
+    out |= set(clean_rules.GROUP_TITLES.values()) | set(clean_engine.SKIP_REASONS.values())
+    out |= {f"{name} cache" for name in clean_rules.CHROMIUM} | {"Firefox cache"}
+    out |= {"Copies of web pages, scripts and images the browser can download again. Cookies, sign-ins, passwords, "
+            "history and open tabs are not part of it.", "Copies of web pages, scripts and images Firefox can "
+            "download again. Cookies, sign-ins, passwords and history are in the profile folder, which is not "
+            "touched.", "Websites load a little slower the first time."}
+    out |= {"the program was running", "shader caches were not confirmed"} | set(clean_service.INTERVALS.values())
+    out |= {title for _, title in cleaner.TABS} | set(cleaner.RISK_TEXT.values()) | set(cleaner.STATUS_TEXT.values())
     out |= {"Desktop", "Start menu", "Desktop (all users)", "Start menu (all users)", "Not available on this PC.",
             "Only administrators can read this folder.", "No minidump folder.",
             "ACPI thermal zone (not necessarily the processor)", "thermal slowdown active"}

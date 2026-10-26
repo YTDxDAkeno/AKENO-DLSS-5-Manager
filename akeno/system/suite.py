@@ -41,3 +41,9 @@ class SystemTools:
         from akeno.system.doctor.service import DoctorService
         return DoctorService(self.store, system_info=lambda: self.s.system, game_pids=self.running_game_pids,
                              game_dirs=self.game_dirs)
+
+    @cached_property
+    def cleaner(self):
+        from akeno.system.cleaner.service import CleanerService, steam_libraries
+        return CleanerService(self.store, games=self.s.library.games,
+                              steam_dirs=lambda: steam_libraries(self.s.library.games()))
