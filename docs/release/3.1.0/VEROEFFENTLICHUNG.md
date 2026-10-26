@@ -20,18 +20,33 @@ für 3.1.0 **kein Git-Tag `v3.1.0` gepusht**.
 
 Die 3.0.0-Dateien und ihr Release bleiben unverändert (`/downloads/3.0.0/…`). 3.1.0 bekommt ein **neues** Release.
 
+## Release-Dateien 3.1.0 (CI-Run 203, Commit `e2c6599`)
+
+| Datei | SHA-256 | Byte |
+|---|---|---|
+| `AKENO-Gaming-Suite-3.1.0-Setup-x64.exe` | `56d33da6c8ad35ed2afffdbb820a9f882231455ef93c759ab02afc04e92b8ca0` | 157 960 587 |
+| `AKENO-Gaming-Suite-3.1.0-portable-x64.zip` | `ed51a967f42e221371793ff62139f32f72e6957adb1daf05f2355391aee52640` | 223 583 996 |
+| `AKENO-Gaming-Suite-3.1.0-source.zip` | `ceafdbcf58f5a18bb8d74395f3d317b8aed1fbbcb181b2a20c3d606fc17e59fd` | |
+| `AKENO-community-dependencies-3.1.0-x64.zip` | `cf31cf0cdcfeb6e581f2a2ff1b332c69cc13cc17b87679b5dfd8c74a97dd13fc` | |
+
+Portable für den Release Manager: `file_count` 2907, `uncompressed_size_bytes` 493999889, `pe_files` 356,
+`content_sha256` `beec2fc7da449f4231e4ccf51af1f225bb89970ad53cc897122ed99d8a20755d`.
+
+Artefakt: Run 203 (ID `40349701652`) → `AKENO-Gaming-Suite-windows-x64` (ID `12665801210`, Digest
+`sha256:ffb134ec71cdde56fac0ea3dea6db426f25300efbe7fea1f3a3c87895d7844e7`, verfügbar bis 2027-01-24).
+
 ## Schritte
 
-1. **Dateien holen.** GitHub Actions → „Build and test“ → der Lauf des Release-Commits (siehe Release-Bericht) →
+1. **Dateien holen.** GitHub Actions → „Build and test“ → Run 203 (Commit `e2c6599`) →
    Artefakt `AKENO-Gaming-Suite-windows-x64`. Nur einen Lauf verwenden, in dem alle Jobs grün sind, auch
    „Windows update end to end“ mit dem Schritt „Upgrade path from the published stable release“.
    Inhalt: `AKENO-Gaming-Suite-3.1.0-Setup-x64.exe`, `AKENO-Gaming-Suite-3.1.0-portable-x64.zip`,
    `AKENO-Gaming-Suite-3.1.0-source.zip`, `AKENO-community-dependencies-3.1.0-x64.zip`, `SHA256SUMS.txt`.
-2. **Prüfsummen vergleichen:** `SHA256SUMS.txt` gegen den Release-Bericht. Jeder neue CI-Lauf erzeugt andere
+2. **Prüfsummen vergleichen:** `SHA256SUMS.txt` gegen die Tabelle oben. Jeder neue CI-Lauf erzeugt andere
    Bytes; nur die Dateien genau dieses Laufs signieren.
 3. **Werte für den Release Manager:**
    `python tools/release_v2.py describe AKENO-Gaming-Suite-3.1.0-portable-x64.zip AKENO-Gaming-Suite-3.1.0-Setup-x64.exe`
-   Die Werte müssen dem Release-Bericht entsprechen (`file_count`, `uncompressed_size_bytes`, `content_sha256`,
+   Die Werte müssen der Tabelle oben entsprechen (`file_count`, `uncompressed_size_bytes`, `content_sha256`,
    Größen, SHA-256).
 4. **Admin-Panel:** neues Release **3.1.0**, Kanal `stable`, Plattform `windows-x64`. Setup-EXE und Portable-ZIP
    hochladen (Ziel `https://akeno.online/downloads/3.1.0/AKENO-Setup.exe` und `…/AKENO-Portable.zip`).

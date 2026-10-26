@@ -3,6 +3,10 @@
 Stand 2026-10-26, Branch `claude/adoring-shannon-2d4qb4`. Nichts veröffentlicht, nichts gemergt, kein Release,
 kein VPS-Deployment, keine Änderung an Lizenzsystem, Schlüsseln oder Benutzerkonten.
 
+**3.1.0 Stable ist gebaut und geprüft und wartet auf Freigabe:** Release-Commit `e2c6599`, CI-Run 203 komplett grün
+(inkl. Upgrade vom echten 3.0.0-Installer, 57/57). Bericht: `docs/release/3.1.0/RELEASE_BERICHT.md`, Schritte:
+`docs/release/3.1.0/VEROEFFENTLICHUNG.md`.
+
 ## Basis
 
 - Branch-Basis: `claude/blissful-wright-8zj111` @ `7b461d3` (Updater Schema 2, CI-Run 188 grün). `main` enthält
@@ -20,6 +24,11 @@ kein VPS-Deployment, keine Änderung an Lizenzsystem, Schlüsseln oder Benutzerk
 | `99765a8` | Universal Mod Scanner + neue Mod-Bibliothek (CI-Run 192 komplett grün inkl. Windows) |
 | `2c4fff1` | Security Center + Download-Schutz |
 | `b12f7fa` | Wiederherstellung ohne Lizenz, Berichtsexport, Testdaten-Screenshots, Doku (CI-Runs 193/194 komplett grün) |
+| `4933118` | Handover |
+| `f2978a3` | Windows-Tests mit den echten PowerShell-Abfragen (Run 197 rot: Fehler nachgewiesen) |
+| `c0f8f7f` | Fix leere Hardware-Gesundheitstabelle (PowerShell 5.1 lehnte mehrzeilige Abfragen ab), SMART-Fallback |
+| `ef955fe` | Release 3.1.0: Version, Release Notes, Quellcodearchiv, Upgrade-Test vom veröffentlichten 3.0.0 |
+| `ddcd52c`, `e2c6599` | CI: Timeout Konto-Fixture, Release-Zusammenfassung, frisches Profil für den Upgrade-Test (Runs 203/204 grün) |
 
 Draft-PR: YTDxDAkeno/AKENO-DLSS-5-Manager#18 (Basis `claude/blissful-wright-8zj111`).
 
@@ -39,14 +48,11 @@ Draft-PR: YTDxDAkeno/AKENO-DLSS-5-Manager#18 (Basis `claude/blissful-wright-8zj1
 
 Technische Beschreibung: `docs/AKENO_3_1_SYSTEM_TOOLS.md`.
 
-## Noch anzusehen
+## Echte Windows-Werte (Run 203, Schritt „Release summary“)
 
-1. Run 193, Windows-Job, Step „AKENO 3.1 system tools against the real runner“: Der Schritt ist grün (kein
-   Python-Fehler mit den echten Windows-Providern). Die Einzelwerte für `Security` und `EICAR` stehen im Step
-   Summary bzw. im Artefakt `windows-test-results-and-screenshots` (`system-check.json`). Aus der
-   Entwicklungsumgebung waren sie nicht abrufbar (Log-Speicher gesperrt). Erwartung: EICAR-Urteil `threats`, wenn
-   Defender auf dem Runner aktiv ist, sonst `not_checked` mit Grund.
-2. Artefakt `screenshots/system-fixtures/*.png` (Testdaten mit rotem Banner).
+- EICAR: `verdict=threats`, `Virus:DOS/EICAR_Test_File`, Download-Prüfung `threats`.
+- System Doctor Hardware: `[warn] Microsoft NVMe Direct Disk v2 is hot` (Laufwerk und Temperatur gelesen).
+- Artefakt `screenshots/system-fixtures/*.png` (Testdaten mit rotem Banner) in `windows-test-results-and-screenshots`.
 
 ## Offene Punkte / bekannte Grenzen
 
@@ -57,5 +63,6 @@ Technische Beschreibung: `docs/AKENO_3_1_SYSTEM_TOOLS.md`.
 
 ## Nächster Schritt
 
-Nutzer-Testplan auf echter Hardware (PR #18, Abschnitt H), danach Review des Draft-PRs. Kein Release ohne
-ausdrückliche Freigabe.
+Freigabe für 3.1.0 Stable einholen, dann `docs/release/3.1.0/VEROEFFENTLICHUNG.md` Schritt für Schritt (Admin-Panel,
+Offline-Signatur, `release_v2.py verify`, Veröffentlichen, Produktions-Lesecheck). Kein Release ohne ausdrückliche
+Freigabe; kein Tag `v3.1.0` (alter Schema-1-Kanal).
