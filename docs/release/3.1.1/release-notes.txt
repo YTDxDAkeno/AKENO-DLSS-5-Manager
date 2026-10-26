@@ -1,0 +1,11 @@
+AKENO Gaming Suite 3.1.1 — Wichtige Fehlerbehebung
+
+- Behebt einen Absturz beim Start von AKENO nach Version 3.1.0, wenn der System Doctor gespeicherte Hardware-Analysen mit einer übersetzbaren CPU-Temperaturmeldung lädt.
+- Vorhandene Lizenz, Spiele, Mod-Backups, Einstellungen und Diagnosehistorie bleiben erhalten. Es ist keine Bereinigung der Datenbanken erforderlich.
+- Die Korrektur wurde um einen Regressionstest für gespeicherte Diagnoseberichte auf Deutsch und Englisch ergänzt.
+
+AKENO Gaming Suite 3.1.1 — Critical startup fix
+
+- Fixes a startup crash introduced in 3.1.0 when System Doctor reopens cached hardware measurements containing a localized CPU temperature note.
+- Existing license, games, mod backups, settings, and diagnostic history are kept. No database deletion is necessary.
+- Adds a regression test for persisted hardware reports in English and German.
