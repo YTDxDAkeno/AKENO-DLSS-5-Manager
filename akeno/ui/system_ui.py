@@ -9,10 +9,12 @@ Universal Mod Scanner.
   same time) and buttons that open the module that can act on it.
 * :class:`ReadingTile`: a value with its source, or "—" and why it is not available.
 * :class:`Sparkline`: recorded history, drawn only from stored samples.
+* :func:`show_stored`: shows a result saved by an earlier run without ever keeping AKENO from starting.
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Callable, Iterable
 
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
@@ -28,6 +30,58 @@ from akeno.ui.widgets import (Card, FlowLayout, PageHeader, Spinner, StatusPill,
                               status_badge)
 
 LEVEL_TEXT = {"ok": "OK", "info": "Note", "warn": "Warning", "fail": "Problem", "unknown": "Unknown"}
+log = logging.getLogger(__name__)
+
+# Results saved by an earlier run (``system.sqlite3``) are shown when a page is built. One that cannot be shown
+# (written by another version, a display error) must never keep AKENO from starting: it stays stored unchanged,
+# the tab says so, and the failure is listed here for the update's start check (``health_report``: an update that
+# cannot show this PC's saved results is rolled back). After a failed start (``akeno.startguard``) saved results
+# are not shown at all until AKENO has started once without them.
+SAFE_MODE = {"on": False}
+STORED_FAILURES: list[str] = []
+
+
+def show_stored(where: str, load: Callable[[], object], show: Callable[[object], None],
+                task: "TaskBar | None" = None) -> bool:
+    """``show(load())`` for a saved result; False (logged, listed, the data untouched) when that fails."""
+    if SAFE_MODE["on"]:
+        return False
+    try:
+        value = load()
+        if value is not None:
+            show(value)
+        return True
+    except Exception as exc:                    # noqa: BLE001 (a saved result never stops the start)
+        log.exception("the saved result %s could not be shown", where)
+        STORED_FAILURES.append(f"{where}: {type(exc).__name__}: {exc}"[:300])
+        if task is not None:
+            task.show_message(t("The last saved result could not be shown. It is kept unchanged; run the check "
+                                "again for a new one."), error=True)
+        return False
+
+
+class UnavailablePage(QWidget):
+    """Stands in for a SYSTEM page whose construction failed: says so, and the window and every other page work.
+    Calls the window makes on the real page (``on_show``, ``link``, …) do nothing here."""
+
+    OPTIONAL = frozenset({"doctor", "cleaner", "network", "security"})
+
+    def __init__(self, key: str, error: BaseException):
+        super().__init__()
+        log.error("the page %s could not be built", key, exc_info=error)
+        STORED_FAILURES.append(f"page {key}: {type(error).__name__}: {error}"[:300])
+        self.key = key
+        lay = QVBoxLayout(self)
+        lay.addWidget(label(t("This page could not be opened."), "h2"))
+        lay.addWidget(label(t("The error was written to the log. Your saved results and undo records are kept "
+                              "unchanged. Updating AKENO (ACCOUNT → Updates) or restarting it usually helps."),
+                            "dim", wrap=True))
+        lay.addStretch(1)
+
+    def __getattr__(self, name: str):
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return lambda *args, **kwargs: None
 
 
 class TabbedPage(QWidget):

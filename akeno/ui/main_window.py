@@ -472,8 +472,16 @@ class MainWindow(QMainWindow):
                 "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage, "home": HomePage,
                 "doctor": DoctorPage, "cleaner": CleanerPage, "network": NetworkPage,
                 "security": SecurityPage}
+        from akeno.ui.system_ui import UnavailablePage
         for key, _, _ in NAV:
-            page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
+            try:
+                page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
+            except Exception as exc:
+                # the SYSTEM tools read results saved on this PC; one that fails must not keep the rest of AKENO
+                # (games, mods, restores, updates) from starting. Every other page is required.
+                if key not in UnavailablePage.OPTIONAL:
+                    raise
+                page = UnavailablePage(key, exc)
             page.setObjectName(f"page_{key}")
             host = PageHost(page)
             self.pages[key] = page

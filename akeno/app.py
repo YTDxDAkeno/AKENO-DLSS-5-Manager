@@ -54,6 +54,17 @@ def desktop_process(argv: list[str]) -> int | None:
     return None
 
 
+def run(argv: list[str] | None = None) -> int:
+    """The program's entry point: ``main``, with a crash while starting reported to the user (``startguard``)."""
+    try:
+        return main(argv)
+    except SystemExit:
+        raise
+    except Exception as exc:                     # noqa: BLE001 (the last line of defence of the start)
+        from akeno import startguard
+        return startguard.crashed(exc)
+
+
 def main(argv: list[str] | None = None) -> int:
     child = desktop_process(sys.argv[1:] if argv is None else list(argv))
     if child is not None:
@@ -75,6 +86,10 @@ def main(argv: list[str] | None = None) -> int:
                         help="window size for --screenshot (default: a maximised window on a 1920x1080 screen)")
     parser.add_argument("--screenshot-scale", metavar="FACTOR", type=float, default=None,
                         help="render screenshots at this display scaling (e.g. 1.25, 1.5) to check High-DPI layout")
+    parser.add_argument("--safe-mode", action="store_true",
+                        help="start without showing the results the System tools saved on this PC (they stay)")
+    parser.add_argument("--check-start", action="store_true",
+                        help="build the suite with this PC's saved data, open every page, report and exit")
     parser.add_argument("--version", action="version", version=__version__)
     args = parser.parse_args(argv)
 
@@ -116,6 +131,10 @@ def main(argv: list[str] | None = None) -> int:
     app.setWindowIcon(QIcon(art.app_icon_pixmap(256)))
     lic = license_manager()
 
+    if args.check_start:
+        # the start check of an update or a repair: this PC's saved data, every page, nothing scanned or changed
+        args.smoke_test = True                        # build_suite: no tray icon, no start-up scans
+        return check_start(app, *build_suite(app, args, lic))
     if args.smoke_test or args.screenshot:
         # CI checks of a build: every window is created, nothing stays open (no use without a license)
         ctl, win = build_suite(app, args, lic)
@@ -124,6 +143,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.smoke_test:
             return smoke_test(app, ctl, win, gate)
         return screenshots(app, ctl, win, args.screenshot, args.screenshot_size, gate)
+
+    from akeno import startguard
+    from akeno.ui import system_ui
+    failed_starts = startguard.begin(__version__)
+    system_ui.SAFE_MODE["on"] = bool(args.safe_mode or failed_starts)
+    if failed_starts:
+        logging.getLogger(__name__).warning("the last start of %s did not finish: safe mode", __version__)
 
     from akeno.ui.shell import SuiteShell
     holder: dict = {}
@@ -137,8 +163,23 @@ def main(argv: list[str] | None = None) -> int:
 
     def build():
         ctl, win = build_suite(app, args, lic, services())
-        holder["ctl"] = ctl
+        holder["ctl"], holder["win"] = ctl, win
+        if system_ui.SAFE_MODE["on"]:
+            from PySide6.QtCore import QTimer as _Timer
+            _Timer.singleShot(800, lambda: safe_mode_notice(win, failed_starts))
         return win
+
+    def suite_check():
+        # the update's start check (health_report): the suite is built with this PC's saved data, also when the
+        # welcome screen is shown (no license yet) — hidden, never usable, closed right away
+        if holder.get("win") is None:
+            check_args = argparse.Namespace(**{**vars(args), "smoke_test": True, "screenshot": None})
+            _ctl, win = build_suite(app, check_args, lic, services())
+            win.close()
+            win.deleteLater()
+        return "; ".join(system_ui.STORED_FAILURES) or True
+    from akeno.updater import service as update_service
+    update_service.SUITE_CHECK = suite_check
 
     try:
         # programs a Network Gaming Mode paused run again, whatever the license state
@@ -158,7 +199,48 @@ def main(argv: list[str] | None = None) -> int:
     from PySide6.QtCore import QTimer
     from akeno.updater.service import write_health_report
     QTimer.singleShot(3000, write_health_report)       # an update that just ran: this version's own start check
+    QTimer.singleShot(startguard.STABLE_SECONDS * 1000, startguard.done)   # the start worked
     return app.exec()
+
+
+def safe_mode_notice(win, failed_starts: int) -> None:
+    """After a start that did not finish: say what safe mode leaves out and open the way out (Updates)."""
+    from akeno.i18n import t
+    from akeno.ui.widgets import info
+    page = win.pages.get("updates")
+    if page is not None:
+        win.go("updates")
+    info(win, t("Safe mode"),
+         t("The last start of AKENO did not finish." if failed_starts else "AKENO was started in safe mode."),
+         t("The results the System tools saved on this PC are not shown this time; they stay stored, and so do "
+           "your games, mods, backups, settings and license. Look for a corrected version here, or go back to "
+           "the previous version. The next normal start shows everything again."))
+    if page is not None and hasattr(page, "check"):
+        page.check(quiet=True)
+
+
+def check_start(app, ctl, win) -> int:
+    """``--check-start``: every page built with the saved data of this PC and shown once; nothing is scanned.
+    Exit code 0, or 4 when a saved result or a page could not be shown (printed and in ``check-start.txt``)."""
+    from PySide6.QtCore import QEventLoop, QTimer
+    from akeno.ui import system_ui, workers
+    win.show()
+    for key in list(win.pages):
+        win.go(key)
+        loop = QEventLoop()
+        QTimer.singleShot(150, loop.quit)
+        loop.exec()
+    workers.drain(30000)
+    failures = list(system_ui.STORED_FAILURES)
+    lines = [f"AKENO {__version__} start check {'OK' if not failures else 'FAILED'}",
+             f"Pages: {', '.join(win.pages)}"] + [f"Not shown: {f}" for f in failures]
+    text = "\n".join(lines)
+    from akeno.paths import logs_dir
+    (logs_dir() / "check-start.txt").write_text(text, encoding="utf-8")   # windowed builds have no console
+    if sys.stdout is not None:
+        print(text)
+    win.close()
+    return 4 if failures else 0
 
 
 def build_suite(app, args, lic, services=None):

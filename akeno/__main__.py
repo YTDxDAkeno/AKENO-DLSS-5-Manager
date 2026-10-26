@@ -1,3 +1,3 @@
-from akeno.app import main
+from akeno.app import run
 
-raise SystemExit(main())
+raise SystemExit(run())

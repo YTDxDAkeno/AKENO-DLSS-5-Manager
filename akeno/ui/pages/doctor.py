@@ -14,10 +14,10 @@ from akeno.i18n import t
 from akeno.system import commands
 from akeno.system.doctor.repair import STEPS
 from akeno.system.doctor.startup import SOURCE_LABELS
-from akeno.system.model import Level, Reading, human_bytes, human_duration
+from akeno.system.model import Level, Reading, dec, human_bytes, human_duration
 from akeno.ui import theme
 from akeno.ui.system_ui import (FindingList, ReadingTile, Sparkline, TabbedPage, TaskBar, card, export_button,
-                                fill_table, make_table, open_link, selected_data)
+                                fill_table, make_table, open_link, selected_data, show_stored)
 from akeno.ui.widgets import (Card, EmptyAware, EmptyState, FlowLayout, KeyValueGrid, Meter, ResponsiveRow, StatusPill,
                               SubCard, button, clear_layout, confirm, info, label)
 
@@ -284,9 +284,7 @@ class SlowPcTab(QWidget):
         procs.body.addWidget(self.table)
         lay.addWidget(procs)
         lay.addStretch(1)
-        last = page.svc.last("slowpc")
-        if last:
-            self._show(last)
+        show_stored("doctor.slowpc", lambda: page.svc.last("slowpc"), self._show, self.task)
 
     def run(self) -> None:
         self.btn.setEnabled(False)
@@ -476,9 +474,7 @@ class CrashTab(QWidget):
         g.body.addWidget(self.dumps)
         lay.addWidget(g)
         lay.addStretch(1)
-        last = page.svc.last("crashes")
-        if last:
-            self._show(last)
+        show_stored("doctor.crashes", lambda: page.svc.last("crashes"), self._show, self.task)
 
     def run(self) -> None:
         days = int(self.period.currentData())
@@ -539,9 +535,7 @@ class HardwareTab(QWidget):
         r.body.addWidget(self.findings)
         lay.addWidget(r)
         lay.addStretch(1)
-        last = page.svc.last("hardware")
-        if last:
-            self._show(last)
+        show_stored("doctor.hardware", lambda: page.svc.last("hardware"), self._show, self.task)
 
     def run(self) -> None:
         self.task.start(self.page.svc.hardware, self._show, text=t("Reading drive health…"), timeout=180)
@@ -586,7 +580,8 @@ class HardwareTab(QWidget):
         temps = [(z["name"], f"{z['celsius']:.0f} °C · {t(z['source'])}") for z in rep.data.get("temperatures") or []]
         cpu_t = rep.data.get("cpu_temperature") or {}
         if not cpu_t.get("value"):
-            temps.append((t("Processor"), t(cpu_t.get("note") or "Not available on this PC.")))
+            # the note is a translatable message stored as JSON ({"t": template, "p": values}, model.enc)
+            temps.append((t("Processor"), t(dec(cpu_t.get("note")) or "Not available on this PC.")))
         for d in rep.data.get("drives") or []:
             if isinstance(d.get("temperature"), (int, float)) and d["temperature"]:
                 temps.append((d.get("name") or "?", f"{d['temperature']} °C · " + t("drive")))
@@ -632,7 +627,8 @@ class RepairTab(QWidget):
 
     def _steps(self) -> None:
         clear_layout(self.steps_box)
-        rec = self.page.svc.repair_recommendations()
+        rec: dict = {}                     # reasons from the saved analyses; the steps are shown without them too
+        show_stored("doctor.repair", self.page.svc.repair_recommendations, rec.update, self.task)
         for s in STEPS:
             box = SubCard()
             head = QHBoxLayout()

@@ -4,7 +4,7 @@
 ; can still be restored with a later AKENO installation.
 
 #ifndef AppVersion
-  #define AppVersion "3.1.0"
+  #define AppVersion "3.1.1"
 #endif
 
 #ifndef SourceDir
@@ -56,6 +56,7 @@ Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreve
 
 [Icons]
 Name: "{group}\AKENO Gaming Suite"; Filename: "{app}\AKENO.exe"
+Name: "{group}\AKENO Gaming Suite (Safe mode)"; Filename: "{app}\AKENO.exe"; Parameters: "--safe-mode"; Comment: "Starts AKENO without the results the System tools saved on this PC (they stay stored)"
 Name: "{group}\{cm:UninstallProgram,AKENO Gaming Suite}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\AKENO Gaming Suite"; Filename: "{app}\AKENO.exe"; Tasks: desktopicon
 

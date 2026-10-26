@@ -16,7 +16,7 @@ from akeno.system.model import Level, human_bytes, human_duration
 from akeno.system.securitycenter import filecheck
 from akeno.system.securitycenter.service import URIS
 from akeno.ui.system_ui import (LEVEL_TEXT, FindingList, TabbedPage, TaskBar, export_button, fill_table, make_table,
-                                open_link, selected_data)
+                                open_link, selected_data, show_stored)
 from akeno.ui.widgets import (Card, EmptyAware, EmptyState, FlowLayout, KeyValueGrid, ResponsiveRow, StatTile,
                               StatusPill, button, confirm, info, label)
 
@@ -242,7 +242,7 @@ class ScanTab(QWidget):
         lay.addStretch(1)
 
     def on_show(self) -> None:
-        self._history()
+        show_stored("security.scans", lambda: True, lambda _: self._history(), self.task)
         self.page.ctl.run("security:ready", lambda: self.page.svc.defender_ready(), self._ready, lambda e: None,
                           silent=True)
 

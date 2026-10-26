@@ -1,0 +1,89 @@
+{
+ "_id": 1,
+ "created_at": "2026-10-26T18:41:15+00:00",
+ "data": {
+  "counters_need_admin": true,
+  "cpu_temperature": {
+   "note": {
+    "p": {},
+    "t": "Windows has no documented CPU temperature sensor without a vendor driver."
+   },
+   "source": "",
+   "unit": "",
+   "value": null
+  },
+  "drives": [
+   {
+    "bus": "",
+    "counters_note": "",
+    "health": "",
+    "media": "",
+    "name": "?",
+    "operational": [],
+    "power_on_hours": null,
+    "read_errors": null,
+    "size": null,
+    "smart_status": null,
+    "temperature": null,
+    "temperature_max": null,
+    "wear": null,
+    "write_errors": null
+   },
+   {
+    "bus": "SCSI",
+    "counters_note": "Only the SMART status is available.",
+    "health": "",
+    "media": "",
+    "name": "Samsung SSD 990 PRO 2TB",
+    "operational": [],
+    "power_on_hours": null,
+    "read_errors": null,
+    "size": 2000396321280,
+    "smart_status": "OK",
+    "temperature": null,
+    "temperature_max": null,
+    "wear": null,
+    "write_errors": null
+   }
+  ],
+  "elevated": false,
+  "gpus": [],
+  "memory": {
+   "available": 10737418240,
+   "commit": null,
+   "commit_limit": null,
+   "paging": null,
+   "percent": 37.5,
+   "swap_total": 0,
+   "swap_used": 0,
+   "top": [],
+   "total": 17179869184,
+   "used": 6442450944
+  },
+  "temperatures": []
+ },
+ "duration_s": null,
+ "errors": [],
+ "findings": [
+  {
+   "data": {},
+   "evidence": [],
+   "id": "drive.ok",
+   "level": "ok",
+   "links": [],
+   "module": "doctor",
+   "observation": {
+    "p": {
+     "n": 2
+    },
+    "t": "{n} drives report a healthy state."
+   },
+   "recommendation": "",
+   "title": {
+    "p": {},
+    "t": "The drives report no problems"
+   }
+  }
+ ],
+ "module": "doctor"
+}

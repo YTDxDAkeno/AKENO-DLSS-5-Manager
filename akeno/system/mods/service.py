@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from typing import Any
@@ -97,7 +98,9 @@ class ModScanner:
     def _load(self) -> list[ModGroup]:
         try:
             return [_group_from(d) for d in self.store.get(LAST_KEY, []) or []]
-        except (KeyError, TypeError, ValueError):
+        except Exception:                       # noqa: BLE001 (saved by another version: replaced by the next scan)
+            logging.getLogger(__name__).warning("the saved mod library could not be read; the next scan replaces it",
+                                                exc_info=True)
             return []
 
     def last_scan(self) -> float | None:

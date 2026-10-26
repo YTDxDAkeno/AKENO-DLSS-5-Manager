@@ -486,6 +486,12 @@ HEALTH_CHECKS = ("version", "program_data", "release_keys", "license_keys", "set
                  "window")
 
 
+# Set by the running suite (``akeno.app``): builds the main window with this PC's saved data when it is not built
+# yet (welcome screen) and returns True, or what could not be shown. An update whose window cannot be built with
+# the user's own data, or that cannot show the results saved on this PC, is rolled back.
+SUITE_CHECK = None
+
+
 def health_report(expected: str | None = None) -> dict:
     """This version's own start check, for the updater's health check. Reads only; changes nothing."""
     import sqlite3
@@ -536,6 +542,8 @@ def health_report(expected: str | None = None) -> dict:
     check("license_keys", license_keys)
     check("settings_database", settings_database)
     check("license_state", license_state)
+    if SUITE_CHECK is not None:
+        check("suite", SUITE_CHECK)
     checks["window"] = True                           # called from the running event loop, after the window
     return {"pid": os.getpid(), "version": __version__, "ok": all(v is True for v in checks.values()),
             "checks": checks, "at": time.time()}

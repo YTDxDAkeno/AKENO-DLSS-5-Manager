@@ -14,7 +14,7 @@ from akeno.system.model import human_bytes
 from akeno.system.network import bufferbloat, repair
 from akeno.ui import theme
 from akeno.ui.system_ui import (FindingList, Sparkline, TabbedPage, TaskBar, export_button, fill_table, make_table,
-                                open_link, selected_data)
+                                open_link, selected_data, show_stored)
 from akeno.ui.widgets import (Card, EmptyAware, EmptyState, FlowLayout, KeyValueGrid, ResponsiveRow, StatusPill,
                               StatTile, button, confirm, form_row, info, label)
 
@@ -226,9 +226,8 @@ class StabilityTab(QWidget):
         r.body.addWidget(self.findings)
         lay.addWidget(r)
         lay.addStretch(1)
-        last = page.svc.last("stability")
-        if last is not None and hasattr(last, "findings"):
-            self._show(last)
+        show_stored("network.stability", lambda: page.svc.last("stability"),
+                    lambda last: self._show(last) if hasattr(last, "findings") else None, self.task)
 
     def run(self) -> None:
         seconds = int(self.duration.currentData())
@@ -299,9 +298,8 @@ class BufferbloatTab(QWidget):
         r.body.addWidget(self.findings)
         lay.addWidget(r)
         lay.addStretch(1)
-        last = page.svc.last("bufferbloat")
-        if last is not None and hasattr(last, "findings"):
-            self._show(last)
+        show_stored("network.bufferbloat", lambda: page.svc.last("bufferbloat"),
+                    lambda last: self._show(last) if hasattr(last, "findings") else None, self.task)
 
     def run(self) -> None:
         if not self.consent.isChecked():
@@ -539,7 +537,7 @@ class DnsTab(QWidget):
                          Qt.AlignmentFlag.AlignLeft)
         lay.addWidget(h)
         lay.addStretch(1)
-        self._history()
+        show_stored("network.dns_changes", lambda: True, lambda _: self._history(), self.task)
 
     def run(self) -> None:
         self.task.start(self.page.svc.dns_benchmark, self._show, text=t("Querying DNS servers…"), timeout=180)
