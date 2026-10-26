@@ -18,7 +18,10 @@ kein VPS-Deployment, keine Änderung an Lizenzsystem, Schlüsseln oder Benutzerk
 | `5154ae4` | Smart Cleaner |
 | `13c2f5b` | Network Lab |
 | `99765a8` | Universal Mod Scanner + neue Mod-Bibliothek (CI-Run 192 komplett grün inkl. Windows) |
-| folgt | Security Center, Download-Schutz, Wiederherstellung ohne Lizenz, Testdaten-Screenshots, Doku |
+| `2c4fff1` | Security Center + Download-Schutz |
+| `b12f7fa` | Wiederherstellung ohne Lizenz, Berichtsexport, Testdaten-Screenshots, Doku (CI-Runs 193/194 komplett grün) |
+
+Draft-PR: YTDxDAkeno/AKENO-DLSS-5-Manager#18 (Basis `claude/blissful-wright-8zj111`).
 
 ## Status
 
@@ -36,12 +39,13 @@ kein VPS-Deployment, keine Änderung an Lizenzsystem, Schlüsseln oder Benutzerk
 
 Technische Beschreibung: `docs/AKENO_3_1_SYSTEM_TOOLS.md`.
 
-## Prüfen nach dem nächsten Push
+## Noch anzusehen
 
-1. CI-Run des Security-Commits: Windows-Job „AKENO 3.1 system tools against the real runner“ – Abschnitt
-   `Security` und `EICAR` im Step Summary bzw. `system-check.json` (Artefakt). Erwartung: WSC-Status gelesen,
-   Defender-Modus angezeigt; EICAR-Urteil `threats`, falls Defender auf dem Runner aktiv ist, sonst
-   `not_checked` mit Grund. Beides ist korrektes Verhalten; ein Python-Fehler wäre ein Bug.
+1. Run 193, Windows-Job, Step „AKENO 3.1 system tools against the real runner“: Der Schritt ist grün (kein
+   Python-Fehler mit den echten Windows-Providern). Die Einzelwerte für `Security` und `EICAR` stehen im Step
+   Summary bzw. im Artefakt `windows-test-results-and-screenshots` (`system-check.json`). Aus der
+   Entwicklungsumgebung waren sie nicht abrufbar (Log-Speicher gesperrt). Erwartung: EICAR-Urteil `threats`, wenn
+   Defender auf dem Runner aktiv ist, sonst `not_checked` mit Grund.
 2. Artefakt `screenshots/system-fixtures/*.png` (Testdaten mit rotem Banner).
 
 ## Offene Punkte / bekannte Grenzen
@@ -53,5 +57,5 @@ Technische Beschreibung: `docs/AKENO_3_1_SYSTEM_TOOLS.md`.
 
 ## Nächster Schritt
 
-Security-Commit pushen, CI abwarten, Draft-PR mit dem deutschen Abschlussbericht (A–J) gegen
-`claude/blissful-wright-8zj111` öffnen.
+Nutzer-Testplan auf echter Hardware (PR #18, Abschnitt H), danach Review des Draft-PRs. Kein Release ohne
+ausdrückliche Freigabe.
