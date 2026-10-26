@@ -351,7 +351,7 @@ def account(env, qtbot, tmp_path):
     qtbot.addWidget(win)
     win.go("account")
     page = win.pages["account"]
-    qtbot.waitUntil(lambda: page.devices.count() == 2, timeout=5000)
+    qtbot.waitUntil(lambda: page.devices.count() == 2, timeout=15000)   # worker pool on a 2-core runner
     yield page
     from akeno.ui import workers
     workers.drain(5000)

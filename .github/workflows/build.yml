@@ -441,7 +441,6 @@ jobs:
             ${{ runner.temp }}/akeno-smoke/logs/*
             ${{ runner.temp }}/akeno-exe/logs/*
       - name: Release summary (checksums, Release Manager values, real Windows security check)
-        if: always()
         shell: pwsh
         run: |
           "=== SHA256SUMS ==="
