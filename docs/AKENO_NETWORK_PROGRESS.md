@@ -20,7 +20,7 @@ B/C: first optional Security Center package and component-aware update copy. Imp
 - CI covers Linux Qt, SQLite/PostgreSQL server, Windows packaging and updater E2E. Pushes to a feature branch do not publish releases (publication requires a tag or explicit dispatch).
 
 ## Validation
-Pinned client and backend dependencies installed in `.venv`. SQLite backend baseline: 146 passed. First 12 component tests passed (activation, settings-reset survival, missing/corrupt files, exact inventory, Core-only projection, absent-module Qt startup). Full client and updater integration runs are ongoing. Windows installer/tunnel checks are not executed.
+Pinned client and backend dependencies installed in `.venv`. SQLite backend baseline: 146 passed. First 12 component tests passed (activation, settings-reset survival, missing/corrupt files, exact inventory, Core-only projection, absent-module Qt startup). Linux one-folder package built successfully. Its PYZ contains no Security Center modules; all 8 optional source files are external. Both full and physically Core-only packages passed `--smoke-test` (28 pages, 19/19 design assets). Core-only signed update and refusal of a monolithic update passed. A copied-interpreter test initially failed because this runtime needs an explicit PYTHONHOME after relocation; it passed with that setup correction. The full initial client suite is still running. Windows installer/tunnel checks are not executed.
 
 ## First implementation checkpoint
 - Security Center is collected as separate source files rather than hidden inside the Core PYZ archive. Inno Setup offers Full/Core/custom selection. Build-generated inventory pins its exact file hashes and version.

@@ -1321,3 +1321,48 @@ def test_authenticode_is_optional_but_never_misread(signing, tmp_path, monkeypat
     invalid = {"verified": False, "status": "invalid", "publisher_certificate_sha256": None}
     bad = parse(envelope(key, fields(pkg=pkg, portable=portable_info(pkg, authenticode=invalid))), keys)
     assert not svc.can_install(bad)[0], "an invalid code signature is never treated as valid"
+
+
+def test_core_only_component_update_preserves_selection_and_full_verification(tmp_path, signing):
+    from akeno.components.service import INVENTORY, SECURITY_FILES, SELECTION
+    from tools.build_components import build
+    key, keys = signing
+    target = installed(tmp_path, '3.0.0')
+    (target / SELECTION).write_text('[components]\nsecurity_center=0\n')
+    pkg = portable_zip(tmp_path, '3.1.0')
+    # The test release signs the whole archive including its optional component inventory.
+    extra = tmp_path / 'component-build'
+    extra.mkdir()
+    for rel in SECURITY_FILES:
+        path = extra / '_internal' / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('# synthetic optional component\n')
+    build(extra)
+    data = json.loads((extra / INVENTORY).read_text())
+    data['version'] = '3.1.0'
+    (extra / INVENTORY).write_text(json.dumps(data))
+    with zipfile.ZipFile(pkg, 'a') as z:
+        for path in extra.rglob('*'):
+            if path.is_file():
+                z.write(path, 'AKENO/' + path.relative_to(extra).as_posix())
+    svc = service_for(tmp_path, key, keys, pkg)
+    plan = plan_for(svc, svc.check(), target)
+    outcome = apply.run(plan)
+    assert outcome['ok'], outcome
+    assert (target / INVENTORY).is_file()
+    assert (target / SELECTION).read_text().endswith('security_center=0\n')
+    assert not any((target / '_internal' / rel).exists() for rel in SECURITY_FILES)
+    assert all((Path(plan['source']) / '_internal' / rel).is_file() for rel in SECURITY_FILES)
+
+
+def test_core_only_rejects_update_without_inventory_before_switch(tmp_path, signing):
+    from akeno.components.service import SELECTION
+    key, keys = signing
+    target = installed(tmp_path, '3.0.0')
+    (target / SELECTION).write_text('[components]\nsecurity_center=0\n')
+    pkg = portable_zip(tmp_path, '3.1.0')
+    svc = service_for(tmp_path, key, keys, pkg)
+    outcome = apply.run(plan_for(svc, svc.check(), target))
+    assert not outcome['ok'] and not outcome['rolled_back'], outcome
+    assert 'inventory' in outcome['error'] and 'nothing was changed' in outcome['error']
+    assert (target / 'AKENO.exe').read_text() == 'version 3.0.0'

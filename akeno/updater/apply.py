@@ -416,11 +416,20 @@ def _run(plan, target, source, keep, journal, outcome) -> dict:
             staging.verify(source, content)
             from akeno.components.service import ComponentError, selected_content
             try:
-                content = selected_content(source, target, content)
+                content = selected_content(source, target, content, plan["version"])
             except ComponentError as exc:
                 raise staging.StagingError(str(exc)) from exc
         else:                                  # a rollback to the kept previous version: copy it as it is
             content = {"files": {rel: {} for rel in staging.walk(source)}}
+            # An old monolithic executable ignores component selection. Core-only installations must
+            # not silently roll back to it and reactivate the excluded component.
+            from akeno.components.service import ComponentError, inventory, selection
+            try:
+                if not selection(target):
+                    optional = inventory(source)["security_center"]["files"]
+                    content["files"] = {k: v for k, v in content["files"].items() if k not in optional}
+            except ComponentError as exc:
+                raise staging.StagingError(str(exc)) from exc
         need = sum(int(v.get("size") or 0) for v in content["files"].values()) + 64 * 2 ** 20
         if free_bytes(target.parent) < need:
             raise OSError(f"not enough free space on the drive of {target} (needs {need // 2 ** 20} MB)")

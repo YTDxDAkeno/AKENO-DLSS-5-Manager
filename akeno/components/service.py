@@ -66,7 +66,7 @@ def inventory(root: Path) -> dict:
         raise ComponentError("Component inventory is missing or damaged; run the installer to repair it.") from exc
 
 
-def selected_content(source: Path, installed: Path, content: dict) -> dict:
+def selected_content(source: Path, installed: Path, content: dict, version: str | None = None) -> dict:
     """Project an ALREADY VERIFIED complete release onto the installed component selection.
 
     Called only after staging.verify(source, content). The signed archive/content aggregate is checked by
@@ -76,6 +76,8 @@ def selected_content(source: Path, installed: Path, content: dict) -> dict:
     if selection(installed):
         return content
     data = inventory(source)
+    if version is not None and data["version"] != version:
+        raise ComponentError("Component inventory version differs from the signed release.")
     optional = data["security_center"]["files"]
     for rel, record in optional.items():
         if content["files"].get(rel) != record:
