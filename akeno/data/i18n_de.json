@@ -4424,5 +4424,6 @@
  "Incompatible": "Nicht kompatibel",
  "Security Center is disabled or unavailable. Manage it in Settings → Components.": "Secure Center ist deaktiviert oder nicht verfügbar. Verwalte es unter Einstellungen → Komponenten.",
  "Security Center is optional. Other suite features currently share the Core bundle. LAN Play and VPN are not installed by this build.": "Secure Center ist optional. Die übrigen Suite-Funktionen sind derzeit Teil des Core-Pakets. Dieser Build installiert weder LAN Play noch VPN.",
- "To add or remove Security Center files, run the AKENO installer and change its component selection. Separate module downloads are not available yet.": "Starte den AKENO-Installer und ändere die Komponentenauswahl, um Secure-Center-Dateien hinzuzufügen oder zu entfernen. Separate Moduldownloads sind noch nicht verfügbar."
+ "To add or remove Security Center files, run the AKENO installer and change its component selection. Separate module downloads are not available yet.": "Starte den AKENO-Installer und ändere die Komponentenauswahl, um Secure-Center-Dateien hinzuzufügen oder zu entfernen. Separate Moduldownloads sind noch nicht verfügbar.",
+ "Wait for the Security Center task to finish or cancel it first.": "Warte, bis die Secure-Center-Aufgabe beendet ist, oder brich sie zuerst ab."
 }

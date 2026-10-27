@@ -49,3 +49,17 @@ Linux cannot establish Windows driver/service/installer readiness or real LAN ga
 
 ## Reusable cloud configuration
 The tested install script and startup instructions have been saved in the environment draft (`install_script`, `start_skill`); publication remains a user action. Setup refresh was executed twice: pinned dependencies installed, `pip check` passed, Qt 6.8.1 and native library loads verified. No network-policy or secret changes were required. Final source snapshot/checkout commit will be saved after the final checkpoint.
+
+## Final validation of this checkpoint
+- Full client regression: all **77 test files** finished with exit 0 in fresh processes; **1,251 passed, 17 skipped, 0 failed/errors** (1,268 collected outcomes). Reports: `/tmp/akeno-regression/`.
+- After adding a guard against disabling Security Center during a running task: affected component, SYSTEM UI and translation suites rerun: **38 passed** (includes one new UI test). Thus 1,252 distinct client tests have passing results and 17 are skipped; the last small change was validated by the affected suites rather than repeating the complete regression.
+- Final backend regression: **153 passed**, 3 third-party deprecation warnings, SQLite and local HTTP tests. No PostgreSQL/Docker deployment run was performed.
+- Final Linux PyInstaller rebuild succeeded. Verified that no Security Center module is in the Core PYZ and all 8 source files are separately collected and inventoried.
+- Both final full-package and physically Core-only `--smoke-test` runs exited successfully: 19/19 design assets, all 28 page keys, Core-only reports `not_installed`. Generated output was restored to the complete bundle afterwards. This is Linux packaging evidence, not a compiled Windows installer.
+- Pinned setup refresh repeated successfully; `pip check`, Qt 6.8.1 and required native library loads passed. Installation/startup instructions saved as an environment draft; not published by the agent.
+- No new credentials/network-policy changes required, no production request/deployment, no releases, no merge.
+
+## Remaining scope / next concrete step
+The full master request is **not completed**. Only Security Center has a real physical package boundary; all other current suite modules remain bundled. Separate module downloads/removal transactions and broader module separation are pending. Inno Setup/Windows matrix, real DPAPI, Windows services/adapters, tunnel transport, P2P/NAT/own relay/discovery, actual gaming traffic, authenticated LAN API/device integration, OpenVPN, VPN Gate/legal/consent checks, own exit inventory, routing/DNS/IPv6/kill switch and full Network UI are unimplemented/unverified. No public country list is presented.
+
+Next: use a disposable Windows runner to compile and validate the Full/Core installer and component-aware update/rollback matrix before treating the component split as release-ready; continue signed module install/remove transactions, then authenticated LAN API integration. Do not deploy or publish networking features from this WIP branch.

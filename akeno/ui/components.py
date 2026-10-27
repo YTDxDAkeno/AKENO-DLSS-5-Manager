@@ -43,6 +43,9 @@ class ComponentCard(Card):
 
     def change(self):
         from akeno.components.service import ComponentError
+        if self.window is not None and any(key.startswith("security:") for key in self.window.ctl.busy):
+            info(self, t("Components"), t("Wait for the Security Center task to finish or cancel it first."))
+            return
         try:
             self.services.components.set_enabled(not self.services.components.active())
             if self.window is not None:

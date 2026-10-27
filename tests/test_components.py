@@ -146,3 +146,34 @@ def test_absent_security_does_not_load_ui_or_fail_health(qtbot, monkeypatch):
     from akeno.ui import workers
     assert workers.drain(30000)
     svc.db.close()
+
+
+def test_settings_component_toggle_rebuilds_page_and_waits_for_running_task(qtbot, monkeypatch):
+    from akeno.services import AppServices
+    from akeno.ui.controller import Controller
+    from akeno.ui.main_window import MainWindow
+    from akeno.ui.components import ComponentUnavailablePage
+    from akeno.ui.system_ui import STORED_FAILURES
+    from akeno.ui import workers
+    svc = AppServices()
+    ctl = Controller(svc)
+    win = MainWindow(ctl)
+    qtbot.addWidget(win)
+    assert workers.drain(30000)
+    before = list(STORED_FAILURES)
+    notices = []
+    monkeypatch.setattr('akeno.ui.components.info', lambda *args, **kw: notices.append(args))
+    card = win.pages['settings'].components
+    ctl.busy.add('security:scan')
+    card.change()
+    assert svc.components.active() and notices
+    ctl.busy.remove('security:scan')
+    card.change()
+    assert not svc.components.active()
+    assert isinstance(win.pages['security'], ComponentUnavailablePage)
+    card.change()
+    assert svc.components.active()
+    assert not isinstance(win.pages['security'], ComponentUnavailablePage)
+    assert STORED_FAILURES == before
+    assert workers.drain(30000)
+    svc.db.close()
