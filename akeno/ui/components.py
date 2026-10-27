@@ -23,7 +23,7 @@ class ComponentCard(Card):
         super().__init__(t("Components"), "layers")
         self.services, self.window = services, window
         self.body.addWidget(label(t("Security Center is optional. Other suite features currently share the Core "
-                                   "bundle. LAN Play and VPN are not installed by this build."), "dim", wrap=True))
+                                   "bundle. AKENO installs no network adapter automatically."), "dim", wrap=True))
         self.status_label = label("", "muted", wrap=True)
         self.body.addWidget(self.status_label)
         self.toggle = button("", "shield", on_click=self.change)

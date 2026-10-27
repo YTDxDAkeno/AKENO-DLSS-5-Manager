@@ -27,6 +27,12 @@ class AkenoNetworkPage(QWidget):
         for text,action in (('Create room',self.create),('Join room',self.join),('Refresh members',self.members),('Leave room',self.leave)):
             b=button(t(text),'wifi',on_click=action);b.setEnabled(sys.platform=='win32');actions.addWidget(b)
         lan.body.addLayout(actions)
+        self.member_picker=QComboBox();lan.body.addWidget(self.member_picker)
+        actions=FlowLayout(spacing=8)
+        for text,action in (('Rotate invitation',self.rotate),('Remove member',self.remove_member),('Delete room',self.delete_room),
+                            ('Copy invitation',self.copy_invite)):
+            b=button(t(text),'wifi',on_click=action);b.setEnabled(sys.platform=='win32');actions.addWidget(b)
+        lan.body.addLayout(actions)
         self.room_status=label(t('No room selected.'),'muted',wrap=True);lan.body.addWidget(self.room_status)
         self.peer_list=QPlainTextEdit();self.peer_list.setReadOnly(True);self.peer_list.setMaximumHeight(130);lan.body.addWidget(self.peer_list)
         vpn=Card(t('Own WireGuard profiles'),'shield');lay.addWidget(vpn)
@@ -76,9 +82,22 @@ class AkenoNetworkPage(QWidget):
     def members(self):
         def show(result):
             self.peer_list.setPlainText('\n'.join(p['virtual_ip']+'  '+p['status'] for p in result['members']))
+            self.member_picker.clear()
+            for p in result['members']:self.member_picker.addItem(p['virtual_ip'],p['actor'])
             self.room_status.setText(t('Peer credentials verified. Transport is not connected by this control.'))
         self.work(lambda:self.lan().heartbeat(self.room()),show)
     def leave(self):self.work(lambda:self.lan().leave(self.room()),lambda _:self.room_status.setText(t('No room selected.')))
+    def rotate(self):self.work(lambda:self.lan().rotate_invite(self.room()),lambda result:self.invite.setText(result['invite']))
+    def copy_invite(self):
+        from PySide6.QtWidgets import QApplication
+        QApplication.clipboard().setText(self.invite.text())
+    def remove_member(self):
+        member=self.member_picker.currentData()
+        if member and confirm(self,t('Remove member'),t('Remove the selected member from this room?')):
+            self.work(lambda:self.lan().remove_member(self.room(),member),lambda _:self.members())
+    def delete_room(self):
+        if confirm(self,t('Delete room'),t('Delete this private room and remove its memberships?')):
+            self.work(lambda:self.lan().delete(self.room()),lambda _:self.room_status.setText(t('No room selected.')))
 
     def refresh_profiles(self):
         self.profiles.clear()

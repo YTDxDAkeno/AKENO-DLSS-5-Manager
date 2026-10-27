@@ -8,6 +8,9 @@ from akeno.network.credentials import verify_peer
 
 class LanClient:
     def __init__(self,license_manager,identity_store):
+        from akeno.licensing.storage import SecureStore
+        if isinstance(identity_store,SecureStore) and not identity_store.protected:
+            raise ValueError('LAN identity storage requires Windows DPAPI; no plaintext fallback is permitted.')
         self.license,self.identity=license_manager,identity_store
 
     def _identity(self):
@@ -58,5 +61,19 @@ class LanClient:
     def leave(self,room):
         i=self._identity()
         result=self._call('POST','rooms/'+self._room(room)+'/leave',{'device_id':i['device_id']})
+        i.pop('room_id',None);self.identity.save(i)
+        return result
+
+    def rotate_invite(self,room):
+        i=self._identity()
+        return self._call('POST','rooms/'+self._room(room)+'/invite',{'device_id':i['device_id']})
+
+    def remove_member(self,room,member):
+        i=self._identity();member=str(uuid.UUID(member))
+        return self._call('DELETE','rooms/'+self._room(room)+'/members/'+member+'?device_id='+i['device_id'])
+
+    def delete(self,room):
+        i=self._identity()
+        result=self._call('DELETE','rooms/'+self._room(room)+'?device_id='+i['device_id'])
         i.pop('room_id',None);self.identity.save(i)
         return result

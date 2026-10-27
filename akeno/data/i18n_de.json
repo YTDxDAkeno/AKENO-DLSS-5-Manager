@@ -4467,5 +4467,12 @@
  "Create room": "Raum erstellen",
  "Join room": "Raum beitreten",
  "Refresh members": "Mitglieder aktualisieren",
- "Leave room": "Raum verlassen"
+ "Leave room": "Raum verlassen",
+ "Rotate invitation": "Einladung erneuern",
+ "Remove member": "Mitglied entfernen",
+ "Delete room": "Raum löschen",
+ "Copy invitation": "Einladung kopieren",
+ "Remove the selected member from this room?": "Ausgewähltes Mitglied aus diesem Raum entfernen?",
+ "Delete this private room and remove its memberships?": "Diesen privaten Raum und seine Mitgliedschaften löschen?",
+ "Security Center is optional. Other suite features currently share the Core bundle. AKENO installs no network adapter automatically.": "Secure Center ist optional. Die übrigen Suite-Funktionen sind derzeit Teil des Core-Pakets. AKENO installiert keinen Netzwerkadapter automatisch."
 }
