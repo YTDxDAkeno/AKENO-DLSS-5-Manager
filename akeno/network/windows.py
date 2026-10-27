@@ -107,6 +107,15 @@ class WindowsWireGuard:
 
     def start(self,name,text):
         name=self._name(name);profile=parse_wireguard(text)
+        # A user-writable transient import must never gain script execution through a previously enabled
+        # WireGuard registry override. Read only; AKENO never changes the Windows/WireGuard security policy.
+        import winreg
+        try:
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,r'Software\WireGuard') as key:
+                dangerous,_=winreg.QueryValueEx(key,'DangerousScriptExecution')
+        except FileNotFoundError:dangerous=0
+        if dangerous:
+            raise NativeUnavailable('WireGuard script execution must be disabled before AKENO imports profiles.')
         # WireGuard manager must already exist: never silently install a background manager/adapter.
         self._trusted('wireguard.exe')
         if not self.configs.is_dir():
@@ -142,8 +151,15 @@ class WindowsWireGuard:
         return {'state':'connected' if latest and 0<=time.time()-latest<180 else 'awaiting_handshake',
                 'last_handshake':latest or None}
 
-    def stop(self,name):
+    def stop(self,name,public_key):
         name=self._name(name)
+        actual=self._call('wg.exe','show',name,'public-key',check=False)
+        if actual.returncode:
+            if (self.configs/(name+'.conf.dpapi')).exists():
+                raise NativeUnavailable('An encrypted orphan remains. Remove this AKENO profile in the official manager, then recover.')
+            return
+        if actual.stdout.strip()!=public_key:
+            raise NativeUnavailable('The tunnel key does not belong to this imported profile; removal refused.')
         self._call('wireguard.exe','/uninstalltunnelservice',name,check=False)
         if self.status(name)['state']!='disconnected':
             raise NativeUnavailable('Tunnel removal is incomplete; recovery is required.')

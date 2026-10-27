@@ -44,7 +44,19 @@ class TunnelManager:
             name=self.name(state.get('profile_id'))
             if state.get('name')!=name:raise ProfileError('Tunnel recovery state is damaged.')
             self.journal.save({**state,'phase':'disconnecting'})
-            try:self.backend.stop(name)
+            try:
+                # Prove possession of this profile's key before asking an elevated backend to remove a service.
+                # A caller cannot select another user's publicly visible tunnel name by forging local metadata.
+                import base64
+                from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+                from cryptography.hazmat.primitives import serialization
+                profile=parse_wireguard(self.profiles._load(state['profile_id'])['text'])
+                import configparser
+                cfg=configparser.ConfigParser(interpolation=None);cfg.read_string(profile.text)
+                key=X25519PrivateKey.from_private_bytes(base64.b64decode(cfg['Interface']['privatekey'],validate=True))
+                public=base64.b64encode(key.public_key().public_bytes(serialization.Encoding.Raw,
+                                       serialization.PublicFormat.Raw)).decode()
+                self.backend.stop(name,public_key=public)
             except Exception:
                 self.journal.save({**state,'phase':'recovery_required'});raise
             self.journal.save({'phase':'disconnected'})

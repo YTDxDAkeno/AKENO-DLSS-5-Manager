@@ -22,7 +22,7 @@ class Backend:
         self.state='awaiting_handshake'
         if self.fail_start:raise RuntimeError('native fixture failure')
     def status(self,name):return {'state':self.state,'last_handshake':None}
-    def stop(self,name):
+    def stop(self,name,public_key):
         if self.fail_stop:raise RuntimeError('native fixture stop failure')
         self.state='disconnected'
 
@@ -55,3 +55,14 @@ def test_invalid_tunnel_id_cannot_become_a_native_command():
     with pytest.raises(ProfileError):TunnelManager.name('../other-profile')
     from akeno.network.windows import WindowsWireGuard,NativeUnavailable
     with pytest.raises(NativeUnavailable):WindowsWireGuard._name('anything /uninstallmanagerservice')
+
+
+def test_native_removal_refuses_another_tunnels_public_key(tmp_path):
+    from types import SimpleNamespace
+    from akeno.network.windows import WindowsWireGuard,NativeUnavailable
+    native=object.__new__(WindowsWireGuard);native.configs=tmp_path
+    calls=[]
+    native._call=lambda *a,**kw:calls.append(a) or SimpleNamespace(returncode=0,stdout='another key')
+    with pytest.raises(NativeUnavailable,match='does not belong'):
+        native.stop('AkenoVPN'+'1'*24,public_key='this profiles key')
+    assert calls==[('wg.exe','show','AkenoVPN'+'1'*24,'public-key')]
