@@ -92,3 +92,15 @@ def test_invalid_release_signature_refuses_component_operation(setup):
     with pytest.raises(Exception,match='signature|Signature'):
         svc.prepare_component('install')
     assert (target/'AKENO.exe').is_file()
+
+
+def test_signed_package_cannot_override_local_component_selection(setup):
+    svc,target,pkg,doc=setup
+    with zipfile.ZipFile(pkg,'a') as z:z.writestr('AKENO/'+SELECTION,'[components]\nsecurity_center=1\n')
+    # Test the extractor directly: even a deliberately supplied signed description may not carry local state.
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    key=Ed25519PrivateKey.generate();public=u.tool.public_of(key)
+    keys={u.tool.kid_of(public):crypto.public_key(public)}
+    release=u.parse(u.envelope(key,u.fields(pkg=pkg,version=__version__)),keys)
+    with pytest.raises(service.UpdateError,match='component selection'):
+        svc.stage(pkg,release)

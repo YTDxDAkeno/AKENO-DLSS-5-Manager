@@ -366,6 +366,9 @@ class UpdateService:
                     raise staging.StagingError("the package contents do not match the signed content_sha256")
             root = staging.program_root(dest)
             content = staging.relative_to_root(content, root.relative_to(dest).as_posix() if root != dest else "")
+            from akeno.components.service import SELECTION
+            if any(rel.casefold() == SELECTION.casefold() for rel in content["files"]):
+                raise staging.StagingError("A release package must not contain this PC's component selection.")
         except staging.StagingError as exc:
             shutil.rmtree(dest, ignore_errors=True)
             raise UpdateError(str(exc)) from exc

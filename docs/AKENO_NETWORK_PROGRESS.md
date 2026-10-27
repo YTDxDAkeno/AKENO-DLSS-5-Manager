@@ -92,3 +92,10 @@ Added AKENO Network alongside the existing Network Lab (which remains unchanged)
 One live HTTP integration test passed with two real desktop licensing/LAN clients, distinct registered device identities, a real local API server, signed peer credentials and two allocated addresses. This is HTTP control-plane evidence; the separate container harness is the actual WireGuard-packet evidence. Source smoke passed with all 29 page keys and 19/19 design assets; affected UI/component/translation/provider checks: 18 passed.
 
 VPN Gate: strict bounded official-format CSV adapter, public-IP filtering, unsafe directive rejection, actual-row-only country list and a fetch-only UI. All connections remain unconditionally disabled pending terms/operator privacy/OpenVPN review. Catalog fixtures: passed; official live catalog/terms fetch remains unavailable through the unapplied network-policy draft. No guaranteed USA/Turkey/server availability or no-logs claim is made.
+
+## Continuation — real own-relay fallback
+Added a bounded paired UDP relay primitive: fixed/proven source tuples, mandatory live membership authoriser, maximum 45-second allocation, packet-size/format checks, bounded rate and no packet amplification. No relay API or public listener starts by default. Production allocation must prove endpoint ownership before supplying tuples; that public allocation/NAT integration remains open.
+
+The isolated WireGuard harness now blocks direct UDP and switches both real WireGuard endpoints to this own relay. Seven actual userspace WireGuard checks passed, including encrypted TCP echo through the relay fallback. Two additional real local UDP-socket tests passed for source binding, arbitrary-packet refusal, revocation and lease bounds. This is still an isolated topology, not real ISP NAT/Windows or game-discovery evidence.
+
+The final server regression found four missing German API messages; translations added. Signed application packages are now forbidden from carrying the local component-selection INI, preventing an archive from overriding this PC's installed choice. Focused tests cover the refusal; complete regression is in progress.

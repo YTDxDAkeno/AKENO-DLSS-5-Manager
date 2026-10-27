@@ -392,5 +392,9 @@
 "{n} confirmed": "{n} bestätigt",
 "{n} disabled": "{n} deaktiviert",
 "{n} end within 7 days": "{n} enden in 7 Tagen",
-"{n} offline certificates": "{n} Offline-Zertifikate"
+"{n} offline certificates": "{n} Offline-Zertifikate",
+ "An active AKENO suite license is required.": "Eine aktive AKENO-Suite-Lizenz ist erforderlich.",
+ "Confirm your email before using LAN Play.": "Bestätige deine E-Mail-Adresse, bevor du LAN Play verwendest.",
+ "Peer credentials cannot be issued.": "Peer-Nachweise können nicht ausgestellt werden.",
+ "Register and use the device bound to this session.": "Registriere und verwende das an diese Sitzung gebundene Gerät."
 }

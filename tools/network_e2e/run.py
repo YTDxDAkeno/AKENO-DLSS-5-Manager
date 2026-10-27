@@ -9,7 +9,7 @@ from pathlib import Path
 
 def main(report):
     prefix='akeno-wg-'+uuid.uuid4().hex[:10]
-    net=prefix+'-net';a=prefix+'-a';b=prefix+'-b'
+    net=prefix+'-net';a=prefix+'-a';b=prefix+'-b';relay_name=prefix+'-relay'
     env=os.environ.copy()
     for k in ('DOCKER_HOST','DOCKER_CONTEXT','DOCKER_TLS','DOCKER_TLS_VERIFY','DOCKER_CERT_PATH'):env.pop(k,None)
     def docker(*args,input=None,check=True):
@@ -75,11 +75,34 @@ print(json.dumps({'bytes':len(data),'sha256':hashlib.sha256(data).hexdigest()}))
         time.sleep(0.5)
         p=docker('exec','-i',b,'python3','-',input=send)
         record('actual encrypted reconnection after peer restore',json.loads(p.stdout)['bytes']==65536)
+        # A trusted isolated fixture allocates this pair; production endpoint-proof/API wiring is separate.
+        docker('run','-d','--name',relay_name,'--network',net,'akeno-network-e2e')
+        module=Path(__file__).resolve().parents[2]/'server'/'akeno_server'/'network'/'relay.py'
+        docker('exec','-i',relay_name,'sh','-c','cat > /run/relay_module.py',input=module.read_text())
+        script=("from relay_module import PairedUDPRelay\nimport json,time\nfrom pathlib import Path\n"
+                +f"r=PairedUDPRelay(({ip(a)!r},51820),({ip(b)!r},51820),lambda:True,time.time()+45,bind='0.0.0.0')\n"
+                +"Path('/run/ports.json').write_text(json.dumps(r.ports))\nr.serve()\n")
+        docker('exec','-i',relay_name,'sh','-c','cat > /run/relay.py',input=script)
+        docker('exec','-d',relay_name,'python3','/run/relay.py')
+        for _ in range(30):
+            ports=docker('exec',relay_name,'cat','/run/ports.json',check=False)
+            if ports.returncode==0:break
+            time.sleep(.1)
+        ports=json.loads(ports.stdout);relay_ip=ip(relay_name)
+        # Block the direct UDP route, then configure the explicit own-relay fallback on both peers.
+        shell(a,'iptables -A OUTPUT -p udp -d '+ip(b)+' --dport 51820 -j DROP')
+        shell(b,'iptables -A OUTPUT -p udp -d '+ip(a)+' --dport 51820 -j DROP')
+        blocked=docker('exec','-i',b,'python3','-',input=send,check=False)
+        record('blocked direct path prevents traffic',blocked.returncode!=0)
+        shell(a,'wg set wg0 peer '+bp+' endpoint '+relay_ip+':'+str(ports[0]))
+        shell(b,'wg set wg0 peer '+ap+' endpoint '+relay_ip+':'+str(ports[1]))
+        p=docker('exec','-i',b,'python3','-',input=send)
+        record('actual encrypted traffic through own UDP relay fallback',json.loads(p.stdout)['bytes']==65536)
     finally:
-        for n in (a,b):docker('rm','-f',n,check=False)
+        for n in (a,b,relay_name):docker('rm','-f',n,check=False)
         docker('network','rm',net,check=False)
         report.write_text(json.dumps({'platform':'real Linux wireguard-go/TUN containers','checks':checks,
-            'not_tested':['Windows drivers','different NATs','public P2P','relay fallback','LAN game discovery']},indent=2))
+            'not_tested':['Windows drivers','different NATs','public P2P','production relay endpoint-proof/API integration','LAN game discovery']},indent=2))
     print(f'{len(checks)} actual WireGuard checks passed')
 
 
