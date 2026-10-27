@@ -35,6 +35,8 @@ def setup(tmp_path, monkeypatch):
     target=u.installed(tmp_path,__version__)
     monkeypatch.setattr(service,'install_dir',lambda:target)
     monkeypatch.setattr(service,'frozen',lambda:True)
+    # the "running program" here is python.exe, which is code-signed on Windows; the rule has its own tests
+    monkeypatch.setattr(service,'signature_check',lambda new_exe,running_exe=None,pin=None:'not checked in this test')
     return svc,target,pkg,doc
 
 
