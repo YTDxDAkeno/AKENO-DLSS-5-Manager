@@ -491,6 +491,32 @@ class UpdatesPage(QWidget):
         workers.run(lambda emit: self.svc.prepare(release, lambda *event: emit(event), self.token), done, failed,
                     on_progress=self._step)
 
+    def change_component(self, action: str) -> None:
+        if self.busy or action not in ("install", "repair", "remove"):
+            return
+        if not confirm(self, t("Components"), t("Change the Security Center installation?"),
+                       t("AKENO verifies the signed package for your installed version, closes and restarts. "
+                         "Your license and data are kept. A failed change restores the previous installation.")):
+            return
+        from akeno.security.downloads import CancelToken
+        self.token = CancelToken()
+        self._busy(True)
+        self.progress.setRange(0, 0)
+        self.phase.setText(t("Preparing the component change…"))
+        self.banner.clear()
+
+        def done(plan):
+            self.btn_cancel.setVisible(False)
+            self.phase.setText(t("Package verified. AKENO restarts to apply the component change."))
+            self._launch(plan)
+
+        def failed(exc):
+            self._busy(False)
+            self.banner.show_message(t("The component was not changed: {e}", e=self._reason(exc)), "error")
+
+        workers.run(lambda emit: self.svc.prepare_component(action, lambda *event: emit(event), self.token),
+                    done, failed, on_progress=self._step)
+
     def _file_count(self, release) -> int:
         try:
             from akeno.updater import staging

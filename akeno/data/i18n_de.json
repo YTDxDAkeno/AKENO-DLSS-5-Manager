@@ -4425,5 +4425,14 @@
  "Security Center is disabled or unavailable. Manage it in Settings → Components.": "Secure Center ist deaktiviert oder nicht verfügbar. Verwalte es unter Einstellungen → Komponenten.",
  "Security Center is optional. Other suite features currently share the Core bundle. LAN Play and VPN are not installed by this build.": "Secure Center ist optional. Die übrigen Suite-Funktionen sind derzeit Teil des Core-Pakets. Dieser Build installiert weder LAN Play noch VPN.",
  "To add or remove Security Center files, run the AKENO installer and change its component selection. Separate module downloads are not available yet.": "Starte den AKENO-Installer und ändere die Komponentenauswahl, um Secure-Center-Dateien hinzuzufügen oder zu entfernen. Separate Moduldownloads sind noch nicht verfügbar.",
- "Wait for the Security Center task to finish or cancel it first.": "Warte, bis die Secure-Center-Aufgabe beendet ist, oder brich sie zuerst ab."
+ "Wait for the Security Center task to finish or cancel it first.": "Warte, bis die Secure-Center-Aufgabe beendet ist, oder brich sie zuerst ab.",
+ "Change the Security Center installation?": "Secure-Center-Installation ändern?",
+ "AKENO verifies the signed package for your installed version, closes and restarts. Your license and data are kept. A failed change restores the previous installation.": "AKENO prüft das signierte Paket deiner installierten Version, schließt sich und startet neu. Lizenz und Daten bleiben erhalten. Bei einem Fehler wird die vorherige Installation wiederhergestellt.",
+ "Preparing the component change…": "Komponentenänderung wird vorbereitet…",
+ "Package verified. AKENO restarts to apply the component change.": "Paket geprüft. AKENO startet neu, um die Komponentenänderung anzuwenden.",
+ "The component was not changed: {e}": "Die Komponente wurde nicht geändert: {e}",
+ "Install Security Center": "Secure Center installieren",
+ "Repair Security Center": "Secure Center reparieren",
+ "Remove Security Center": "Secure Center entfernen",
+ "Component changes use the signed package for this AKENO version and restart the application. The previous installation is kept for rollback.": "Komponentenänderungen verwenden das signierte Paket dieser AKENO-Version und starten die Anwendung neu. Die vorherige Installation bleibt für die Rückkehr erhalten."
 }

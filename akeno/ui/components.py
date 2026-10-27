@@ -2,7 +2,7 @@
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
 from akeno.i18n import t
-from akeno.ui.widgets import Card, button, info, label
+from akeno.ui.widgets import Card, FlowLayout, button, info, label
 
 
 class ComponentUnavailablePage(QWidget):
@@ -28,9 +28,17 @@ class ComponentCard(Card):
         self.body.addWidget(self.status_label)
         self.toggle = button("", "shield", on_click=self.change)
         self.body.addWidget(self.toggle)
-        self.body.addWidget(label(t("To add or remove Security Center files, run the AKENO installer and change "
-                                   "its component selection. Separate module downloads are not available yet."),
-                                 "muted", wrap=True))
+        actions = FlowLayout(spacing=8)
+        self.operations = {}
+        for action, text in (("install", "Install Security Center"), ("repair", "Repair Security Center"),
+                             ("remove", "Remove Security Center")):
+            b = button(t(text), "download" if action != "remove" else "trash",
+                       on_click=lambda _=False, a=action: self.operate(a))
+            self.operations[action] = b
+            actions.addWidget(b)
+        self.body.addLayout(actions)
+        self.body.addWidget(label(t("Component changes use the signed package for this AKENO version and restart "
+                                   "the application. The previous installation is kept for rollback."), "muted", wrap=True))
         self.refresh()
 
     def refresh(self):
@@ -40,6 +48,16 @@ class ComponentCard(Card):
         self.status_label.setText(t("Security Center") + ": " + names[state])
         self.toggle.setText(t("Disable Security Center") if state == "active" else t("Enable Security Center"))
         self.toggle.setEnabled(state in ("active", "disabled"))
+        supported = self.services.components.frozen and self.window is not None
+        for action, b in self.operations.items():
+            b.setEnabled(supported and (state == "not_installed" if action == "install" else state != "not_installed"))
+
+    def operate(self, action):
+        if self.window is None or any(k.startswith("security:") for k in self.window.ctl.busy):
+            info(self, t("Components"), t("Wait for the Security Center task to finish or cancel it first."))
+            return
+        self.window.go("updates")
+        self.window.pages["updates"].change_component(action)
 
     def change(self):
         from akeno.components.service import ComponentError

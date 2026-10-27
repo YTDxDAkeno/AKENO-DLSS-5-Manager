@@ -239,7 +239,7 @@ class UpdateService:
         self._store(sequence_seen={"sequence": details.sequence, "fingerprint": fingerprint},
                     newest_issued=max(details.issued_ts, float(self.state().get("newest_issued") or 0)))
 
-    def check(self) -> manifest.Release | None:
+    def check(self, include_current: bool = False) -> manifest.Release | None:
         """The newer release of the chosen channel, or None. Raises UpdateError / ManifestError."""
         self._store(last_attempt=time.time())
         try:
@@ -263,11 +263,33 @@ class UpdateService:
             self._anti_replay(release)
         self._store(last_check=time.time(), last_success=time.time(), latest=release.release,
                     **{key: release.release if not seen or manifest.newer(release.release, seen) else seen})
-        if not manifest.newer(release.release, self.version):
+        if not manifest.newer(release.release, self.version) and not (include_current and release.release == self.version):
             return None
         if release.release in (self.state().get("failed") or []):
             return None                                   # this version did not start here: not offered again
         return release
+
+    def prepare_component(self, action: str, emit=None, token=None) -> dict:
+        """Same-version module install/repair/removal through the authenticated full-package swap.
+
+        Reuses release expiry/anti-replay checks, Ed25519, archive/hash verification, health check and rollback.
+        Never mixes a new component with a different Core version or executes a standalone unsigned module.
+        """
+        if action not in ("install", "repair", "remove"):
+            raise UpdateError("Unknown component operation.")
+        release = self.check(include_current=True)
+        if release is None or release.release != self.version:
+            raise UpdateError("The signed package for this exact AKENO version is unavailable. Update AKENO first.")
+        allowed, reason = self.can_install(release)
+        if not allowed:
+            raise UpdateError(str(reason))
+        plan = self.prepare(release, emit, token)
+        from akeno.components.service import inventory
+        data = inventory(Path(plan["source"]))
+        if data["version"] != self.version:
+            raise UpdateError("Component package and Core versions differ.")
+        plan["component_action"] = action
+        return plan
 
     # -- download and stage ------------------------------------------------------------------------------------------
     def downloads(self):

@@ -1,0 +1,53 @@
+name: Optional components on Windows
+on:
+  push:
+    branches: [feature/akeno-network-modular]
+    paths: ['akeno/components/**', 'akeno/updater/**', 'akeno/ui/components.py', 'packaging/**', 'tools/component_windows_e2e.py', '.github/workflows/components-windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: components-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  components:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QT_QPA_FONTDIR: 'C:\Windows\Fonts'
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-dev.txt
+      - name: Component and updater tests
+        run: python -m pytest -q tests/test_components.py tests/test_component_transactions.py tests/test_updater_v2.py --junitxml=component-tests.xml
+      - name: Build real Windows executable and optional component inventory
+        run: |
+          python packaging/make_icon.py
+          pyinstaller --noconfirm packaging/akeno.spec
+      - name: Compile actual Inno Setup installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup --no-progress -y }
+          & $iscc packaging/installer.iss
+          if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed' }
+      - name: Full/Core installs, signed module install/remove/repair, failed-health rollback and uninstall
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem packaging/out -Filter '*-Setup-x64.exe' | Select-Object -First 1
+          python tools/component_windows_e2e.py --installer $setup.FullName --dist dist/AKENO --work "$env:RUNNER_TEMP/component-e2e" --report component-windows-report.json
+          if ($LASTEXITCODE -ne 0) { throw 'Real Windows component tests failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: component-windows-evidence
+          path: |
+            component-tests.xml
+            component-windows-report.json
+            packaging/out/*Setup*.exe
+            ${{ runner.temp }}/component-e2e/*.log

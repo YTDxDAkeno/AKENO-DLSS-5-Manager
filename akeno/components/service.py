@@ -66,14 +66,18 @@ def inventory(root: Path) -> dict:
         raise ComponentError("Component inventory is missing or damaged; run the installer to repair it.") from exc
 
 
-def selected_content(source: Path, installed: Path, content: dict, version: str | None = None) -> dict:
+def selected_content(source: Path, installed: Path, content: dict, version: str | None = None,
+                     enabled: bool | None = None) -> dict:
     """Project an ALREADY VERIFIED complete release onto the installed component selection.
 
     Called only after staging.verify(source, content). The signed archive/content aggregate is checked by
     UpdateService before apply starts. The original content list is never rewritten. Missing new inventories
     fail closed for Core-only installations so an older monolithic release cannot reinstall Secure Center.
     """
-    if selection(installed):
+    chosen = selection(installed) if enabled is None else enabled
+    if type(chosen) is not bool:
+        raise ComponentError("Invalid component selection.")
+    if chosen and enabled is None:
         return content
     data = inventory(source)
     if version is not None and data["version"] != version:
@@ -82,9 +86,18 @@ def selected_content(source: Path, installed: Path, content: dict, version: str 
     for rel, record in optional.items():
         if content["files"].get(rel) != record:
             raise ComponentError("Component inventory differs from the verified release.")
+    if chosen:
+        return content
     files = {rel: record for rel, record in content["files"].items() if rel not in optional}
     return {**content, "files": files, "file_count": len(files),
             "bytes": sum(r["size"] for r in files.values())}
+
+
+def write_selection(root: Path, enabled: bool) -> None:
+    if type(enabled) is not bool:
+        raise ComponentError("Invalid component selection.")
+    staging.write_atomic(Path(root) / SELECTION,
+                         f"[components]\nsecurity_center={int(enabled)}\n".encode("ascii"))
 
 
 class ComponentService:

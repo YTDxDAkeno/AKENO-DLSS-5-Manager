@@ -416,7 +416,12 @@ def _run(plan, target, source, keep, journal, outcome) -> dict:
             staging.verify(source, content)
             from akeno.components.service import ComponentError, selected_content
             try:
-                content = selected_content(source, target, content, plan["version"])
+                action = plan.get("component_action")
+                if action is not None and (action not in ("install", "repair", "remove") or
+                                           plan["version"] != plan.get("previous_version")):
+                    raise ComponentError("Invalid component operation or mismatched Core version.")
+                content = selected_content(source, target, content, plan["version"],
+                                           enabled=action != "remove" if action is not None else None)
             except ComponentError as exc:
                 raise staging.StagingError(str(exc)) from exc
         else:                                  # a rollback to the kept previous version: copy it as it is
@@ -437,6 +442,11 @@ def _run(plan, target, source, keep, journal, outcome) -> dict:
         copy_listed(source, n["new"], content)
         if plan.get("content"):
             staging.verify(n["new"], content)
+        if plan.get("component_action"):
+            # The selected marker is local state, written only AFTER payload verification. Keep the old
+            # marker in .old so rollback restores the previous physical selection, even for same-version changes.
+            from akeno.components.service import write_selection
+            write_selection(n["new"], plan["component_action"] != "remove")
     except (OSError, staging.StagingError) as exc:
         with contextlib.suppress(OSError):
             remove(n["new"])
