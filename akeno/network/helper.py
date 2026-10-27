@@ -30,6 +30,9 @@ def execute(ident):
         manager=TunnelManager(profiles,SecureStore(sub('network')/'tunnel'),WindowsWireGuard())
         action=request['action']
         if action=='connect':
+            from akeno.licensing import manager as license_manager
+            if not license_manager().view().unlocked:
+                raise ProfileError('An active AKENO license is required to connect. Disconnect and recovery remain available.')
             result=manager.connect(request['profile_id'])
             deadline=time.monotonic()+30
             while result['state']=='awaiting_handshake' and time.monotonic()<deadline:

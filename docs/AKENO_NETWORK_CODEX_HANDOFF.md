@@ -91,3 +91,5 @@ Next priorities: obtain and inspect the exact-commit Windows workflow evidence, 
 
 
 Final privilege-boundary tightening: native removal derives the local profile public key from its private key and compares it to the actual tunnel public key before uninstalling/deleting. A forged local tunnel name cannot remove another profile without that key. Orphan encrypted profiles require removal through the official manager before recovery; do not silently delete an unproven profile. The connector refuses WireGuard DangerousScriptExecution registry overrides without modifying them. 23 profile/tunnel/STUN checks passed, including a stand-in check that foreign-key removal runs no uninstall command. Actual Windows validation remains required.
+
+The elevated connect entry point also enforces the existing signed AKENO entitlement (same offline/license rules as the UI). Disconnect/status/recovery stay available after expiry; never gate safety cleanup behind a license or a network connection.
