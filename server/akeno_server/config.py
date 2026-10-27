@@ -33,6 +33,8 @@ class ServerConfig(BaseSettings):
     environment: Literal["production", "development", "test"] = "production"
     # which part of the site this process serves: the API, the public/account website, the admin website, or all
     role: Literal["all", "api", "web", "admin"] = "all"
+    network_enabled: bool = False  # Explicit opt-in; existing production installs expose no network API.
+    network_database_path: Path = Path("/data/network.sqlite3")
 
     database_url: str = "sqlite:///./akeno-dev.sqlite3"
     public_url: str = ""                # e.g. https://licenses.your-domain (links in e-mails); empty: from the request

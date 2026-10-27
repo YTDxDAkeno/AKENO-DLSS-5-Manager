@@ -45,6 +45,8 @@ class RoomStore:
                 CREATE TABLE IF NOT EXISTS banned (
                     room TEXT REFERENCES rooms(id) ON DELETE CASCADE, actor TEXT NOT NULL, PRIMARY KEY(room,actor));
             ''')
+            if 'device' not in {r[1] for r in db.execute('PRAGMA table_info(peers)')}:
+                db.execute("ALTER TABLE peers ADD COLUMN device TEXT NOT NULL DEFAULT ''")
 
     @contextmanager
     def _tx(self):
@@ -99,7 +101,7 @@ class RoomStore:
         if room['owner']!=actor:
             raise RoomError('Room owner required.')
 
-    def create(self,actor,name,public_key,password=''):
+    def create(self,actor,name,public_key,password='',device_id=''):
         self._actor(actor)
         self._key(public_key)
         if not isinstance(name,str) or not 1 <= len(name.strip()) <= 64 or any(ord(c)<32 for c in name):
@@ -121,11 +123,11 @@ class RoomStore:
             db.execute('INSERT INTO rooms VALUES (?,?,?,?,?,?,?,?)',
                        (ident,actor,name.strip(),slot,password_hash,self._hash(invite),now+self.INVITE_TTL,
                         now+self.ROOM_TTL))
-            db.execute('INSERT INTO peers VALUES (?,?,?,?,?)',(ident,actor,public_key,2,now))
+            db.execute('INSERT INTO peers VALUES (?,?,?,?,?,?)',(ident,actor,public_key,2,now,device_id))
         return {'room_id':ident,'invite':invite,'invite_expires_at':now+self.INVITE_TTL,
                 'subnet':f'10.203.{slot}.0/24','transport':'not_implemented'}
 
-    def join(self,actor,invite,public_key,password=''):
+    def join(self,actor,invite,public_key,password='',device_id=''):
         self._actor(actor)
         self._key(public_key)
         if not isinstance(password,str) or len(password)>128:
@@ -145,7 +147,7 @@ class RoomStore:
                     raise RoomError('Invalid room password.') from None
             existing=db.execute('SELECT * FROM peers WHERE room=? AND actor=?',(ident,actor)).fetchone()
             if existing:
-                if existing['public_key']!=public_key:
+                if existing['public_key']!=public_key or existing['device']!=device_id:
                     raise RoomError('Leave the room before registering another public key.')
                 db.execute('UPDATE peers SET seen=? WHERE room=? AND actor=?',(now,ident,actor))
                 return ident
@@ -154,7 +156,7 @@ class RoomStore:
                 raise RoomError('Room is full.')
             host=next(n for n in range(2,255) if n not in hosts)
             try:
-                db.execute('INSERT INTO peers VALUES (?,?,?,?,?)',(ident,actor,public_key,host,now))
+                db.execute('INSERT INTO peers VALUES (?,?,?,?,?,?)',(ident,actor,public_key,host,now,device_id))
             except sqlite3.IntegrityError:
                 raise RoomError('Public key is already registered.') from None
             return ident
@@ -163,11 +165,17 @@ class RoomStore:
         with self._tx() as db:
             room=self._room(db,ident)
             self._member(db,room,actor)
-            return [{'actor':r['actor'],'public_key':r['public_key'],
+            return [{'actor':r['actor'],'device_id':r['device'],'public_key':r['public_key'],
                      'virtual_ip':str(ipaddress.ip_address(f"10.203.{room['slot']}.{r['host']}")),
                      'status':'registered' if r['seen']+self.PEER_LEASE>self.clock() else 'expired',
                      'transport':'not_implemented'}
                     for r in db.execute('SELECT * FROM peers WHERE room=? ORDER BY host',(ident,))]
+
+    def require_device(self,actor,ident,device_id):
+        with self._tx() as db:
+            peer=self._member(db,self._room(db,ident),actor)
+            if not device_id or peer['device']!=device_id:
+                raise RoomError('Membership belongs to another device.')
 
     def heartbeat(self,actor,ident):
         with self._tx() as db:

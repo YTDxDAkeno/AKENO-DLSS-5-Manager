@@ -1366,3 +1366,12 @@ def test_core_only_rejects_update_without_inventory_before_switch(tmp_path, sign
     assert not outcome['ok'] and not outcome['rolled_back'], outcome
     assert 'inventory' in outcome['error'] and 'nothing was changed' in outcome['error']
     assert (target / 'AKENO.exe').read_text() == 'version 3.0.0'
+
+
+def test_release_cli_accepts_a_signature_starting_with_dash(tmp_path, monkeypatch):
+    import release_v2
+    received=[]
+    monkeypatch.setattr(release_v2,'verify',lambda args:received.append(args.signature) or 0)
+    value='-'+('A'*85)
+    assert release_v2.main(['verify','--signature',value])==0
+    assert received==[value]

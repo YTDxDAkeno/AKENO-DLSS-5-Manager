@@ -91,6 +91,12 @@ def create_app() -> FastAPI:
     from akeno_server.api import system
     if cfg.serves_api:
         app.include_router(api_router)
+        if cfg.network_enabled:
+            from akeno_server.network.api import router as network_router
+            from akeno_server.network.rooms import RoomStore
+            from akeno_server.clock import utcnow
+            app.state.lan_rooms = RoomStore(cfg.network_database_path, clock=lambda: utcnow().timestamp())
+            app.include_router(network_router)
     else:
         app.include_router(system.router, prefix=f"/api/{API_VERSION}")     # health checks on every service
     from akeno_server.web import mount

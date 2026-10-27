@@ -195,6 +195,13 @@ def verify(args) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    # A base64url signature can start with '-'. Bind that value to its option so argparse does not
+    # treat it as another flag. Malformed/missing option values still receive the normal parser error.
+    import re
+    argv = list(sys.argv[1:] if argv is None else argv)
+    for i in range(len(argv) - 2, -1, -1):
+        if argv[i] == "--signature" and re.fullmatch(r"[-_A-Za-z0-9+/]{86}(?:==)?", argv[i + 1]):
+            argv[i:i + 2] = ["--signature=" + argv[i + 1]]
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("describe")

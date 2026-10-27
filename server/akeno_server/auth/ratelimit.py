@@ -24,6 +24,9 @@ LIMITS: dict[str, tuple[int, int]] = {
     "device": (30, 3600),
     "admin_codes": (30, 600),
     "default": (300, 60),
+    "lan_ip": (120, 60),
+    "lan_user": (90, 60),
+    "lan_join": (10, 60),
 }
 
 
