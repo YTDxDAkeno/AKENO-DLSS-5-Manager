@@ -1,6 +1,19 @@
 # AKENO Network and modular installation — progress
 
-## Current phase
+## Current continuation status (supersedes the historical entries below)
+- Branch: `feature/akeno-network-modular`; latest implementation checkpoint before this final documentation update: `41e4805`. Resolve the final commit with `git rev-parse HEAD`; remote pushes have been explicitly confirmed.
+- Implemented source: same-version signed Secure Center install/remove/repair with rollback; Full/Core Windows installer matrix; opt-in authenticated/device-bound LAN API and common client UI; explicit Windows WireGuard/UAC backend with DPAPI/journal; bounded STUN and own-relay primitives; VPN Gate catalog parser with all connections disabled.
+- Full client run: 81 files, 1,266 passed, 19 skipped, zero failed/errors. Combining the subsequent new marker-refusal/STUN/last UI targeted results gives 1,269 distinct passing client cases and 19 skipped (not a second full-suite claim).
+- Full backend regression after fixes: 160 passed, 3 dependency deprecation warnings. Final focused updater/module/profile/provider run: 138 passed, 1 skipped. Last room/client/API checks: 12 passed; last UI/component/translation checks: 16 passed.
+- Seven actual Linux userspace WireGuard checks passed, including encrypted traffic over virtual IPs, peer revocation/reconnect and own-relay fallback after blocking the direct path. Local relay policy and STUN tests are separate from Windows/ISP-NAT evidence.
+- Final Linux PyInstaller rebuild passed. Both complete and physically Core-only executable smoke tests passed with all 29 page keys, Network UI and 19/19 assets. Security Center remains absent from Core PYZ; full generated bundle was restored after the test. `pip check` passed.
+- Required external evidence remains unavailable: real Windows installer/UAC/manager/driver/routing/DNS/IPv6/exit-IP tests, two Windows PCs behind real separate NATs, public endpoint proof/relay allocation/lease integration and real LAN games. Actions API and official VPN Gate terms/catalog are blocked by current proxy policy; required domains are saved in the draft but not observed active. No production deployments/releases/merge occurred.
+- Next concrete step: apply reviewed network domain settings and inspect the exact-commit Windows workflow/artifacts, fix actual Windows failures, then finish authenticated LAN transport/endpoint-proof and real NAT tests before public feature activation. No new secret is assumed missing while the API destination itself is denied.
+- Complete current Claude handoff: `docs/AKENO_NETWORK_CODEX_HANDOFF.md`. Security review: `docs/AKENO_NETWORK_SECURITY_REVIEW.md`. Full master request remains incomplete.
+
+## Historical checkpoint records
+
+## Initial phase
 B/C plus isolated D/E internals: optional Security Center package, component-aware updates, experimental room store and WireGuard profile import/storage. The complete master request is not finished.
 
 - Branch: `feature/akeno-network-modular`.
