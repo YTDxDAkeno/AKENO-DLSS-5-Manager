@@ -1,7 +1,7 @@
 # AKENO Network and modular installation — progress
 
 ## Current phase
-B/C: first optional Security Center package and component-aware update copy. Implementation is not complete.
+B/C plus isolated D/E internals: optional Security Center package, component-aware updates, experimental room store and WireGuard profile import/storage. The complete master request is not finished.
 
 - Branch: `feature/akeno-network-modular`.
 - Base commit: `2069ff7c58d2c52473023ce759bdbfe863319713` (`claude/adoring-shannon-2d4qb4`). This integrates the 3.1.1 hotfix. `main` is only the initial README.
@@ -27,6 +27,12 @@ Pinned client and backend dependencies installed in `.venv`. SQLite backend base
 - Component activation lives in `components.sqlite3`, outside resettable settings. Settings exposes activation and honest installation states. Missing/disabled components do not fail updater health checks.
 - Core-only updates verify the full signed ZIP and original staged content before filtering the copy; selected files are verified again. Monolithic updates without a component inventory fail closed for Core-only installs.
 - Other modules are still bundled; separate module downloads, LAN Play and VPN are not claimed as implemented.
+
+## Isolated network internals
+- WireGuard import: one peer, strict directive allowlist, no scripts/includes/continuations, key/address/route/endpoint/MTU validation. Profile strings are excluded from repr and parser errors.
+- ProfileStore: encrypted payloads in SQLite; Windows DPAPI required in production, no plaintext Linux fallback. Rename/delete and nonsecret metadata provided. 16 tests passed using an authenticated-encryption stand-in (not DPAPI evidence). No connect/disconnect, OpenVPN or UI integration yet.
+- `server/akeno_server/network/rooms.py`: isolated transactional SQLite prototype with expiring hashed invitations, Argon2 room passwords, owner-only controls, revoked-member exclusion, peer leases, persistent state, 16-peer capacity and distinct allocated virtual IPs. 7 tests passed, including concurrent joins. It is NOT registered in the production API. Actor identity is a trusted internal input pending existing-session/license/device enforcement in API integration.
+- No transport, Windows adapter, firewall, NAT traversal, P2P, relay, discovery or actual packet exchange was implemented or claimed.
 
 ## Next steps
 1. Finish cloud installation, run baseline client and server suites and application smoke test.
