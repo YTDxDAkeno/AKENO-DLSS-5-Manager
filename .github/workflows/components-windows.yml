@@ -2,7 +2,7 @@ name: Optional components on Windows
 on:
   push:
     branches: [feature/akeno-network-modular]
-    paths: ['akeno/components/**', 'akeno/updater/**', 'akeno/ui/components.py', 'packaging/**', 'tools/component_windows_e2e.py', '.github/workflows/components-windows.yml']
+    paths: ['akeno/components/**', 'akeno/updater/**', 'akeno/network/**', 'tests/test_network_windows.py', 'akeno/ui/components.py', 'packaging/**', 'tools/component_windows_e2e.py', '.github/workflows/components-windows.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -24,7 +24,7 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements-dev.txt
       - name: Component and updater tests
-        run: python -m pytest -q tests/test_components.py tests/test_component_transactions.py tests/test_updater_v2.py --junitxml=component-tests.xml
+        run: python -m pytest -q tests/test_components.py tests/test_component_transactions.py tests/test_updater_v2.py tests/test_network_windows.py --junitxml=component-tests.xml
       - name: Build real Windows executable and optional component inventory
         run: |
           python packaging/make_icon.py

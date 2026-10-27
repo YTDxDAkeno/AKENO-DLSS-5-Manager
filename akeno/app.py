@@ -66,6 +66,12 @@ def run(argv: list[str] | None = None) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    network_args = sys.argv[1:] if argv is None else list(argv)
+    if "--network-helper" in network_args:
+        if len(network_args) != 2 or network_args[0] != "--network-helper":
+            return 2
+        from akeno.network.helper import execute
+        return execute(network_args[1])
     child = desktop_process(sys.argv[1:] if argv is None else list(argv))
     if child is not None:
         return child
