@@ -74,7 +74,11 @@ def private_file(path:Path,data:bytes):
 class WindowsWireGuard:
     def __init__(self):
         if sys.platform!='win32':raise NativeUnavailable('WireGuard tunnel services require Windows.')
-        self.root=Path(os.environ.get('ProgramFiles',r'C:\Program Files'))/'WireGuard'
+        # Elevated code must not select an executable directory from user-controlled environment variables.
+        folder=ctypes.create_unicode_buffer(32768)
+        if ctypes.windll.shell32.SHGetFolderPathW(None,0x26,None,0,folder)!=0:
+            raise NativeUnavailable('Cannot locate the Windows Program Files directory.')
+        self.root=Path(folder.value)/'WireGuard'
         self.configs=self.root/'Data'/'Configurations'
 
     def _trusted(self,name):
