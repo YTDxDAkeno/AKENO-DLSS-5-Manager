@@ -1,0 +1,62 @@
+name: WireGuard on Windows
+# AKENO's own VPN backend against the official signed WireGuard for Windows and its WireGuardNT driver, on a
+# disposable runner. The peer is a loopback test responder: no Internet exit, no third-party VPN server, no secrets.
+on:
+  push:
+    branches: [feature/akeno-network-modular, 'claude/**']
+    paths: ['akeno/network/**', 'tools/network_windows_e2e.py', 'tools/network_e2e/**', '.github/workflows/network-windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: network-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  wireguard:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Install the official signed WireGuard for Windows (newest MSI, signer verified)
+        shell: pwsh
+        run: |
+          $base = 'https://download.wireguard.com/windows-client/'
+          $index = Invoke-WebRequest -UseBasicParsing $base
+          $msi = $index.Links.href | Where-Object { $_ -match '^wireguard-amd64-[0-9.]+\.msi$' } |
+            Sort-Object { [version]($_ -replace '^wireguard-amd64-|\.msi$', '') } | Select-Object -Last 1
+          if (-not $msi) { throw 'No official WireGuard MSI found in the download index' }
+          $file = Join-Path $env:RUNNER_TEMP $msi
+          Invoke-WebRequest -UseBasicParsing ($base + $msi) -OutFile $file
+          $sig = Get-AuthenticodeSignature $file
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=WireGuard LLC') {
+            throw "Unexpected installer signature: $($sig.Status) $($sig.SignerCertificate.Subject)"
+          }
+          Write-Host "Installing $msi (SHA-256 $((Get-FileHash $file).Hash)), signed by $($sig.SignerCertificate.Subject)"
+          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$file`"", '/qn', 'DO_NOT_LAUNCH=1',
+            '/l*v', "`"$env:RUNNER_TEMP\wireguard-msi.log`""
+          if ($p.ExitCode -ne 0) { throw "msiexec failed with $($p.ExitCode)" }
+          & "$env:ProgramFiles\WireGuard\wireguard.exe" /installmanagerservice
+          $store = "$env:ProgramFiles\WireGuard\Data\Configurations"
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $store); $i++) { Start-Sleep 1 }
+          if (-not (Test-Path $store)) { throw 'The WireGuard manager service did not create its configuration store' }
+          Get-Service WireGuardManager | Format-List Name, Status, StartType
+          (Get-Item "$env:ProgramFiles\WireGuard\wireguard.exe").VersionInfo | Format-List ProductVersion, FileVersion
+      - name: AKENO VPN backend through WireGuardNT (split tunnel, recovery, outage, full tunnel leak checks)
+        run: python tools/network_windows_e2e.py --work "$env:RUNNER_TEMP/network-e2e" --report network-windows-report.json --full-tunnel
+      - name: WireGuard log on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          & "$env:ProgramFiles\WireGuard\wireguard.exe" /dumplog | Select-Object -Last 120
+          Get-Service 'WireGuard*' | Format-Table Name, Status
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: network-windows-evidence
+          path: network-windows-report.json
