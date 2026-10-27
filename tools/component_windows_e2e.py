@@ -77,6 +77,10 @@ def run(args):
                 return type('Download',(),{'path':archive,'size':len(data)})()
         service.install_dir=lambda:target
         service.frozen=lambda:True
+        # In the product the running program is the installed AKENO.exe; here it is the runner's signed python.exe.
+        # Apply the unchanged Authenticode rule against the real installed executable instead.
+        rule=service.signature_check
+        service.signature_check=lambda new_exe,running_exe=None,pin=None:rule(new_exe,target/'AKENO.exe',pin)
         svc=UpdateService(keys={signing.kid_of(public):crypto.public_key(public)},version=__version__,
                           folder=work/'updates',fetch=lambda url:envelope,downloads=LocalDelivery())
         def change(action,success=True):
