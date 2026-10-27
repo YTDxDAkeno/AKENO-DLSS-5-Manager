@@ -38,7 +38,7 @@ SECTIONS = [
                 ("network", "Network Lab", "wifi"), ("security", "Security Center", "shield")]),
     ("DESKTOP", [("wallpapers", "Wallpapers", "image"), ("dock", "Dock", "dock"), ("widgets", "Widgets", "grid"),
                  ("themes", "Theme Workshop", "palette")]),
-    ("ONLINE", [("community", "Community", "globe"), ("sync", "Cloud Sync", "refresh")]),
+    ("ONLINE", [("akeno_network", "AKENO Network", "wifi"), ("community", "Community", "globe"), ("sync", "Cloud Sync", "refresh")]),
     ("ACCOUNT", [("account", "My Account", "user"), ("license", "License", "key"), ("updates", "Updates", "download"),
                  ("settings", "Settings", "gear")]),
 ]
@@ -421,6 +421,7 @@ class MainWindow(QMainWindow):
         self.resize(w, h)
 
     def _build(self) -> None:
+        from akeno.ui.pages.akeno_network import AkenoNetworkPage
         from akeno.ui.pages.account import AccountPage, LicensePage
         from akeno.ui.pages.advanced import AdvancedPage
         from akeno.ui.pages.backups import BackupsPage
@@ -464,7 +465,7 @@ class MainWindow(QMainWindow):
             page = cls(self.ctl, self)
             page.setObjectName(f"page_{key}")
             advanced[key] = page
-        main = {"library": LibraryPage, "fivem": FiveMPage, "installed": InstalledPage, "downloads": DownloadsPage,
+        main = {"akeno_network": AkenoNetworkPage, "library": LibraryPage, "fivem": FiveMPage, "installed": InstalledPage, "downloads": DownloadsPage,
                 "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage, "account": AccountPage,
                 "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
                 "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage,
