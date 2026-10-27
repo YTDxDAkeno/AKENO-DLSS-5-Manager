@@ -75,6 +75,10 @@ class SettingsPage(QWidget):
         for r in rows:
             lay.addWidget(r)
 
+        from akeno.ui.components import ComponentCard
+        self.components = ComponentCard(self.s, window)
+        lay.addWidget(self.components)
+
         # General
         gen = Card(t("General"), "globe")
         self.lang = QComboBox()

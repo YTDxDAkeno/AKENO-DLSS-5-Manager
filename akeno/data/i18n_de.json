@@ -4417,5 +4417,12 @@
  "The error was written to the log. Your saved results and undo records are kept unchanged. Updating AKENO (ACCOUNT → Updates) or restarting it usually helps.": "Der Fehler wurde ins Protokoll geschrieben. Deine gespeicherten Ergebnisse und Rückgängig-Protokolle bleiben unverändert. Ein Update von AKENO (KONTO → Updates) oder ein Neustart hilft meistens.",
  "The last saved result could not be shown. It is kept unchanged; run the check again for a new one.": "Das zuletzt gespeicherte Ergebnis konnte nicht angezeigt werden. Es bleibt unverändert gespeichert; starte die Prüfung erneut für ein neues.",
  "The results the System tools saved on this PC are not shown this time; they stay stored, and so do your games, mods, backups, settings and license. Look for a corrected version here, or go back to the previous version. The next normal start shows everything again.": "Die von den System-Tools auf diesem PC gespeicherten Ergebnisse werden diesmal nicht angezeigt; sie bleiben gespeichert, ebenso deine Spiele, Mods, Backups, Einstellungen und deine Lizenz. Suche hier nach einer korrigierten Version oder kehre zur vorherigen Version zurück. Beim nächsten normalen Start wird wieder alles angezeigt.",
- "This page could not be opened.": "Diese Seite konnte nicht geöffnet werden."
+ "This page could not be opened.": "Diese Seite konnte nicht geöffnet werden.",
+ "Disable Security Center": "Secure Center deaktivieren",
+ "Enable Security Center": "Secure Center aktivieren",
+ "Error": "Fehler",
+ "Incompatible": "Nicht kompatibel",
+ "Security Center is disabled or unavailable. Manage it in Settings → Components.": "Secure Center ist deaktiviert oder nicht verfügbar. Verwalte es unter Einstellungen → Komponenten.",
+ "Security Center is optional. Other suite features currently share the Core bundle. LAN Play and VPN are not installed by this build.": "Secure Center ist optional. Die übrigen Suite-Funktionen sind derzeit Teil des Core-Pakets. Dieser Build installiert weder LAN Play noch VPN.",
+ "To add or remove Security Center files, run the AKENO installer and change its component selection. Separate module downloads are not available yet.": "Starte den AKENO-Installer und ändere die Komponentenauswahl, um Secure-Center-Dateien hinzuzufügen oder zu entfernen. Separate Moduldownloads sind noch nicht verfügbar."
 }

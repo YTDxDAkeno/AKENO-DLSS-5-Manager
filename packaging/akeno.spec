@@ -40,6 +40,7 @@ a = Analysis(
                    "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"],
     excludes=EXCLUDES,
     noarchive=False,
+    module_collection_mode={"akeno.system.securitycenter": "py", "akeno.ui.pages.security": "py"},
 )
 pyz = PYZ(a.pure)
 exe = EXE(
@@ -52,3 +53,7 @@ exe = EXE(
     upx=False,
 )
 coll = COLLECT(exe, a.binaries, a.datas, name="AKENO", upx=False)
+
+# These files are independently selectable in Inno Setup and covered by the signed release ZIP.
+import runpy
+runpy.run_path(str(ROOT / "tools" / "build_components.py"))["build"](Path(coll.name))

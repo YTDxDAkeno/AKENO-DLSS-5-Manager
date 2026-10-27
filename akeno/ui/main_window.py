@@ -443,7 +443,6 @@ class MainWindow(QMainWindow):
         from akeno.ui.pages.doctor import DoctorPage
         from akeno.ui.pages.cleaner import CleanerPage
         from akeno.ui.pages.network import NetworkPage
-        from akeno.ui.pages.security import SecurityPage
 
         root = QWidget()
         root.setObjectName("Root")
@@ -470,11 +469,12 @@ class MainWindow(QMainWindow):
                 "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
                 "wallpapers": WallpapersPage, "dock": DockPage, "widgets": WidgetsPage, "themes": ThemesPage,
                 "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage, "home": HomePage,
-                "doctor": DoctorPage, "cleaner": CleanerPage, "network": NetworkPage,
-                "security": SecurityPage}
+                "doctor": DoctorPage, "cleaner": CleanerPage, "network": NetworkPage}
         from akeno.ui.system_ui import UnavailablePage
         for key, _, _ in NAV:
             try:
+                if key == "security":
+                    main[key] = lambda *_: self.security_component_page()
                 page = AdvancedPage(self.ctl, self, advanced) if key == "advanced" else main[key](self.ctl, self)
             except Exception as exc:
                 # the SYSTEM tools read results saved on this PC; one that fails must not keep the rest of AKENO
@@ -489,6 +489,31 @@ class MainWindow(QMainWindow):
             self.stack.addWidget(host)
         self.pages.update(advanced)
         self._apply_density()
+
+    def security_component_page(self):
+        from akeno.ui.components import ComponentUnavailablePage
+        status = self.s.components.status()
+        if status["state"] != "active":
+            return ComponentUnavailablePage(status)
+        try:
+            from akeno.ui.pages.security import SecurityPage
+            return SecurityPage(self.ctl, self)
+        except (ImportError, OSError) as exc:
+            return ComponentUnavailablePage({"detail": str(exc)})
+
+    def refresh_security_component(self):
+        old = self.hosts["security"]
+        index = self.stack.indexOf(old)
+        selected = self.stack.currentWidget() is old
+        page = self.security_component_page()
+        page.setObjectName("page_security")
+        host = PageHost(page)
+        self.stack.removeWidget(old)
+        self.stack.insertWidget(index, host)
+        self.pages["security"], self.hosts["security"] = page, host
+        old.deleteLater()
+        if selected:
+            self.stack.setCurrentWidget(host)
 
     def _auto_sync(self) -> None:
         page = getattr(self, "pages", {}).get("sync")

@@ -87,5 +87,8 @@ class SystemTools:
 
     @cached_property
     def security(self):
+        if not self.s.components.active():
+            from akeno.components.service import ComponentError
+            raise ComponentError("Security Center is disabled or unavailable.")
         from akeno.system.securitycenter.service import SecurityService
         return SecurityService(self.store)

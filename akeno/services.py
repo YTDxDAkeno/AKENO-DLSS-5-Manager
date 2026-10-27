@@ -62,6 +62,8 @@ class AppServices:
                  compat_db: CompatDatabase | None = None):
         self.db = db or Database(db_path())
         self.settings = Settings(self.db)
+        from akeno.components.service import ComponentService
+        self.components = ComponentService()
         self.hardware = hardware or HardwareService()
         self.library = GameLibrary(self.db)
         self.registry = registry or default_registry()
@@ -124,6 +126,9 @@ class AppServices:
         from akeno.system.tasks import Cancelled as TaskCancelled, TimedOut
         if not is_windows():
             return {"status": "not_checked", "engine": "", "threats": [], "detail": "no Windows antivirus"}
+        if not self.components.active():
+            return {"status": "not_checked", "engine": "", "threats": [],
+                    "detail": "Security Center is disabled or unavailable; release signatures and hashes remain required."}
         try:
             return self.system_tools.security.check_download(str(path), token, os.path.basename(str(path)))
         except TaskCancelled as exc:

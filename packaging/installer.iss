@@ -48,8 +48,19 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
+[Types]
+Name: "full"; Description: "AKENO Gaming Suite"
+Name: "core"; Description: "AKENO Core (without Security Center)"
+Name: "custom"; Description: "Custom"; Flags: iscustom
+
+[Components]
+Name: "core"; Description: "AKENO Core / Launcher, licensing, updates and bundled suite features"; Types: full core custom; Flags: fixed
+Name: "security_center"; Description: "Security Center (optional Windows Security / Defender integration)"; Types: full
+
 [Files]
-Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourceDir}\*"; DestDir: "{app}"; Excludes: "_internal\akeno\system\securitycenter\*,_internal\akeno\ui\pages\security.py,akeno-components.ini"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: core
+Source: "{#SourceDir}\_internal\akeno\system\securitycenter\*"; DestDir: "{app}\_internal\akeno\system\securitycenter"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: security_center
+Source: "{#SourceDir}\_internal\akeno\ui\pages\security.py"; DestDir: "{app}\_internal\akeno\ui\pages"; Flags: ignoreversion; Components: security_center
 Source: "..\README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\THIRD_PARTY_NOTICES.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
@@ -59,6 +70,15 @@ Name: "{group}\AKENO Gaming Suite"; Filename: "{app}\AKENO.exe"
 Name: "{group}\AKENO Gaming Suite (Safe mode)"; Filename: "{app}\AKENO.exe"; Parameters: "--safe-mode"; Comment: "Starts AKENO without the results the System tools saved on this PC (they stay stored)"
 Name: "{group}\{cm:UninstallProgram,AKENO Gaming Suite}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\AKENO Gaming Suite"; Filename: "{app}\AKENO.exe"; Tasks: desktopicon
+
+[INI]
+Filename: "{app}\akeno-components.ini"; Section: "components"; Key: "security_center"; String: "1"; Components: security_center
+Filename: "{app}\akeno-components.ini"; Section: "components"; Key: "security_center"; String: "0"; Check: not WizardIsComponentSelected('security_center')
+
+[InstallDelete]
+; Deselecting the optional component on an upgrade removes its old files too.
+Type: filesandordirs; Name: "{app}\_internal\akeno\system\securitycenter"; Check: not WizardIsComponentSelected('security_center')
+Type: files; Name: "{app}\_internal\akeno\ui\pages\security.py"; Check: not WizardIsComponentSelected('security_center')
 
 [Run]
 Filename: "{app}\AKENO.exe"; Description: "{cm:LaunchProgram,AKENO Gaming Suite}"; Flags: nowait postinstall skipifsilent

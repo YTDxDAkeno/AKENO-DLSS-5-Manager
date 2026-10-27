@@ -1,7 +1,7 @@
 # AKENO Network and modular installation — progress
 
 ## Current phase
-A: repository inspection and cloud development setup. Implementation is not complete.
+B/C: first optional Security Center package and component-aware update copy. Implementation is not complete.
 
 - Branch: `feature/akeno-network-modular`.
 - Base commit: `2069ff7c58d2c52473023ce759bdbfe863319713` (`claude/adoring-shannon-2d4qb4`). This integrates the 3.1.1 hotfix. `main` is only the initial README.
@@ -20,7 +20,13 @@ A: repository inspection and cloud development setup. Implementation is not comp
 - CI covers Linux Qt, SQLite/PostgreSQL server, Windows packaging and updater E2E. Pushes to a feature branch do not publish releases (publication requires a tag or explicit dispatch).
 
 ## Validation
-Dependencies are being installed from the pinned requirements. No passing suite or Windows/tunnel evidence claimed yet.
+Pinned client and backend dependencies installed in `.venv`. SQLite backend baseline: 146 passed. First 12 component tests passed (activation, settings-reset survival, missing/corrupt files, exact inventory, Core-only projection, absent-module Qt startup). Full client and updater integration runs are ongoing. Windows installer/tunnel checks are not executed.
+
+## First implementation checkpoint
+- Security Center is collected as separate source files rather than hidden inside the Core PYZ archive. Inno Setup offers Full/Core/custom selection. Build-generated inventory pins its exact file hashes and version.
+- Component activation lives in `components.sqlite3`, outside resettable settings. Settings exposes activation and honest installation states. Missing/disabled components do not fail updater health checks.
+- Core-only updates verify the full signed ZIP and original staged content before filtering the copy; selected files are verified again. Monolithic updates without a component inventory fail closed for Core-only installs.
+- Other modules are still bundled; separate module downloads, LAN Play and VPN are not claimed as implemented.
 
 ## Next steps
 1. Finish cloud installation, run baseline client and server suites and application smoke test.

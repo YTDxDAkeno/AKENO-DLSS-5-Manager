@@ -40,7 +40,7 @@ from pathlib import Path
 from akeno.updater import staging
 
 log = logging.getLogger(__name__)
-KEEP_ALWAYS = ("portable.ini", "AKENO.ini")
+KEEP_ALWAYS = ("portable.ini", "AKENO.ini", "akeno-components.ini")
 # the installer's uninstaller lives in the program folder; the portable package does not carry it
 KEEP_PATTERNS = ("unins*.exe", "unins*.dat", "unins*.msg")
 UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
@@ -414,6 +414,11 @@ def _run(plan, target, source, keep, journal, outcome) -> dict:
         content = staging.load(plan["content"]) if plan.get("content") else None
         if content is not None:
             staging.verify(source, content)
+            from akeno.components.service import ComponentError, selected_content
+            try:
+                content = selected_content(source, target, content)
+            except ComponentError as exc:
+                raise staging.StagingError(str(exc)) from exc
         else:                                  # a rollback to the kept previous version: copy it as it is
             content = {"files": {rel: {} for rel in staging.walk(source)}}
         need = sum(int(v.get("size") or 0) for v in content["files"].values()) + 64 * 2 ** 20
