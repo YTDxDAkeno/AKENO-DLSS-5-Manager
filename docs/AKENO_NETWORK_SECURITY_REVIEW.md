@@ -1,0 +1,27 @@
+# Network and modular-installation security review
+
+Status: development review of `feature/akeno-network-modular`; not a release/penetration-test certification.
+
+| Boundary | Implemented control | Remaining risk / required validation |
+|---|---|---|
+| Optional executable code | Fixed eight-file inventory, SHA-256 and version checks, external source collection, absent-component startup path | A local attacker who can replace Core can replace its inventory too. Inventory authentication comes from the existing signed whole release, not from an untrusted JSON download. Windows packaging/install evidence still needed. |
+| Downloads / updates | Existing Ed25519, SHA-256, signed content aggregate, bounded strict extraction, full staging verification before selection, copied-subset verification | No standalone unsigned module download is allowed. Core-only installs reject old monolithic update/rollback. Add same-version module install/removal transactions before offering download buttons. |
+| Module state | Separate SQLite activation state, exact physical-file checks, persisted installer selection | Only Security Center is actually separable. Other suite code remains bundled. Validate Windows in-place upgrades, interrupted install, locked/quarantined optional files and repairs. |
+| Norton / antivirus | No exclusion, disable command or evasion; optional component can be omitted; missing/changed files are not considered installed | No detection logs supplied. The main executable and installer are not Authenticode-signed. False positives, installer-level blocking and module-specific detection are different hypotheses. Modularity does not prove a fix for a blocked main installer. |
+| LAN invitations | Random 192-bit codes; only hashes stored; ten-minute expiry; rotation revokes old invite | API rate limits, authentication/license/device binding, invitation distribution and transport credentials are not integrated. Never expose the internal actor parameter as caller-controlled authority. |
+| Room membership | Owner controls, permanent per-room exclusions, serialized joins, distinct public keys and IP allocations, bounded capacity | No signed peer configuration/short-lived tunnel token, handshake or immediate data-plane revocation exists. Room tests are control-plane simulations only. |
+| Peer isolation | No adapter/routes/ports installed by the prototype | Before transport: default deny peer access, explicit allowed game ports, block SMB/RDP and local services, validate IPv4/IPv6/local-subnet collisions. WireGuard AllowedIPs alone does not implement application firewall policy. |
+| Discovery | Not implemented or enabled | Any future broadcast/multicast forwarding must be room-bound, protocol/port allowlisted, rate/size limited, and resistant to cross-room amplification. Explicit-IP game connections are the safer initial target. |
+| VPN profile import | Strict WireGuard allowlist, one peer, input bounds, keys/IPs/endpoints/MTU validation, no shell/subprocess execution | Parser validity is not endpoint trust or connectivity. OpenVPN scripts, plugins, hooks, included files, management endpoints and unchecked directives remain unsupported. |
+| VPN secrets | Windows DPAPI encrypted SQLite payload, no Linux plaintext fallback; profile text omitted from repr and error messages | Real Windows DPAPI, cross-user and corruption tests pending. No plaintext export to sync, diagnostics or support logs. Original imported source files remain the user's responsibility. Record deletion is not guaranteed secure physical erasure. |
+| Public relays/providers | None enabled, no fabricated servers/countries | VPN Gate terms, operator privacy/logging, profile validation, explicit consent and availability checks remain unreviewed. Never promise no-logs or free global availability. No commercial private API assumptions. |
+| Routing / DNS / privileged service | No changes or privileged service implemented | Requires authenticated local IPC, fixed operations, least privilege, signed adapters, transaction journal, DNS/IPv6 leak tests, network-change recovery and safe rollback. A kill switch must be explicitly enabled and independently validated. |
+| Production VPS | No API registration, deployment, firewall or Caddy change; prototype local SQLite only | Integrate authenticated APIs in isolation first. Do not turn the licensing VPS into a public exit or relay without explicit deployment approval and capacity/security review. |
+
+## Required release evidence
+
+1. Disposable Windows Full/Core/custom installs, component deselection on an upgrade, user-data retention, uninstall and repair; compile the actual Inno script.
+2. Authenticated full ZIP updates, Core-only filtering, missing/corrupt/locked optional files, invalid signatures/hashes, failed health check, interrupted switch and rollback. Confirm Core-only rollback refusal is explained to the user.
+3. DPAPI round-trip and wrong-user/tamper checks on Windows; secret-free metadata/logs/diagnostics; no profile/key sync.
+4. Only after implementing transport: two real Windows PCs, distinct NATs, direct P2P, own relay fallback, membership revocation while traffic is active, routing/DNS restoration, IPv4/IPv6 leaks, network change/standby and bounded game discovery.
+5. Actual named LAN game tests and real packet exchange separately from simulated control-plane tests. Do not mark any of these completed merely because a room allocated two IPs.
