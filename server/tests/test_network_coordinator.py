@@ -154,3 +154,53 @@ def test_the_coordinator_replies_with_a_valid_wireguard_response(world):
     prove(coordinator, member, A)                                       # consume() verifies the Noise response
     assert member.send_key is not None and coordinator.handle(member.keepalive(), A) == []
     assert wg.shape(member.keepalive()) == wg.TRANSPORT
+
+
+def test_aggregate_packet_budget_cannot_be_bypassed_by_rotating_source_addresses(world):
+    coordinator, grants, clock, wall = world
+    coordinator.GLOBAL_PACKETS_PER_SECOND=3
+    for i in range(3):
+        assert coordinator._allow(('192.0.2.'+str(i+1),40000+i),148)
+    assert not coordinator._allow(('192.0.2.99',50000),148)
+    clock[0]+=1
+    assert coordinator._allow(('192.0.2.99',50000),148)
+
+
+def test_source_and_global_byte_budgets_bound_relay_capacity(world):
+    coordinator=world[0]
+    coordinator.BYTES_PER_SECOND=500
+    coordinator.GLOBAL_BYTES_PER_SECOND=800
+    assert coordinator._allow(A,400)
+    assert not coordinator._allow(A,200)
+    # Failed per-source attempts still consume the global parsing budget conservatively.
+    assert coordinator._allow(B,200)
+    assert not coordinator._allow(C,32)
+
+
+def test_source_grant_and_endpoint_state_stays_bounded_under_churn(world):
+    coordinator, grants, clock, wall=world
+    coordinator.MAX_SOURCES=2
+    assert coordinator._allow(A,148) and coordinator._allow(B,148)
+    assert not coordinator._allow(C,148) and len(coordinator._rate)==2
+    coordinator.MAX_GRANTS=2
+    for _ in range(10):coordinator._grant(X25519PrivateKey.generate().public_key().public_bytes_raw())
+    assert len(coordinator._grants)<=2
+    coordinator.MAX_ENDPOINTS=1
+    a,b=Member(),Member()
+    grants[a.key]=grants[b.key]=Grant('room-1',wall[0]+45)
+    clock[0]+=2
+    prove(coordinator,a,A)
+    assert coordinator.handle(b.initiation(coordinator.responder.public),B)==[]
+    assert len(coordinator.endpoints)==1
+    metrics=coordinator.metrics()
+    assert metrics['members']==1
+    assert all('192.' not in str(value) and '198.' not in str(value) for value in metrics.values())
+
+
+def test_member_cannot_overwrite_another_members_live_wireguard_receiver_index(world):
+    coordinator=world[0]
+    a,b=two_members(world)
+    index=b'\x01\x23\x45\x67'
+    assert coordinator._learn('room-1',index,a.public)
+    assert not coordinator._learn('room-1',index,b.public)
+    assert coordinator._index('room-1',index)==a.public
