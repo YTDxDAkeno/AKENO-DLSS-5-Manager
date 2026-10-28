@@ -57,6 +57,12 @@ binds listeners explicitly and correlates exact payloads. It retains public nati
 never `wg dump/showconf` or private keys. Destination-drop counters were added to the actual exit firewall so
 negative tests prove the firewall dropped real packets rather than merely observing an unreachable service.
 
+LAN game selection also now reads the existing library's nested `exe_path`/`exe_candidates` rather than
+requiring an exact display title and root-level executable. Only existing reviewed basenames within the
+canonical installation directory are suggested; traversal and symlink escapes are rejected. A UI contract
+test verifies the selected library executable/profile reaches the helper without a manual file picker.
+This does not establish game compatibility or native Windows firewall enforcement.
+
 | Check | Current-instance result |
 |---|---|
 | Full backend, `cd server; /workspace/akeno-env/bin/python -m pytest -q` | 260 passed, 3 third-party deprecation warnings |
@@ -66,6 +72,7 @@ negative tests prove the firewall dropped real packets rather than merely observ
 | Isolated API readiness/auth/web | Six HTTP assertions passed before and after process restart |
 | Offscreen app smoke | 3.2.0 starts; 19/19 assets and all pages construct |
 | Copied-interpreter performance tests | Initial environment failure diagnosed; all 12 pass with scoped PYTHONHOME |
+| Library selection, network UI and translation group | 34 passed, including nested path and containment checks |
 | Full client regression | Still running when this draft was written; consult final progress entry before claiming a pass |
 
 Evidence in this machine: `/tmp/akeno-server-tests.log`, `/tmp/akeno-final-network-tests.log`,

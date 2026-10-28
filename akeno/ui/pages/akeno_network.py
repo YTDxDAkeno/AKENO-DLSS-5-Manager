@@ -629,7 +629,7 @@ class AkenoNetworkPage(QWidget):
         if self.session.get('state') != 'active':
             info(self, t('Allow a game…'), t('Start the LAN session first.'))
             return
-        from akeno.network.games import PROFILES
+        from akeno.network.games import PROFILES, installed_program
         names=[p.name for p in PROFILES.values()]
         name,ok=QInputDialog.getItem(self,t('Allow a game…'),t('Reviewed game port profile'),names,0,False)
         if not ok:
@@ -639,8 +639,7 @@ class AkenoNetworkPage(QWidget):
         library=getattr(services,'library',None)
         installed=library.games() if library else []
         # Reuse the existing library; the elevated backend still validates the exact executable and profile.
-        found=next((Path(g.install_dir)/exe for g in installed for exe in game.executables
-                    if g.name.casefold()==game.name.casefold() and (Path(g.install_dir)/exe).is_file()),None)
+        found=installed_program(game.id,installed)
         path=str(found) if found else QFileDialog.getOpenFileName(self,t('Choose the game program'),'',t('Programs (*.exe)'))[0]
         if path:
             from akeno.network.helper import allow_game

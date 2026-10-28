@@ -32,7 +32,8 @@ No unit, UI or lab result proves that a country VPN works on a customer's Window
   UDP queries are not evidence of automatic Windows LAN discovery. Do not enable the UI claim prematurely.
 - [ ] Verify network change, standby/resume, reboot, safe reconnect/backoff and routing/DNS restoration.
   Managed VPN currently stops on a lost handshake; this is not seamless automatic reconnection.
-- [ ] Complete existing game-library integration/automatic executable selection and validate each advertised game.
+- [ ] Validate each advertised game and extend library matching/profile coverage as needed. Reviewed-game
+  selection now reuses nested library executable paths with containment checks and a tested UI/helper contract.
   Only OpenTTD has a real game-protocol lab check here; Factorio/Terraria sessions are unverified.
 - [ ] Run the current Windows build/installer/update/rollback regression and record actual CI run/artifact links.
 - [ ] Test two physical Windows PCs behind different authorized ISP/NAT connections with captures and real games.

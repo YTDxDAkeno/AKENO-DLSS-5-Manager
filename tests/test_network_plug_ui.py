@@ -68,3 +68,25 @@ def test_module_off_prevents_catalog_request(qtbot,monkeypatch):
     widget=AutomaticVPN(parent);qtbot.addWidget(widget)
     monkeypatch.setattr(widget,'client',lambda:(_ for _ in ()).throw(AssertionError('must not call')))
     widget.refresh()
+
+
+def test_lan_allow_game_reuses_nested_library_executable_and_reviewed_profile(qtbot,monkeypatch,tmp_path):
+    from PySide6.QtWidgets import QWidget
+    import akeno.ui.pages.akeno_network as ui
+    import akeno.network.helper as helper
+    exe=tmp_path/'Factorio'/'bin'/'x64'/'factorio.exe'
+    exe.parent.mkdir(parents=True);exe.write_bytes(b'fixture only')
+    game=SimpleNamespace(name='Factorio (Steam)',install_dir=str(tmp_path/'Factorio'),exe_path=str(exe))
+    widget=QWidget();qtbot.addWidget(widget)
+    widget.session={'state':'active'}
+    widget.ctl=SimpleNamespace(s=SimpleNamespace(library=SimpleNamespace(games=lambda:[game])))
+    widget.room=lambda:'ab'*16
+    widget.say=lambda *args:None
+    widget.show_room=lambda:None
+    monkeypatch.setattr(ui.QInputDialog,'getItem',lambda *args:('Factorio',True))
+    monkeypatch.setattr(ui.QFileDialog,'getOpenFileName',lambda *args:(_ for _ in ()).throw(
+        AssertionError('Installed game must not require a manual executable picker')))
+    calls=[]
+    monkeypatch.setattr(helper,'allow_game',lambda *args:calls.append(args))
+    ui.AkenoNetworkPage.allow_game(widget)
+    assert calls==[('ab'*16,str(exe),'factorio')] and widget.game_allowed is True

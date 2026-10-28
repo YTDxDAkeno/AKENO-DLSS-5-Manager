@@ -65,6 +65,21 @@ The new handoff and production gate list explicitly retain native DNS observer, 
 discovery/driver/UAC/DPAPI, reconnect/standby, actual country exits, per-account operations
 review and two physical ISP-separated PCs as outstanding. No completed product claim.
 
+### Existing game-library selection
+
+Last verified remote before this update: `099983ee5cd82f34bac7c5f29c7888479bb3fb99`.
+The LAN game action now reuses recorded nested executable paths/candidates from the existing
+game library instead of requiring both an exact display title and a root-level executable.
+For example, Factorio (Steam) at `bin/x64/factorio.exe` is selected automatically after the
+user selects its reviewed port profile. No recursive scan, game launch or extra port opening
+occurs. Canonical containment, reviewed executable basenames, existing regular files and
+the elevated helper's independent validation remain mandatory. A symlink outside the recorded
+installation is rejected. Manual executable selection remains the fallback.
+
+The targeted library, UI and translation group passes **34 tests**, including a UI assertion
+that nested library selection avoids the file picker and submits only the reviewed profile.
+This verifies selection policy/wiring, not an actual Windows game session.
+
 ## Resume here
 
 - Branch: `codex/akeno-network-plug-and-play`.
