@@ -32,7 +32,7 @@ Lokal (Linux, Python 3.13, offscreen Qt) in dieser Arbeit:
 
 - Server: **175 passed** (inkl. neuer Tests: Status-Route fehlt ohne Aktivierung, Status mit Aktivierung, Heartbeat-Raumdaten, echter Desktop-Client gegen echten uvicorn-Server **ohne** LAN-API → `LanUnavailable` statt 404).
 - Client-Netzwerk/UI: `test_network_ui.py` (inkl. „Not Found“-Regression, Modul-Aus, Dienst-Aus, Besitzer/Mitglied-Ansicht, VPN-Standorte, Dashboard aus echtem Verbindungsergebnis, redigierter Export, Orb-Animation), `test_network_providers.py` (6), `test_network_modules.py` (3), `test_network_discovery.py` (13, inkl. echter UDP-Zustellung und Unicast-Antwort), i18n-Abdeckung.
-- Vollständige Client-Regression: Ergebnis siehe Abschnitt 4 / Fortschrittsdatei (wird nach Abschluss eingetragen).
+- Vollständige Client-Regression: **1326 passed, 19 skipped, 0 failed** (lokal, 24 min).
 
 Nicht in dieser Arbeit ausgeführt (bleiben aus früheren CI-Läufen belegt, siehe `AKENO_NETWORK_PROGRESS.md`):
 WireGuardNT auf Windows (40 Checks), LAN-Session auf Windows (26 Checks), NAT-Lab 37/37, OpenTTD über P2P/Relay,
@@ -40,9 +40,13 @@ Update-E2E 58/0, Upgrades 3.0.0/3.1.0 57/0, Repair 15/0 — alle auf Commit `588
 
 ## 4. Windows-CI
 
-`build.yml` läuft auf jedem Push dieses Branches; laufende Builds werden durch neuere Pushes abgebrochen. Ergebnis
-des letzten vollständigen Laufs auf dem Endstand: siehe `AKENO_NETWORK_RELEASE_PROGRESS.md` (Abschnitt „CI“).
-Ohne grünen Lauf auf dem finalen Commit ist der Kandidat **nicht** freigabefähig.
+**`build.yml` Lauf 310 (https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40630526117), Commit
+`edc02c6`, vollständig grün:** Linux-Tests, Lizenzserver (SQLite, PostgreSQL 16, Docker-Deployment), Upstream-
+Paketverträge, Windows-Unit/Integration/UI-Tests, Smoke-Test, PyInstaller, gepackte App startet, Desktop Studio,
+Portable-ZIP, **Inno-Installer 3.2.0**, Release-Manager-Werte, Prüfsummen; **Update-E2E 58/0**, **Upgrade vom
+veröffentlichten 3.0.0-Installer 57/0**, **vom 3.1.0-Installer 57/0**, **Repair 15/0**. Zusätzlich auf `f2f5d84`
+(gleicher Netzwerk-Code): `network-windows.yml` Lauf 23 (WireGuard/LAN-Session auf Windows) und `lan-lab.yml`
+Lauf 13 (NAT-Lab) grün. Lokale Regression: Client 1326 passed / 19 skipped / 0 failed, Server 175 passed.
 
 ## 5. Release-Kandidaten-Paket
 
@@ -103,8 +107,7 @@ Optionen und Kosten: `AKENO_VPN_PROVIDERS.md`.
 
 ## 11. Offene Release-Blocker
 
-1. **Grüner `build.yml`-Lauf auf dem finalen Commit** (Windows-Tests, Installer, Update-E2E, Upgrades 3.0.0/3.1.0,
-   Repair) — Status in der Fortschrittsdatei.
+1. ~~Grüner `build.yml`-Lauf~~ — erledigt (Lauf 310 auf `edc02c6`). Bei weiteren Commits erneut prüfen.
 2. **LAN-Dienst in Produktion nicht aktiviert** (bewusst): erfordert gesonderte Sicherheitsprüfung, Kapazitäts- und
    Missbrauchslimits, Monitoring, öffentliche UDP-Freigabe. Bis dahin zeigt 3.2.0 „noch nicht aktiv“ — das ist ein
    sicherer, ehrlicher Zustand und kein Blocker für 3.2.0 selbst.

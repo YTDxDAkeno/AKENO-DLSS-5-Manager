@@ -28,16 +28,21 @@ Final report: `docs/AKENO_NETWORK_RELEASE_READINESS.md` (written at the end; may
 ## Tests
 
 - Server (local): 175 passed.
-- Client network/UI/providers/modules/discovery: all passed locally. Full client suite: see "CI" below / next entry.
+- Client full suite (local): 1326 passed, 19 skipped, 0 failed.
 
 ## CI
 
-- `build.yml` runs on every push; earlier runs were cancelled by newer pushes. Waiting for a full run on the final
-  commit.
+**`build.yml` Lauf 310 (https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40630526117), Commit
+`edc02c6`, vollständig grün:** Linux-Tests, Lizenzserver (SQLite, PostgreSQL 16, Docker-Deployment), Upstream-
+Paketverträge, Windows-Unit/Integration/UI-Tests, Smoke-Test, PyInstaller, gepackte App startet, Desktop Studio,
+Portable-ZIP, **Inno-Installer 3.2.0**, Release-Manager-Werte, Prüfsummen; **Update-E2E 58/0**, **Upgrade vom
+veröffentlichten 3.0.0-Installer 57/0**, **vom 3.1.0-Installer 57/0**, **Repair 15/0**. Zusätzlich auf `f2f5d84`
+(gleicher Netzwerk-Code): `network-windows.yml` Lauf 23 (WireGuard/LAN-Session auf Windows) und `lan-lab.yml`
+Lauf 13 (NAT-Lab) grün. Lokale Regression: Client 1326 passed / 19 skipped / 0 failed, Server 175 passed.
 
 ## Next
 
-- Record the full client regression and the final `build.yml` result here and in the readiness report.
+- The 5-minute auto-checkpoint script stopped at its 2 h limit; commits since are manual after each step.
 - Possible follow-ups: Windows capture for discovery, AKENO exit servers (owner approval), two-PC test.
 
 ## "Not Found" — root cause
