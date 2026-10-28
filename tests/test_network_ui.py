@@ -220,11 +220,13 @@ def test_vpn_locations_only_own_profiles_are_connectable(page):
     page.profile_meta = [{'id': 'c' * 32, 'name': 'My box'}]
     page.render_locations()
     ids = [page.location_list.item(i).data(256) for i in range(page.location_list.count())]
-    assert ids[0] == 'own:' + 'c' * 32 and 'akeno:TR' in ids and 'vpngate' in ids
-    page.location_list.setCurrentRow(ids.index('akeno:TR'))
-    assert not page.connect_button.isEnabled() and 'No AKENO VPN server' in page.location_reason.text()
-    page.location_search.setText('germ')
-    assert [page.location_list.item(i).data(256) for i in range(page.location_list.count())] == ['akeno:DE']
+    # AKENO countries live in the one-click AKENO VPN card; the expert list holds own and third-party entries.
+    assert ids == ['own:' + 'c' * 32, 'vpngate']
+    page.location_list.setCurrentRow(ids.index('vpngate'))
+    assert not page.connect_button.isEnabled() and 'VPN Gate' in page.location_reason.text()
+    assert not page.automatic_vpn.tiles['TR'].available and not page.automatic_vpn.connect_button.isEnabled()
+    page.location_search.setText('box')
+    assert [page.location_list.item(i).data(256) for i in range(page.location_list.count())] == ['own:' + 'c' * 32]
 
 
 def test_vpn_dashboard_reflects_a_real_connection_result(page):

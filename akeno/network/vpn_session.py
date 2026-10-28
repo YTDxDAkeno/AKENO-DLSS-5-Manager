@@ -112,7 +112,8 @@ class ManagedVPNSession:
             result['lease_expires_at'] = claims['exp']
         if state == 'connected' and observation:
             result.update(exit_ipv4=observation['ipv4'], exit_ipv6=observation['ipv6'],
-                          routing_verified=True, dns_verified=True)
+                          routing_verified=True, dns_verified=True,
+                          connected_since=self.state.get('connected_since', self.clock()))
         if error:
             result['error'] = error     # only a fixed code from this module, never server/native exception text
         self.status.save(result)
@@ -227,7 +228,7 @@ class ManagedVPNSession:
             claims = self._renew(initial)
             self._status('verifying',claims=claims)
             observation = self._observe(claims,self.manager.name(ident))
-            self._write('running')
+            self._write('running',connected_since=self.clock())
             self._status('connected',claims=claims,observation=observation)
             had_connected=True
             renewed,observed = self.clock(),self.clock()

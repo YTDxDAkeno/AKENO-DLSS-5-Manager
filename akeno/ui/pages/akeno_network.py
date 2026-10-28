@@ -183,6 +183,23 @@ class AkenoNetworkPage(QWidget):
             w.setVisible(i == index)        # hidden tabs take no height inside the page's scroll area
         if self.tab_bar.currentIndex() != index:
             self.tab_bar.setCurrentIndex(index)
+        vpn = getattr(self, 'automatic_vpn', None)
+        # Opening the VPN tab asks the AKENO server once (read-only) which countries have a verified exit.
+        if index == 1 and vpn is not None and not vpn.loaded and self.modules.enabled('vpn') and \
+                getattr(self.window, 'license', None) is not None and WINDOWS:
+            vpn.refresh()
+
+    def show_managed_vpn(self, text, colour, country, ipv4):
+        """The dashboard's VPN card follows the one-click AKENO VPN while it is active."""
+        connected = colour == 'ok'
+        self.vpn_pill.set(text, colour)
+        self.tile_status.set(text)
+        self.vpn_dash.set_state(text, colour, t('Your internet traffic goes through {where}.').format(where=country)
+                                if connected else t('Your internet traffic uses your normal connection.'))
+        self.tile_location.set(country if connected else '—')
+        self.tile_exit.set(ipv4 if connected else '—')
+        self.tile_provider.set(t('AKENO server') if connected else '—')
+        self.tile_protocol.set('WireGuard' if connected else '—')
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -751,10 +768,13 @@ class AkenoNetworkPage(QWidget):
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(16)
         from akeno.ui.network_vpn import AutomaticVPN
-        self.automatic_vpn=AutomaticVPN(self)
+        self.automatic_vpn = AutomaticVPN(self)
         content.addWidget(self.automatic_vpn)
-        content.addWidget(row)
-        content.addWidget(self._vpngate_card())
+        # Own WireGuard profiles stay available for experts, below the one-click AKENO VPN and closed by default.
+        self.expert_vpn = Details(t('Expert: your own WireGuard profiles and providers'))
+        self.expert_vpn.body.addWidget(row)
+        self.expert_vpn.body.addWidget(self._vpngate_card())
+        content.addWidget(self.expert_vpn)
         lay.addWidget(self.vpn_content)
         self.vpn_off = self._off_card('vpn', t('VPN'), 'shield', t(
             'Send your internet traffic through a WireGuard server you choose, for example your own. Needs the '
@@ -792,6 +812,8 @@ class AkenoNetworkPage(QWidget):
         self.location_list.blockSignals(True)
         self.location_list.clear()
         self.location_items = {}
+        # AKENO countries are chosen in the AKENO VPN card above; this expert list holds own and third-party entries.
+        items = [loc for loc in items if loc.kind != providers.AKENO]
         for loc in items:
             name = loc.name if loc.kind == providers.OWN else (country_name(loc.country) or loc.name)
             source = t(providers.KIND_NAMES[loc.kind])
