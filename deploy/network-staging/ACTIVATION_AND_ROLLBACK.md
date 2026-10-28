@@ -26,7 +26,7 @@ sudo docker image inspect akeno-network-staging:588b21c --format '{{.Id}}'
 sudo docker image inspect postgres:16-alpine --format '{{json .RepoDigests}}'
 ```
 
-Der Image-Tag wird hier nur vorbereitet; der Build ist nicht erfolgt. Vor Einsatz immutable Image-ID/Digest dokumentieren und Image/Paketversionen prüfen. Der aktuell lokal vorhandene PostgreSQL-Digest ist in der Bestandsaufnahme dokumentiert; nicht unbeaufsichtigt ein anderes `postgres:16-alpine` nachladen. Das vorhandene PostgreSQL-16-Alpine verwendet UID/GID 70; `prepare-secrets.py` baut darauf auf. Bei Imagewechsel die UID erneut prüfen.
+Der Image-Tag wird hier nur vorbereitet; der Build ist nicht erfolgt. Vor Einsatz immutable Image-ID/Digest dokumentieren und Image/Paketversionen prüfen. Der aktuell lokal vorhandene PostgreSQL-Digest ist in Compose fest gepinnt; `pull_policy: never` verhindert unbeaufsichtigtes Nachladen. Fehlt dieses Image auf einem anderen Host, zuerst separat die genehmigte identische Version bereitstellen. Das vorhandene PostgreSQL-16-Alpine verwendet UID/GID 70; `prepare-secrets.py` baut darauf auf. Bei Imagewechsel die UID erneut prüfen.
 
 ## C. Lokales Staging initialisieren — erst nach Freigabe
 

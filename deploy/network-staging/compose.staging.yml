@@ -66,7 +66,8 @@ services:
     logging: *logs
 
   staging-db:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:f4610795587492cd4fb887c2dc3de301b813278bb6f616992061141b5f15ac36
+    pull_policy: never
     profiles: [approved-staging]
     restart: "no"
     read_only: true

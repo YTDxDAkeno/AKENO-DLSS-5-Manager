@@ -27,3 +27,14 @@ The coordinator uses UDP 3478; it is not an anonymous STUN/TURN or Internet exit
 - Added manual activation, source-IP/global UDP budget review, monitoring and rollback procedures.
 - Additional Internet VPN exits remain a separate future architecture; no server purchased/started or third-party VPN connected.
 - Both real-Windows-PC/ISP-NAT test and actual staging deployment remain pending explicit approval.
+
+## Final verification
+
+- All 7 pre-existing container IDs/images/start times/restart counters unchanged.
+- All 19 production database tables have identical aggregate contents before/after.
+- Production .env/Compose/Caddy/backup-script hashes and all checked firewall rules unchanged.
+- Production HTTPS/API health and readiness remain HTTP 200; release public key unchanged.
+- No staging containers/networks/volumes/runtime secrets created; no staging DNS/proxy activation.
+- Pinned PostgreSQL to the locally verified official digest; app image build/boot remains approval-gated.
+- All 7 existing workflows reviewed; branch pushes run CI, no VPS deployment path was invoked.
+- Last confirmed remote checkpoint before this final update: `71a69ded0cd2049cc2ffcd91b10efcb90bade358`.

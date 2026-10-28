@@ -4,7 +4,7 @@ Stand: **28.10.2026, Europe/Berlin**. Ergebnis: **Vorbereitung fertig; kein Stag
 
 ## 1. Quellen und Branch
 
-Untersucht: `claude/inspiring-gauss-i8vjdr`, festgehaltener Commit **`588b21ca64a78f13d937a89abb58d5289b34f7c5`**, Tree `0aa0d19ea28ad2728ba6e613fbf757928a3d507a`. Alle fünf verlangten Dokumente/Compose-Dateien gelesen, dazu tatsächliche Server-/Client-Implementierung. 110 gelesene Dateien entsprechen exakt den Git-Blob-Hashes (`SOURCE_IDENTITY.json`). Kein AGENTS.md im untersuchten Repository-Baum gefunden.
+Untersucht: `claude/inspiring-gauss-i8vjdr`, festgehaltener Commit **`588b21ca64a78f13d937a89abb58d5289b34f7c5`**, Tree `0aa0d19ea28ad2728ba6e613fbf757928a3d507a`. Alle fünf verlangten Dokumente/Compose-Dateien gelesen, dazu tatsächliche Server-/Client-Implementierung. 116 gelesene Dateien entsprechen exakt den Git-Blob-Hashes (`SOURCE_IDENTITY.json`). Kein AGENTS.md im untersuchten Repository-Baum gefunden.
 
 Eigener Vorbereitungsbranch: **`codex/akeno-network-staging-20261028`**. Checkpoints wurden über die GitHub-API geschrieben und der Remote-Ref jeweils zurückgelesen. Kein Merge, Tag, Release, Pull Request oder Deployment ausgelöst. Branch-Pushes können die vorhandene Test-CI starten; es wurde kein Workflow mit Veröffentlichungs-/Deploymentparametern angefordert. Letzten bestätigten Commit siehe `GITHUB_CHECKPOINT.json` im lokalen Übergabepaket und Branchhistorie. `PROGRESS.md` enthält den Fortschritt.
 
@@ -101,7 +101,7 @@ Die gesamte Relay-Produktionshärtung bleibt offen: verschiedene In-Memory-Tabel
 ## 6. Durchgeführte Prüfungen
 
 - Bestehende Dienste, Ressourcen, Ports, Firewallpfade, Docker-Netze, Backupmetadaten, PostgreSQL und HTTPS nur lesend untersucht.
-- 110 Quelldateien gegen exakte Git-Blob-Identitäten geprüft.
+- 116 Quelldateien gegen exakte Git-Blob-Identitäten geprüft.
 - **26 Netzwerk-Backendtests bestanden**: echte kryptografische Handshakes, authentifizierte Raum-/Lizenz-/Gerätebindung, falsche Autorität, Widerruf, Lease, Relaygrenzen. Temporärer Testcontainer, kein Netzwerk, keine produktiven Mounts/DBs/Keys, keine echten E-Mails.
 - **6 Vorbereitungstests bestanden**: Origin-/Rollen-/Umgebungs-/DSN-Abbruch, Secret-Dateiverarbeitung ohne Ausgabe, synthetische Standardnutzer mit Argon2id und befristeten Lizenzen, Verweigerung eines erneuten Seeds ohne Accountänderung.
 - Compose syntaktisch validiert und `check-preparation.py` erfolgreich. Öffentlicher Override verweigert fehlende explizite IPv4 erwartungsgemäß; mit explizitem Wert ist die Konfiguration renderbar. Keine Ports geöffnet.
@@ -126,3 +126,13 @@ Dateien:
 - `VPS_INVENTORY.json`, `SOURCE_IDENTITY.json`, Testprotokolle und `FINAL_READONLY_VERIFICATION.json`: tatsächliche Nachweise.
 
 **Vor Aktivierung fehlen deine ausdrückliche Freigabe, die beiden öffentlichen Tester-IP-Adressen und ein Testzeitraum.** Danach müssen eigene Testkeys erzeugt/exportiert und in einen gesonderten Windows-Build integriert werden. Es gibt absichtlich noch keine vorgetäuschten öffentlichen Testkeys, keine produktiven Testkonten, keinen öffentlich erreichbaren Relay-/VPN-Dienst und kein automatisch gestartetes Deployment.
+
+## 8. Abschließender Erhaltungsnachweis
+
+`FINAL_READONLY_VERIFICATION.json` bestätigt: **alle sieben vorhandenen Container** mit identischer ID, Image, Startzeit und Restart-Zähler; **alle 19 Produktions-Tabellen** inhaltlich identisch; die vier geprüften produktiven Konfigurationsdateien samt .env unverändert; UFW-, IPv4-/IPv6-iptables- und DOCKER-USER-Regeln identisch. Keine Staging-Container, -Netze oder -Volumes und kein Laufzeit-.env/Secret-Verzeichnis angelegt. Produktive HTTPS-Seiten und API-Health/Ready liefern weiterhin HTTP 200. Öffentlicher Release-Key unverändert.
+
+Die vorbereitete PostgreSQL-Konfiguration ist auf den lokal vorhandenen offiziellen Digest `postgres:16-alpine@sha256:f4610795587492cd4fb887c2dc3de301b813278bb6f616992061141b5f15ac36` festgelegt und lädt keine andere Version automatisch nach. Das App-Image muss nach einer später genehmigten Erstellung ebenfalls mit seiner Image-ID/Digest festgehalten werden.
+
+Detaillierte Hostinventur und Erhaltungsnachweise bleiben im lokalen Übergabepaket; auf GitHub liegen die überprüfbaren Vorlagen, Tests, öffentliche Source-Identitäten und Dokumentation. Private Betriebsdateien oder Datenbankinhalte wurden nicht hochgeladen.
+
+Die sieben vorhandenen GitHub-Workflows wurden gelesen: Branch-Pushes starten CI auf Runnern, keinen VPS-Deploy. Veröffentlichung/Draft-Erstellung erfordern Tags bzw. ausdrücklich gesetzte manuelle Workflow-Eingaben; solche Ereignisse wurden nicht ausgelöst. Keine Workflow-Datei wurde geändert.

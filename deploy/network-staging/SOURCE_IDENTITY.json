@@ -9,6 +9,48 @@
       "exact": true
     },
     {
+      "path": ".github/workflows/components-windows.yml",
+      "git_blob_sha": "98f2c8092521fe211938db8f0bd820bb3685794f",
+      "local_blob_sha": "98f2c8092521fe211938db8f0bd820bb3685794f",
+      "sha256": "f891dadba8eff79f9cb2f94d0eabd6ae1e1f634ced155e3731719138b9f5f53f",
+      "exact": true
+    },
+    {
+      "path": ".github/workflows/lan-lab.yml",
+      "git_blob_sha": "c0fe425d2eb5e95292fc3fc1866e4c8b757a949f",
+      "local_blob_sha": "c0fe425d2eb5e95292fc3fc1866e4c8b757a949f",
+      "sha256": "3aef302046cfe3820d2f178a2bee25e65d93b8d7a6ddbf6be599a2f906f2b390",
+      "exact": true
+    },
+    {
+      "path": ".github/workflows/network-windows.yml",
+      "git_blob_sha": "e8dfcdca57f9c1acf35db98d0c55980f4345ac45",
+      "local_blob_sha": "e8dfcdca57f9c1acf35db98d0c55980f4345ac45",
+      "sha256": "2d52b1469ab8a852ffbe6c8dabb6f843666091e03dbc0af4c6453485a5d3afba",
+      "exact": true
+    },
+    {
+      "path": ".github/workflows/nr-diagnostic.yml",
+      "git_blob_sha": "a43b114db5cefeaa2951940ea97b783036ffb175",
+      "local_blob_sha": "a43b114db5cefeaa2951940ea97b783036ffb175",
+      "sha256": "797ecd75761b8470d7e9fba8485c8ca1ff85ac4482d53f9af80b8dc626cf2e58",
+      "exact": true
+    },
+    {
+      "path": ".github/workflows/production-check.yml",
+      "git_blob_sha": "498b715338288fcfa982da7ea7ab78b2dbade238",
+      "local_blob_sha": "498b715338288fcfa982da7ea7ab78b2dbade238",
+      "sha256": "3786253ea88d5b8c62057e655288e6854fcce302d9f9bc24d9ce7e575b3ff3ba",
+      "exact": true
+    },
+    {
+      "path": ".github/workflows/vpngate-catalog.yml",
+      "git_blob_sha": "f6cc724f72163511eed02426815f9a6a153799d0",
+      "local_blob_sha": "f6cc724f72163511eed02426815f9a6a153799d0",
+      "sha256": "a647281707e3dc778cad557f286f354cad3ca8b53256f2c43f156f0b97d59ac4",
+      "exact": true
+    },
+    {
       "path": "akeno/__init__.py",
       "git_blob_sha": "6e44fa33bfc92a5837e5e3fa29421f9d46e1a4f7",
       "local_blob_sha": "6e44fa33bfc92a5837e5e3fa29421f9d46e1a4f7",
