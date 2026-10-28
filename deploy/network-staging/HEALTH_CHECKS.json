@@ -1,0 +1,28 @@
+{
+  "at_berlin": "2026-10-28T03:52:32.078602+01:00",
+  "project": "akeno-network-staging",
+  "containers": [
+    "akeno-network-staging-staging-admin-1|Up 8 minutes (healthy)|127.0.0.1:18512->8000/tcp",
+    "akeno-network-staging-staging-web-1|Up 8 minutes (healthy)|127.0.0.1:18511->8000/tcp",
+    "akeno-network-staging-staging-api-1|Up 2 minutes (healthy)|127.0.0.1:3478->3478/udp, 127.0.0.1:18510->8000/tcp",
+    "akeno-network-staging-staging-db-1|Up 9 minutes (healthy)|5432/tcp"
+  ],
+  "docker_query_ok": true,
+  "health": {
+    "http": 200,
+    "result": {
+      "status": "ok",
+      "time": "2026-10-28T02:52:32.179825+00:00"
+    }
+  },
+  "ready": {
+    "http": 200,
+    "result": {
+      "status": "ready",
+      "checks": {
+        "database": "ok",
+        "signing_key": "ok"
+      }
+    }
+  }
+}

@@ -23,3 +23,7 @@ Docker verwaltet später ausschließlich eigene Staging-Bridge-/Loopback-NAT-Reg
 - Raum erstellen/beitreten, authentifizierte Heartbeats und Ablehnung fremder Geräte/Actor-Spoofing erfolgreich.
 - Ein Testfehler beim Verändern des letzten Base64-Zeichens wurde erkannt: nicht kanonische letzte Zeichen können identische Signaturbytes darstellen. Test geändert auf tatsächliches Bitflip eines dekodierten Signaturbytes, ohne Anwendungsprüfung zu ändern.
 - Der Lauf brach am fehlerhaften Test ab; nur API angehalten, genau der zugehörige Staging-Smoke-Raum bereinigt, Schlüssel/Konten/Lizenzen erhalten. Erneuter vollständiger UDP-/Client-Lauf folgt. Kein produktiver Zugriff des Live-Tests.
+
+## Live-Smoke bestanden
+
+48/48 Prüfungen erfolgreich, inklusive 64 echten Ende-zu-Ende-verschlüsselten 1.200-Byte-Roundtrips über den laufenden lokalen Koordinator/Relay. Sicherheitsprüfungen unverändert; Signaturmanipulation verfälscht jetzt tatsächlich ein Signaturbyte. Testräume gelöscht, Testgeräte widerrufen, alle Testsessions beendet. Vier Staging-Container gesund; sieben vorhandene Container und alle 19 Produktionstabellen unverändert. UFW/DOCKER-USER und alle bisherigen Filterregeln erhalten; Docker ergänzte nur eigene private Staging-Netzregeln. Öffentliche Portverbindungen auf die TCP-Testports scheitern. Kein externer Scan oder echter Windows-/ISP-NAT-Test behauptet.
