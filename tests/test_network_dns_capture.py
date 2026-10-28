@@ -151,3 +151,31 @@ def test_unavailable_drop_events_fail_closed_as_capture_errors(tmp_path):
         def proves(self,flows,start):raise EventsUnavailable('Windows does not record firewall drop events.')
     monitor,_=monitor_with(tmp_path,False,Off())
     with pytest.raises(CaptureError,match='does not record'):monitor.finish()
+
+
+def positive_monitor(tmp_path,record):
+    query=question()
+    monitor=DNSCapture.__new__(DNSCapture)
+    monitor.directory=tmp_path;monitor.etl=tmp_path/'capture.etl';monitor._stop=lambda:None
+    monitor._call=lambda *args:None;monitor.pending=[]
+    monitor.positive=[(query,('10.203.78.2',43001),('10.203.78.1',53))]
+    (tmp_path/'drops.pcapng').write_bytes(capture(('10.0.0.9',1,'10.0.0.8',2,17),b'x'*12))
+    (tmp_path/'all.pcapng').write_bytes(record(query))
+    return monitor
+
+
+def test_query_recorded_on_the_tunnel_adapter_is_a_valid_positive_control(tmp_path):
+    flow=('10.203.78.2',43001,'10.203.78.1',53,17)
+    assert positive_monitor(tmp_path,lambda q:capture(flow,q,framing=b'')).finish()==0
+
+
+def test_query_seen_on_an_ethernet_link_is_not_a_positive_control(tmp_path):
+    flow=('10.203.78.2',43001,'10.203.78.1',53,17)
+    with pytest.raises(CaptureError,match='positive DNS reply'):
+        positive_monitor(tmp_path,lambda q:capture(flow,q)).finish()
+
+
+def test_a_different_query_on_the_tunnel_is_not_a_positive_control(tmp_path):
+    flow=('10.203.78.2',43001,'10.203.78.1',53,17)
+    with pytest.raises(CaptureError,match='positive DNS reply'):
+        positive_monitor(tmp_path,lambda q:capture(flow,question(),framing=b'')).finish()

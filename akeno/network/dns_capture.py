@@ -42,7 +42,9 @@ def _bare_ip(packet):
     return False
 
 
-def packets(raw, stats=None):
+def packets(raw, stats=None, layer3=None):
+    """Yield (flow, payload) of every TCP/UDP packet. ``layer3`` (a list) collects the flows recorded without a link
+    header (a layer-3 adapter such as WireGuardNT), i.e. packets seen on the tunnel rather than on an Ethernet link."""
     if len(raw)>16*1024*1024:raise CaptureError('DNS capture exceeded its bound.')
     if raw[:4]!=b'\x0a\x0d\x0d\x0a':raise CaptureError('Missing capture section header.')
     offset,endian,interfaces=0,'<',[]
@@ -65,11 +67,12 @@ def packets(raw, stats=None):
         if len(block)<20:raise CaptureError('Invalid packet record.')
         iface,_,_,captured,original=struct.unpack_from(endian+'IIIII',block)
         if iface>=len(interfaces) or captured>len(block)-20 or captured>original:raise CaptureError('Invalid packet length.')
-        packet=block[20:20+captured];link=interfaces[iface]
+        packet=block[20:20+captured];link=interfaces[iface];bare=link in (101,228,229)
         if link==1:
             if len(packet)>=14 and packet[12:14] in (b'\x08\x00',b'\x86\xdd'):
                 packet=packet[14:]
             elif _bare_ip(packet):
+                bare=True
                 if stats is not None:stats['bare_ip']=stats.get('bare_ip',0)+1
             else:
                 # Metadata only (EtherType values), never addresses or payload.
@@ -90,7 +93,9 @@ def packets(raw, stats=None):
         if proto not in (6,17) or len(body)<8:continue
         sport,dport=struct.unpack_from('!HH',body)
         payload=body[8:] if proto==17 else body[(body[12]>>4)*4:] if len(body)>=20 else b''
-        yield (str(ipaddress.ip_address(source)),sport,str(ipaddress.ip_address(target)),dport,proto),payload
+        flow=(str(ipaddress.ip_address(source)),sport,str(ipaddress.ip_address(target)),dport,proto)
+        if bare and layer3 is not None:layer3.append((flow,payload))
+        yield flow,payload
 
 
 class DNSCapture:
@@ -148,12 +153,16 @@ class DNSCapture:
         self._call('etl2pcap',self.etl,'--drop-only','--out',drops_file)
         stats={}
         drop_stats={}
-        observed=list(packets(all_file.read_bytes(),stats))
+        tunnel_records=[]
+        observed=list(packets(all_file.read_bytes(),stats,tunnel_records))
         dropped_flows=[flow for flow,_ in packets(drops_file.read_bytes(),drop_stats)];dropped=set(dropped_flows)
         if not self.positive:raise CaptureError('DNS capture lacks a positive control.')
         from akeno.network.dns_probe import valid_reply
-        # Each resolver is asked at least twice (before and after the denial probes); one captured reply per
-        # resolver proves that the capture recorded the tunnel while the probes ran.
+        # Each resolver is asked at least twice (before and after the denial probes). The socket already validated
+        # each reply; here one capture record of a probe per resolver proves that Packet Monitor recorded the tunnel
+        # while the denial probes ran: the reply, or the byte-identical query on the layer-3 tunnel adapter (Windows
+        # does not always hand WireGuardNT's inbound packets to Packet Monitor). A query seen on an Ethernet link
+        # never counts: there it would be a DNS lookup outside the tunnel.
         resolvers={}
         for query,source,target in self.positive:
             resolvers.setdefault(target,[]).append((query,source))
@@ -164,8 +173,15 @@ class DNSCapture:
                 any_local=ipaddress.ip_address(source[0]).is_unspecified
                 return (item[0],item[1],item[3],item[4])==(target[0],target[1],source[1],17) and \
                     (any_local or item[2]==source[0])
-            if not any(matches(item,source) and valid_reply(query,payload)
-                       for query,source in probes for item,payload in observed):
+            def sent(item,source):
+                any_local=ipaddress.ip_address(source[0]).is_unspecified
+                return (item[1],item[2],item[3],item[4])==(source[1],target[0],target[1],17) and \
+                    (any_local or item[0]==source[0])
+            replied=any(matches(item,source) and valid_reply(query,payload)
+                        for query,source in probes for item,payload in observed)
+            queried=any(sent(item,source) and payload==query
+                        for query,source in probes for item,payload in tunnel_records)
+            if not (replied or queried):
                 query,source=probes[-1]
                 any_local=ipaddress.ip_address(source[0]).is_unspecified
                 # Structural metadata only: no addresses, names or payload bytes leave this function.
