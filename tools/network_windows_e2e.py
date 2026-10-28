@@ -272,30 +272,35 @@ def full_tunnel(store, manager, backend, journal, wgpeer, check, info, evidence,
                   'IPv4 and IPv6 default routes on the tunnel adapter', defaults)
             tunnel_dns = {d for d in dns() if d[0] == name}
             check(any('10.203.78.1' in d[2] for d in tunnel_dns), 'tunnel DNS server configured', sorted(tunnel_dns))
-            # Leak probes: these destinations are on the Internet. They must arrive inside the tunnel (at the
-            # loopback peer), not on the physical adapter.
-            probes = [('1.1.1.1', socket.AF_INET), ('2606:4700:4700::1111', socket.AF_INET6)]
+            # Leak probes: Internet destinations must arrive inside the tunnel (at the loopback peer). Port 9 is
+            # used because WireGuard for Windows' firewall blocks DNS (port 53) to any non-tunnel resolver.
+            query = b'\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01'
+            probes = [('1.1.1.1', socket.AF_INET, 9), ('2606:4700:4700::1111', socket.AF_INET6, 9),
+                      ('1.1.1.1', socket.AF_INET, 53)]
             sent6 = True
-            for address, family in probes:
+            for address, family, port in probes:
                 try:
                     with socket.socket(family, socket.SOCK_DGRAM) as s:
-                        s.sendto(b'\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01',
-                                 (address, 53))
+                        s.sendto(query, (address, port))
                 except OSError as exc:
                     if family == socket.AF_INET6:
                         sent6 = False
                         info('IPv6 probe could not be sent', type(exc).__name__)
+                    elif port == 53:
+                        info('DNS to a foreign resolver refused by the system', type(exc).__name__)
             resolver = threading.Thread(target=lambda: _resolve('akeno-leak-test.example'), daemon=True)
             resolver.start()
             resolver.join(6)
             time.sleep(1.5)
             seen = peer.observed_snapshot()
             evidence['tunnel_observed'] = seen[:50]
-            check(any(o['destination'] == '1.1.1.1' and o['port'] == 53 for o in seen),
+            check(any(o['destination'] == '1.1.1.1' and o['port'] == 9 for o in seen),
                   'IPv4 Internet packet went through the tunnel, not the physical adapter')
             if sent6:
-                check(any(o['destination'] == '2606:4700:4700::1111' for o in seen),
+                check(any(o['destination'] == '2606:4700:4700::1111' and o['port'] == 9 for o in seen),
                       'IPv6 Internet packet went through the tunnel, not the physical adapter')
+            check(not any(o['destination'] == '1.1.1.1' and o['port'] == 53 for o in seen),
+                  'DNS to a foreign resolver is not delivered through the tunnel (WireGuard firewall DNS restriction)')
             check(any(o['destination'] == '10.203.78.1' and o['port'] == 53 for o in seen),
                   'system DNS lookups were sent to the tunnel DNS server')
             check(not _tcp_reachable('140.82.112.3', 443), 'no direct Internet connection while the full tunnel is up')

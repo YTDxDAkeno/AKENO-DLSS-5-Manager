@@ -73,19 +73,19 @@ def kernel_wireguard() -> bool:
 class NsWireGuard:
     """PathController backend for one lab PC: the real ``wg`` tool against the real interface."""
 
-    def __init__(self, ns):
-        self.ns = ns
+    def __init__(self, ns, interface):
+        self.ns, self.interface = ns, interface
 
     def set_peer(self, key, endpoint, virtual_ip):
-        sh('wg', 'set', 'wg0', 'peer', key, 'endpoint', f'{endpoint[0]}:{endpoint[1]}', 'allowed-ips',
+        sh('wg', 'set', self.interface, 'peer', key, 'endpoint', f'{endpoint[0]}:{endpoint[1]}', 'allowed-ips',
            f'{virtual_ip}/32', 'persistent-keepalive', 25, ns=self.ns)
 
     def remove_peer(self, key):
-        sh('wg', 'set', 'wg0', 'peer', key, 'remove', ns=self.ns)
+        sh('wg', 'set', self.interface, 'peer', key, 'remove', ns=self.ns)
 
     def peers(self):
         out = {}
-        for line in sh('wg', 'show', 'wg0', 'dump', ns=self.ns).splitlines()[1:]:
+        for line in sh('wg', 'show', self.interface, 'dump', ns=self.ns).splitlines()[1:]:
             f = line.split('\t')
             endpoint = None
             if f[2] != '(none)':
@@ -99,6 +99,8 @@ class Lab:
     def __init__(self, symmetric_b=False):
         tag = uuid.uuid4().hex[:5]
         self.ns = {k: f'akl{tag}-{k}' for k in ('inet', 'nata', 'natb', 'pca', 'pcb')}
+        # wireguard-go's control socket lives in /var/run/wireguard, which all namespaces share: unique names.
+        self.wg = {side: f'akw{tag}{side}' for side in 'ab'}
         self.symmetric_b = symmetric_b
         self.procs, self.threads, self.stop = [], [], threading.Event()
         self.kernel = kernel_wireguard()
@@ -148,6 +150,11 @@ class Lab:
         sh('iptables', '-F', 'FORWARD', ns=router)
         sh('iptables', '-A', 'FORWARD', '-i', f'l{side}n', '-j', 'ACCEPT', ns=router)
         sh('iptables', '-A', 'FORWARD', '-m', 'conntrack', '--ctstate', 'ESTABLISHED,RELATED', '-j', 'ACCEPT', ns=router)
+        # Like a home router, drop unsolicited traffic to the router itself. (Accepting it would confirm a conntrack
+        # entry that collides with the hole-punching mapping and makes netfilter pick another source port.)
+        sh('iptables', '-F', 'INPUT', ns=router)
+        sh('iptables', '-A', 'INPUT', '-i', f'w{side}n', '-m', 'conntrack', '--ctstate', 'NEW,INVALID', '-j', 'DROP',
+           ns=router)
 
     def coordinator_up(self):
         self.coordinator_key = X25519PrivateKey.generate()
@@ -156,16 +163,16 @@ class Lab:
         self.coordinator.start()
 
     def member_up(self, side, virtual_ip):
-        pc = self.ns['pc' + side]
+        pc, wg = self.ns['pc' + side], self.wg[side]
         if self.kernel:
-            sh('ip', 'link', 'add', 'wg0', 'type', 'wireguard', ns=pc)
+            sh('ip', 'link', 'add', wg, 'type', 'wireguard', ns=pc)
         else:
             env = dict(os.environ, WG_PROCESS_FOREGROUND='1')
             env.pop('WG_TUN_FD', None)
-            self.procs.append(subprocess.Popen(['ip', 'netns', 'exec', pc, 'wireguard-go', '-f', 'wg0'], env=env,
+            self.procs.append(subprocess.Popen(['ip', 'netns', 'exec', pc, 'wireguard-go', '-f', wg], env=env,
                                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
             deadline = time.monotonic() + 10
-            while time.monotonic() < deadline and subprocess.run(['ip', 'netns', 'exec', pc, 'wg', 'show', 'wg0'],
+            while time.monotonic() < deadline and subprocess.run(['ip', 'netns', 'exec', pc, 'wg', 'show', wg],
                                                                  capture_output=True).returncode:
                 time.sleep(0.1)
         private = X25519PrivateKey.generate()
@@ -179,12 +186,12 @@ class Lab:
             f.write(base64.b64encode(raw).decode())
         try:
             coord_public = base64.b64encode(self.coordinator.responder.public).decode()
-            sh('wg', 'set', 'wg0', 'private-key', f.name, 'listen-port', 51820, 'peer', coord_public, 'endpoint',
+            sh('wg', 'set', wg, 'private-key', f.name, 'listen-port', 51820, 'peer', coord_public, 'endpoint',
                f'{COORD[0]}:{COORD[1]}', 'allowed-ips', '10.203.0.1/32', 'persistent-keepalive', 25, ns=pc)
         finally:
             os.unlink(f.name)
-        sh('ip', 'address', 'add', f'{virtual_ip}/24', 'dev', 'wg0', ns=pc)
-        sh('ip', 'link', 'set', 'wg0', 'mtu', 1380, 'up', ns=pc)
+        sh('ip', 'address', 'add', f'{virtual_ip}/24', 'dev', wg, ns=pc)
+        sh('ip', 'link', 'set', wg, 'mtu', 1380, 'up', ns=pc)
         self.keys[side] = {'public': public, 'ip': virtual_ip}
         self.grants[public] = Grant(ROOM, time.time() + 3600)
 
@@ -270,8 +277,8 @@ def run_lab(symmetric_b, record):
         b_end = wait(lambda: lab.proven('b'), 15)
         record(bool(a_end and a_end[0] == '11.203.0.10' and b_end and b_end[0] == '11.203.0.20'),
                f'[{label}] coordinator proved both NAT-mapped WireGuard endpoints', f'{a_end} {b_end}')
-        ca = PathController(NsWireGuard(lab.ns['pca']), COORD, SUBNET)
-        cb = PathController(NsWireGuard(lab.ns['pcb']), COORD, SUBNET)
+        ca = PathController(NsWireGuard(lab.ns['pca'], lab.wg['a']), COORD, SUBNET)
+        cb = PathController(NsWireGuard(lab.ns['pcb'], lab.wg['b']), COORD, SUBNET)
         a_pub, b_pub = lab.keys['a']['public'], lab.keys['b']['public']
         lab.echo_server('b')
 
@@ -289,13 +296,14 @@ def run_lab(symmetric_b, record):
         expected = ('relay', 'relay') if symmetric_b else ('direct', 'direct')
 
         def path_check(name):
+            via_relay = expected == ('relay', 'relay')
             modes = wait(settled, 75, 1)
             record(modes == expected, f'[{label}] {name}: path chosen from real handshakes', modes)
             before = lab.coordinator.stats['relayed']
             ok = lab.echo('a', 'b', count=200)
             relayed = lab.coordinator.stats['relayed'] - before
             record(ok == 200, f'[{label}] {name}: 200 encrypted UDP echoes between the members', f'{ok}/200')
-            if symmetric_b:
+            if via_relay:
                 record(relayed >= 400, f'[{label}] {name}: traffic went through the AKENO relay', f'{relayed} relayed')
             else:
                 record(relayed == 0, f'[{label}] {name}: direct P2P, nothing went through the relay',
@@ -312,14 +320,22 @@ def run_lab(symmetric_b, record):
         recovered = wait(lambda: lab.echo('a', 'b', count=3, timeout=1) == 3, 90, 1)
         record(recovered, f'[{label}] outage: traffic resumes automatically after the network returns')
 
-        # NAT rebinding (new external port for A, as after a router restart): re-proof and reconnect.
+        # Network change on A (new local WireGuard port, as after a Wi-Fi switch or restart): re-proof, reconnect.
         old = lab.proven('a')
-        lab.masquerade('a', ports='45000-45100')
-        sh('conntrack', '-F', check=False, ns=lab.ns['nata'])
-        moved = wait(lambda: (lab.proven('a') or old)[1] != old[1] and lab.proven('a'), 60, 1)
-        record(bool(moved and 45000 <= moved[1] <= 45100), f'[{label}] NAT rebinding: coordinator re-proved A',
+        sh('wg', 'set', lab.wg['a'], 'listen-port', 51821, ns=lab.ns['pca'])
+        moved = wait(lambda: (lab.proven('a') or old) != old and lab.proven('a'), 60, 1)
+        record(bool(moved and moved[1] != old[1]), f'[{label}] network change: coordinator re-proved A',
                f'{old} -> {moved}')
-        path_check('after NAT rebinding')
+        path_check('after the network change')
+
+        if not symmetric_b:
+            # A's router starts allocating a port per destination (endpoint-dependent mapping): the endpoint the
+            # coordinator proved no longer works for B, so AKENO must fall back to the relay on its own.
+            lab.masquerade('a', ports='45000-45100')
+            sh('conntrack', '-F', check=False, ns=lab.ns['nata'])
+            wait(lambda: (lab.proven('a') or old)[1] >= 45000, 60, 1)
+            expected = ('relay', 'relay')
+            path_check('router became endpoint-dependent')
 
         # Revocation while traffic flows: B is removed from the room.
         lab.grants.pop(b_pub)
@@ -330,7 +346,7 @@ def run_lab(symmetric_b, record):
                    f'[{label}] revocation: the relay stops forwarding immediately')
         refresh()
         ca.tick()
-        record(b_pub not in ca.state and b_pub not in NsWireGuard(lab.ns['pca']).peers(),
+        record(b_pub not in ca.state and b_pub not in NsWireGuard(lab.ns['pca'], lab.wg['a']).peers(),
                f'[{label}] revocation: A removed B from WireGuard')
         record(lab.echo('a', 'b', count=5, timeout=0.5) == 0, f'[{label}] revocation: no traffic to B any more')
         record(wait(lambda: lab.proven('b') is None, 5), f'[{label}] revocation: B can no longer prove an endpoint')
