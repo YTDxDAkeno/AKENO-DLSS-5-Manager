@@ -4,7 +4,8 @@ name: WireGuard on Windows
 on:
   push:
     branches: [feature/akeno-network-modular, 'claude/**']
-    paths: ['akeno/network/**', 'tools/network_windows_e2e.py', 'tools/network_e2e/**', '.github/workflows/network-windows.yml']
+    paths: ['akeno/network/**', 'server/akeno_server/network/**', 'tools/network_windows_e2e.py', 'tools/lan_windows_e2e.py',
+            'tools/network_e2e/**', '.github/workflows/network-windows.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -60,3 +61,51 @@ jobs:
         with:
           name: network-windows-evidence
           path: network-windows-report.json
+  lan-play:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt argon2-cffi
+      - name: Install the official signed WireGuard for Windows (newest MSI, signer verified)
+        shell: pwsh
+        run: |
+          $base = 'https://download.wireguard.com/windows-client/'
+          $index = Invoke-WebRequest -UseBasicParsing $base
+          $msi = $index.Links.href | Where-Object { $_ -match '^wireguard-amd64-[0-9.]+\.msi$' } |
+            Sort-Object { [version]($_ -replace '^wireguard-amd64-|\.msi$', '') } | Select-Object -Last 1
+          if (-not $msi) { throw 'No official WireGuard MSI found in the download index' }
+          $file = Join-Path $env:RUNNER_TEMP $msi
+          Invoke-WebRequest -UseBasicParsing ($base + $msi) -OutFile $file
+          $sig = Get-AuthenticodeSignature $file
+          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=WireGuard LLC') {
+            throw "Unexpected installer signature: $($sig.Status) $($sig.SignerCertificate.Subject)"
+          }
+          Write-Host "Installing $msi (SHA-256 $((Get-FileHash $file).Hash)), signed by $($sig.SignerCertificate.Subject)"
+          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$file`"", '/qn', 'DO_NOT_LAUNCH=1',
+            '/l*v', "`"$env:RUNNER_TEMP\wireguard-msi.log`""
+          if ($p.ExitCode -ne 0) { throw "msiexec failed with $($p.ExitCode)" }
+          & "$env:ProgramFiles\WireGuard\wireguard.exe" /installmanagerservice
+          $store = "$env:ProgramFiles\WireGuard\Data\Configurations"
+          for ($i = 0; $i -lt 60 -and -not (Test-Path $store); $i++) { Start-Sleep 1 }
+          if (-not (Test-Path $store)) { throw 'The WireGuard manager service did not create its configuration store' }
+          Get-Service WireGuardManager | Format-List Name, Status, StartType
+          (Get-Item "$env:ProgramFiles\WireGuard\wireguard.exe").VersionInfo | Format-List ProductVersion, FileVersion
+      - name: AKENO LAN Play on WireGuardNT (coordinator proof, direct, relay, firewall policy, revocation, crash recovery)
+        run: python tools/lan_windows_e2e.py --work "$env:RUNNER_TEMP/lan-e2e" --report lan-windows-report.json
+      - name: WireGuard log on failure
+        if: failure()
+        shell: pwsh
+        run: |
+          & "$env:ProgramFiles\WireGuard\wireguard.exe" /dumplog | Select-Object -Last 150
+          Get-NetFirewallRule -Group 'AKENO LAN Play' -ErrorAction SilentlyContinue | Format-Table DisplayName, Enabled, Action
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lan-windows-evidence
+          path: lan-windows-report.json
