@@ -1,3 +1,34 @@
+# AKENO Gaming Suite 3.2.0 — AKENO Network (release candidate, not published)
+
+**New: AKENO Network** (ONLINE → AKENO Network), two modules that are **off until you turn them on**; updates
+never switch them on, and each works without the other.
+
+- **LAN Play**: create a private room or join with an invitation code, see members with their connection path
+  (direct P2P or relay), measured ping and link quality, copy your virtual IP, allow one game program, owner tools
+  (new invitation, remove member, delete room). Uses the official WireGuard for Windows; firewall rules keep file
+  sharing, Remote Desktop and NetBIOS closed for members. **Needs the AKENO LAN service on the server, which is not
+  switched on yet**: until then the page says so and creates nothing.
+- **VPN**: import your own WireGuard profiles (encrypted with Windows DPAPI), tag their country, favourites,
+  search, connect/disconnect with UAC, exit-IP check, a short connection history (time and location only). The 8
+  target countries are listed with the real reason they cannot be connected yet: **no AKENO VPN server runs**.
+  VPN Gate stays disabled.
+- **Diagnostics**: DNS, AKENO server, LAN service, coordinator/relay, sign-in, license, WireGuard, firewall,
+  sessions and VPN routing; export as a text file without passwords, tokens or keys.
+- New premium layout: connection dashboard, tabs, (i) buttons and "How it works" sections instead of long texts.
+
+**Fixed**
+- "Not Found" at the bottom left: the shipped client called LAN API routes the production server does not offer.
+  Server answers are now translated into sentences everywhere (status bar included), and the page asks the server
+  once whether LAN Play is offered (`GET /api/v1/network/lan/status`, new, read-only).
+
+**Components**: Settings → Components lists Core, Security Center (optional, removable — e.g. when Norton blocks
+it), LAN Play and VPN (on/off). Security Center can still be left out in the installer.
+
+**Updating**: from 3.0.0, 3.1.0 and 3.1.1 via ACCOUNT → Updates or the installer; license, account, settings,
+desktop, components and data stay. No network adapter, WireGuard service or route is installed by the update.
+
+---
+
 # AKENO Gaming Suite 3.1.1 — critical start-up fix
 
 **Fixed**

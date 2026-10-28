@@ -1,7 +1,7 @@
 """The way back for a 3.1.0 that no longer starts: the new installer over it, on a real Windows PC (CI runner).
 
     python tools/repair_e2e.py --broken-installer published\\AKENO-Setup-3.1.0.exe \\
-        --installer packaging\\out\\AKENO-Gaming-Suite-3.1.1-Setup-x64.exe --work %RUNNER_TEMP%\\repair \\
+        --installer packaging\\out\\AKENO-Gaming-Suite-3.2.0-Setup-x64.exe --work %RUNNER_TEMP%\\repair \\
         [--report repair-report.md]
 
 **Only for a disposable test machine** (it installs AKENO for the current user and writes its data folder).
