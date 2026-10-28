@@ -139,15 +139,15 @@ class PathController:
             self.backend.remove_peer(key)
             del self.state[key]
 
-    def _attempt(self, key, now):
+    def _attempt(self, key, now, relay=False):
+        # Re-adding the peer discards its current session, so WireGuard must complete a new handshake over exactly
+        # this path. Only that handshake counts as success: an old session would keep "working" on stale state
+        # (WireGuard rekeys only every 120 s), which made a moved member look unreachable.
         s = self.state[key]
-        if s['endpoint'] is not None:
-            self.backend.set_peer(key, s['endpoint'], s['virtual_ip'])
-            s['mode'] = 'direct_trying'
-        else:
-            self.backend.set_peer(key, self.relay, s['virtual_ip'])
-            s['mode'] = 'relay_trying'
-        s['since'] = now
+        relay = relay or s['endpoint'] is None
+        self.backend.remove_peer(key)
+        self.backend.set_peer(key, self.relay if relay else s['endpoint'], s['virtual_ip'])
+        s['mode'], s['since'] = ('relay_trying' if relay else 'direct_trying'), now
 
     def tick(self) -> dict[str, dict]:
         self.expire()
@@ -162,8 +162,7 @@ class PathController:
             if fresh and handshake >= s['since'] - 1:
                 s['mode'] = 'relay' if via_relay else 'direct'
             elif s['mode'] == 'direct_trying' and now - s['since'] > self.DIRECT_GRACE:
-                self.backend.set_peer(key, self.relay, s['virtual_ip'])
-                s['mode'], s['since'] = 'relay_trying', now
+                self._attempt(key, now, relay=True)
             elif s['mode'] in ('direct', 'relay') and not fresh:
                 self._attempt(key, now)                     # connection lost: start over, direct first
             elif s['mode'] == 'relay_trying' and now - s['since'] > self.RELAY_GRACE and s['endpoint'] is not None \
