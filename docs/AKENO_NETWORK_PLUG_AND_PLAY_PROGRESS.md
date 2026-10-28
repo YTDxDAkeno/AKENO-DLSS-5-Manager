@@ -13,25 +13,28 @@ Current cloud evidence:
 
 - Python 3.12 virtual environment `/workspace/akeno-env`; pinned client/dev/server dependencies installed.
 - Server suite: **260 passed**, three dependency deprecation warnings.
-- Client network and i18n suite: **206 passed, 2 skipped** (native Windows checks).
+- Final client network and i18n suite: **211 passed, 2 skipped** (native Windows checks).
 - Actual relay-only lab: **27 passed**, including three communicating WireGuard clients,
   OpenTTD UDP/TCP, cross-room refusal, revocation and four outer packet captures.
 - Local API initialized with separate development-only keys/database; loopback HTTP and UDP only.
   Six readiness/authentication/web requests passed. No production credentials or data reused.
-- Full client regression is running; no final result yet.
-- Managed exit lab initially failed. Native diagnostics proved its fixture deleted the outer
-  endpoint /32 route because iproute2 serializes it without `/32`. Correct network comparison,
-  explicit route assertions, destination-bound echo listeners and private-listener controls
-  are under real packet validation. Production firewall rules are unchanged.
+- Original full client regression: **1449 passed, 19 skipped, 2 environment failures**, 27 min 12 s.
+  Both failures concern copied Python binaries missing the relocated standard library. After the scoped
+  PYTHONHOME correction, their full affected files passed: **12 performance tests**, **108 updater-v2 tests,
+  1 skipped**. The final five added library tests are included in the separate 211-test network run.
+- Managed exit lab initially failed. Fixture routing, internal-bridge addressing, UDP source and delayed
+  reply defects were corrected. **23 real packet/native/kernel checks pass**. Production forwarding verdicts
+  remain unchanged; private-destination drop counters were added to verify negative tests meaningfully.
 - Native Windows DNS leak verification is still deliberately incomplete in `default_probe`;
   managed VPN disconnects with `verification_required`. This is a repository release blocker,
   not a dependency setup failure or working country VPN.
 - Current proxy denies official provider pages, WireGuard download/docs website and GitHub API
   with CONNECT 403. Git HTTPS access works. No prices, live CI results or country exits are inferred.
 
-Next: finish actual exit validation, full client regression, save tested installation/startup
-configuration, publish an honest technical handoff and production gate list. Local helper files
-are outside the checkout in `/workspace/akeno-cloud`; they do not change product configuration.
+The tested installation/startup instructions and exact checkout are saved in the cloud draft. Publication and
+restoration into a fresh task have not been verified. Local helpers/evidence remain outside the checkout in
+`/workspace/akeno-cloud`; they do not change product configuration. Next work is the documented native Windows
+implementation/validation and authorized external infrastructure gates, not an automatic production deployment.
 
 ### Cloud validation checkpoint
 
@@ -79,6 +82,24 @@ installation is rejected. Manual executable selection remains the fallback.
 The targeted library, UI and translation group passes **34 tests**, including a UI assertion
 that nested library selection avoids the file picker and submits only the reviewed profile.
 This verifies selection policy/wiring, not an actual Windows game session.
+
+### Final cloud validation record
+
+Last verified remote before this entry: `87e96a7c4b7959835d8fbbcdc5eef69507507eaf`.
+All 1470 originally collected client tests completed: **1449 passed, 19 skipped, 2 failed**.
+The failures are `test_background_programs_lowered_and_paused_then_restored` and
+`test_other_akeno_processes_from_the_program_folder_are_ended`; captured stderr proves the
+same missing `encodings` issue in copied relocated Python binaries. The corrected wrapper's
+entire affected files pass (12 performance; 108 updater v2, 1 skipped). Full network/i18n
+including the new library integration passes 211, with 2 native skips. No test, assertion,
+dependency declaration or lockfile was disabled/rewritten to resolve the environment issue.
+
+The original full-run XML/log are preserved unchanged. This is a completed original run plus
+successful affected-suite reruns, **not a second completely green full run**. No unexplained
+required Linux check remains. Remaining product limitations are in the handoff/readiness list.
+Runtime files/processes survived the reported reconnect; this does not establish a published
+snapshot or fresh-task restoration. The draft contains installation, startup, exact repository
+commit/path and six reviewed domain additions; user review/save/publication is still required.
 
 ## Resume here
 

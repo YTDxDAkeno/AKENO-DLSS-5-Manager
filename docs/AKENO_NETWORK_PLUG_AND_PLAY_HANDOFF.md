@@ -66,18 +66,28 @@ This does not establish game compatibility or native Windows firewall enforcemen
 | Check | Current-instance result |
 |---|---|
 | Full backend, `cd server; /workspace/akeno-env/bin/python -m pytest -q` | 260 passed, 3 third-party deprecation warnings |
-| Client network + i18n | 206 passed, 2 native checks skipped |
+| Client network + i18n, including final library changes | 211 passed, 2 native checks skipped |
 | Actual relay/OpenTTD/PCAP lab | 27 passed |
 | Actual managed-exit dual-stack/NAT/freeze/crash/recovery lab | 23 passed |
 | Isolated API readiness/auth/web | Six HTTP assertions passed before and after process restart |
 | Offscreen app smoke | 3.2.0 starts; 19/19 assets and all pages construct |
 | Copied-interpreter performance tests | Initial environment failure diagnosed; all 12 pass with scoped PYTHONHOME |
+| Updater v2 after the same interpreter correction | 108 passed, 1 skipped |
 | Library selection, network UI and translation group | 34 passed, including nested path and containment checks |
-| Full client regression | Still running when this draft was written; consult final progress entry before claiming a pass |
+| Original full client regression | 1449 passed, 19 skipped, 2 environment failures in 27 min 12 s; both affected suites pass after the PYTHONHOME correction |
+
+The full run began before the final five library tests were added. Its two failures both show a copied Python
+binary exiting because `/install/lib/python3.12/encodings` is unavailable in this relocated cloud runtime.
+The corrected wrapper was then used for the entire performance and updater-v2 files (12 passed; 108 passed,
+1 skipped) and the final entire network/i18n group (211 passed, 2 skipped). The original full-run result is
+preserved unchanged; a second full 27-minute run was not performed. Do not label the original run fully green.
 
 Evidence in this machine: `/tmp/akeno-server-tests.log`, `/tmp/akeno-final-network-tests.log`,
 `/tmp/akeno-relay-report.json`, `/tmp/akeno-relay-pcaps/`, `/tmp/akeno-vpn-exit-correlated-report.json`,
 `/tmp/akeno-vpn-correlated-lab.log`, `/tmp/akeno-performance-env-fixed.log`, `/tmp/akeno-app-local-smoke.log`.
+Full-run log/JUnit: `/tmp/akeno-client-regression.log` and `/tmp/akeno-client-regression.xml`;
+corrected updater log: `/tmp/akeno-updater-env-fixed.log`. Copies and SHA-256 metadata are retained in
+`/workspace/akeno-cloud/evidence/manifest.json`, outside the repository.
 Reports/PCAPs describe only artificial local networks. They do not contain country exit evidence.
 The latest CI outcomes could not be read: GitHub API returned proxy CONNECT 403. Workflow triggers now include
 the continuation branch; [Actions](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions) is a navigation

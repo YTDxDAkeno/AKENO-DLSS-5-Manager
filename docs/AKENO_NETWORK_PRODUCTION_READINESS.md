@@ -7,13 +7,16 @@ The current cloud continuation is `codex/akeno-network-cloud-20261028`, based on
 ## Locally verified
 
 - Existing account/license/device authorization and opt-in API startup: full backend suite, 260 passed.
-- LAN client/browser/signing/bootstrap/session policies and offscreen Qt/i18n: 206 passed, 2 native checks skipped.
+- LAN client/browser/signing/bootstrap/session policies and offscreen Qt/i18n: 211 passed, 2 native checks skipped.
 - Actual relay transport: 27 checks, three communicating wireguard-go clients, fourth-room denial,
   OpenTTD UDP discovery query/TCP game information, revocation and four outer PCAPs.
 - Actual managed exit: 23 checks, native handshake, dual-stack encrypted datagrams, NAT/NAT66,
   private-destination drop counters, revocation, frozen/crashed-agent kernel expiry and recovery.
 - Local loopback API/database/signer/web readiness and authentication gates passed before and after restart.
 - The full application constructs its pages in Linux offscreen smoke mode. This does not test Windows features.
+- Original full client run: 1449 passed, 19 skipped, two copied-interpreter environment failures. Both affected
+  files pass with the corrected scoped Python home: performance 12 passed; updater v2 108 passed, 1 skipped.
+  The original run was not rewritten or presented as fully green; see the handoff for exact validation limits.
 
 The packet labs use disposable internal Docker networks, local test keys and synthetic control grants/manifests.
 Globally shaped lab IPv4 addresses are aliases inside an internal network; they are **not public country exits**.
