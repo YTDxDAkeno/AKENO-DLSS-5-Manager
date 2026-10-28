@@ -358,6 +358,11 @@ jobs:
           if ($p.HasExited) { throw "AKENO.exe exited during normal start (exit code $($p.ExitCode))" }
           Stop-Process -Id $p.Id -Force
           Get-Content "$env:AKENO_HOME\logs\akeno.log" -Tail 40
+      - name: Packaged network helper through the runas verb (read-only, no adapter or tunnel)
+        shell: pwsh
+        run: |
+          python tools/packaged_helper_check.py dist\AKENO\AKENO.exe packaged-helper-report.json
+          if ($LASTEXITCODE -ne 0) { throw "packaged network helper check failed" }
       - name: Public offline inventory (no proprietary binaries)
         shell: pwsh
         run: |
@@ -428,6 +433,7 @@ jobs:
             test-results.xml
             v141-ui-150pct.xml
             system-check.json
+            packaged-helper-report.json
             screenshots/system-fixtures/*.png
             screenshots/v141-150pct/*.png
             screenshots/v14-fixtures/*.png
