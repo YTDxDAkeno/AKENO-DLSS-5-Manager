@@ -4669,5 +4669,9 @@
  "Windows refused the firewall configuration for LAN Play.": "Windows hat die Firewall-Einrichtung für LAN Play abgelehnt.",
  "WireGuard returned an invalid status.": "WireGuard hat einen ungültigen Status gemeldet.",
  "WireGuard script execution must be disabled before AKENO imports profiles.": "Die Skriptausführung von WireGuard muss deaktiviert sein, bevor AKENO Profile importiert.",
- "WireGuard tunnel services require Windows.": "WireGuard-Tunneldienste brauchen Windows."
+ "WireGuard tunnel services require Windows.": "WireGuard-Tunneldienste brauchen Windows.",
+ "{ok} of {n} checked reachable from this PC": "{ok} von {n} geprüften von diesem PC erreichbar",
+ "not reachable from this PC": "von diesem PC nicht erreichbar",
+ "reachability unknown (UDP)": "Erreichbarkeit unbekannt (UDP)",
+ "VPN Gate states that it keeps connection logs for at least three months, that each volunteer server records packet headers for at least two weeks, and that logs are disclosed to police, prosecutors and courts on request.": "VPN Gate gibt an, Verbindungsprotokolle mindestens drei Monate aufzubewahren, dass jeder Freiwilligen-Server Paket-Header mindestens zwei Wochen protokolliert und dass Protokolle auf Anfrage an Polizei, Staatsanwaltschaft und Gerichte herausgegeben werden."
 }

@@ -72,6 +72,32 @@ def fetch_catalog():
     return parse_catalog(raw)
 
 
+def transport(server):
+    """(protocol, host, port) of a catalog profile's first remote, or (None, None, None)."""
+    proto,remote=None,None
+    for line in server.profile.splitlines():
+        parts=line.strip().split()
+        if len(parts)>1 and parts[0]=='proto':proto=parts[1].lower()
+        elif len(parts)>2 and parts[0]=='remote' and remote is None and parts[2].isdigit():remote=(parts[1],int(parts[2]))
+    return (proto,)+(remote or (None,None))
+
+
+def reachable(server,timeout=3.0):
+    """Whether this PC reaches the server's OpenVPN TCP port: 'reachable', 'unreachable' or 'unknown' (UDP servers
+    are not probed). A plain TCP connection, closed at once: no VPN protocol, no data, no connection to the VPN."""
+    import socket
+    proto,host,port=transport(server)
+    if not proto or not proto.startswith('tcp') or not port:return 'unknown'
+    try:
+        if ipaddress.ip_address(host)!=ipaddress.ip_address(server.ip):return 'unknown'
+    except ValueError:
+        return 'unknown'
+    try:
+        with socket.create_connection((server.ip,port),timeout=timeout):return 'reachable'
+    except OSError:
+        return 'unreachable'
+
+
 def countries(servers):
     return sorted({(s.country,s.country_name) for s in servers})
 

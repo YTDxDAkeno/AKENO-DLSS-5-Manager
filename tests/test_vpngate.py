@@ -25,3 +25,19 @@ def test_malicious_profiles_and_private_addresses_are_not_exposed():
     assert parse_catalog(catalog(ip='127.0.0.1'))==[]
     assert parse_catalog(catalog(country='XX<script>'))==[]
     with pytest.raises(ValueError):parse_catalog(b'not the official format')
+
+
+def test_reachability_probe_only_opens_a_tcp_connection_to_the_listed_address(monkeypatch):
+    import socket
+    from akeno.network import vpngate
+    calls = []
+
+    class Conn:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(socket, 'create_connection', lambda addr, timeout: calls.append(addr) or Conn())
+    tcp = vpngate.Server('h', '45.1.2.3', 'US', 'United States', 10, 1, 1, '2 weeks', 'client\nproto tcp\nremote 45.1.2.3 443\n')
+    udp = vpngate.Server('h', '45.1.2.4', 'US', 'United States', 10, 1, 1, '2 weeks', 'client\nproto udp\nremote 45.1.2.4 1194\n')
+    other = vpngate.Server('h', '45.1.2.5', 'US', 'United States', 10, 1, 1, '2 weeks', 'client\nproto tcp\nremote 9.9.9.9 443\n')
+    assert vpngate.reachable(tcp) == 'reachable' and calls == [('45.1.2.3', 443)]
+    assert vpngate.reachable(udp) == 'unknown' and vpngate.reachable(other) == 'unknown' and len(calls) == 1

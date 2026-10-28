@@ -83,6 +83,8 @@ def main(report: Path):
         reachable = sum(1 for r in rows if r['state'] == 'accepts TCP')
         print(f'{code} {names.get(code, "not in catalog")}: {counts.get(code, 0)} in catalog, '
               f'{reachable}/{len(rows)} probed TCP servers accept a connection from this runner', flush=True)
+        for r in rows:
+            print(f"    {r['ip']} {r['proto']}:{r['port']} -> {r['state']} (logging policy: {r['logging']!r})", flush=True)
     policies = {}
     for url in PAGES:
         try:

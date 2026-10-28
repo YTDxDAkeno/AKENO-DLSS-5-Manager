@@ -513,15 +513,27 @@ class AkenoNetworkPage(QWidget):
         self.location_grid = KeyValueGrid(130)
         self.location_grid.set_rows([(t('USA'), t('Not checked')), (t('Turkey'), t('Not checked'))])
         card.body.addWidget(self.location_grid)
+        card.body.addWidget(label(t('VPN Gate states that it keeps connection logs for at least three months, that '
+                                    'each volunteer server records packet headers for at least two weeks, and that '
+                                    'logs are disclosed to police, prosecutors and courts on request.'), 'muted',
+                                  wrap=True))
         connect = button(t('Connect (not available yet)'), 'lock')
         connect.setEnabled(False)
         card.body.addWidget(connect)
         return card
 
     def catalog(self):
-        from akeno.network.vpngate import countries, fetch_catalog
+        from akeno.network.vpngate import countries, fetch_catalog, reachable
 
-        def show(servers):
+        def load():
+            servers = fetch_catalog()
+            # Only the two target countries are probed, at most five servers each, from this PC.
+            probes = {code: [reachable(s) for s in [s for s in servers if s.country == code][:5]]
+                      for code in ('US', 'TR')}
+            return servers, probes
+
+        def show(result):
+            servers, probes = result
             self.catalog_servers = servers
             self.countries.clear()
             counts = {}
@@ -536,10 +548,20 @@ class AkenoNetworkPage(QWidget):
 
             def where(code):
                 n = counts.get(code, 0)
-                return t('{n} servers in the catalog').format(n=n) if n else t('Not in the current catalog')
+                if not n:
+                    return t('Not in the current catalog')
+                states = probes.get(code, [])
+                ok = states.count('reachable')
+                if ok:
+                    reach = t('{ok} of {n} checked reachable from this PC').format(ok=ok, n=len(states))
+                elif states.count('unreachable'):
+                    reach = t('not reachable from this PC')
+                else:
+                    reach = t('reachability unknown (UDP)')
+                return t('{n} servers in the catalog').format(n=n) + ' · ' + reach
             self.location_grid.set_rows([(t('USA'), where('US')), (t('Turkey'), where('TR'))])
             self.work_status.setText(t('Catalog loaded. Public VPN connections remain disabled.'))
-        self.work(fetch_catalog, show)
+        self.work(load, show)
 
     # -- diagnostics -------------------------------------------------------------------------------------------------
     def _diagnostics_card(self):

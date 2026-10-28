@@ -90,9 +90,10 @@ def test_locations_show_only_countries_the_catalog_really_lists(page, monkeypatc
         return Server(f'h{n}', f'45.0.0.{n}', country, name, 20, 1, 1, '2 weeks', 'client')
     servers = [server('US', 'United States', 1), server('US', 'United States', 2), server('JP', 'Japan', 3)]
     monkeypatch.setattr('akeno.network.vpngate.fetch_catalog', lambda: servers)
+    monkeypatch.setattr('akeno.network.vpngate.reachable', lambda s: 'reachable' if s.host == 'h1' else 'unreachable')
     page.catalog()
     rows = [page.location_grid.grid.itemAtPosition(r, 1).widget().text() for r in range(2)]
-    assert rows == ['2 servers in the catalog', 'Not in the current catalog']
+    assert rows == ['2 servers in the catalog · 1 of 2 checked reachable from this PC', 'Not in the current catalog']
     assert [page.countries.itemData(i) for i in range(page.countries.count())] == ['JP', 'US']
 
 
