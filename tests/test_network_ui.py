@@ -74,7 +74,7 @@ def test_session_shows_each_members_real_path_ping_and_traffic(page, monkeypatch
     assert friend[2] == 'Direct (P2P)' and friend[3] == '18 ms' and friend[4] == '12 s ago' and '2.3 MB' in friend[5]
     assert relayed[2] == 'Relay' and relayed[3] == '41 ms'
     assert page.tile_members.value.text() == '2' and page.tile_paths.value.text() == '1 / 1'
-    assert page.tile_ping.value.text() == '30 ms' and page.tile_session.value.text() == 'Connected'
+    assert page.tile_ping.value.text() == '30 ms' and page.lan_dash.state_label.text() == 'Connected'
     _shot(page, 'akeno-network-session-en-fixture.png')
 
 
@@ -108,7 +108,7 @@ def test_page_renders_in_german(qtbot, monkeypatch):
         assert p.session_pill.text().endswith('Kein Raum')
         in_session(p, monkeypatch)
         assert cells(p, 1)[2] == 'Direkt (P2P)' and cells(p, 2)[2] == 'Relay' and cells(p, 0)[0] == 'Du'
-        assert p.tile_session.value.text() == 'Verbunden'
+        assert p.lan_dash.state_label.text() == 'Verbunden'
         _shot(p, 'akeno-network-session-de-fixture.png')
     finally:
         i18n.set_language('en')
