@@ -172,3 +172,21 @@ class PathController:
                     and not fresh:
                 self._attempt(key, now)
         return {k: {kk: v for kk, v in s.items() if kk not in ('since', 'rx_at')} for k, s in self.state.items()}
+
+
+class LanControl:
+    """The real control plane of a session: the existing sign-in and device (LanClient) and the server's signed
+    credentials. Only verified data leaves this class; this PC's private key never leaves the PC."""
+
+    def __init__(self, client, room: str):
+        self.client, self.room = client, room
+
+    def refresh(self) -> dict:
+        result = self.client.heartbeat(self.room)              # verifies this PC's own credential
+        identity = self.client._identity()
+        keys = self.client.license.trusted_keys()
+        own = verify_peer(result['credential'], keys, self.room)
+        return {'self': {'public_key': identity['public_key'], 'private_key': identity['private_key'],
+                         'virtual_ip': own['virtual_ip']},
+                'coordinator': coordinator_of(result),
+                'peers': verified_peers(result, keys, self.room, identity['public_key'])}
