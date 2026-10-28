@@ -111,6 +111,7 @@ class Responder:
         self.observed: list[dict] = []
         self.inbox: list[dict] = []           # packets to our own addresses that are not echo requests
         self.drop = False
+        self.answer_dns = False             # explicit isolated Windows DNS-probe fixture only
         self.accept_from = None               # set of source addresses; None accepts any (relay-only tests)
         self._pending = None                  # our own initiation (to a coordinator) awaiting its response
         self.coordinator = None               # (session, address) once our endpoint proof completed
@@ -336,9 +337,13 @@ class Responder:
             self._record(version, proto, address, port)
             return None
         probe = proto == 17 and port == LATENCY_PORT and payload[8:12] == b'AKLP' and len(payload) == 24
-        if proto == 17 and (port == ECHO_PORT or probe) and len(payload) >= 8:
+        dns = self.answer_dns and proto==17 and port==53 and len(payload)>=20
+        if proto == 17 and (port == ECHO_PORT or probe or dns) and len(payload) >= 8:
             sport, = struct.unpack('!H', payload[:2])
             body = b'AKLR' + payload[12:] if probe else payload[8:]   # AKENO's LAN latency probe answer
+            if dns:
+                self._record(version,proto,address,port)
+                body=body[:2]+b'\x81\x83'+body[4:]  # synthetic NXDOMAIN, echoes actual random question
             udp = struct.pack('!HHHH', port, sport, 8 + len(body), 0) + body
             pseudo = (dst + src + struct.pack('!BBH', 0, 17, len(udp)) if version == 4 else
                       dst + src + struct.pack('!IxxxB', len(udp), 17))

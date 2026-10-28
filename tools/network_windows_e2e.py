@@ -255,6 +255,7 @@ def full_tunnel(store, manager, backend, journal, wgpeer, check, info, evidence,
     client_private, client_public = wgpeer.keypair()
     peer_private, _ = wgpeer.keypair()
     with wgpeer.Responder(peer_private, client_public, ('10.203.78.1', 'fd00:a4e0:78::1')) as peer:
+        peer.answer_dns = True
         text = profile(client_private, peer.public_key, peer.port, '10.203.78.2/32, fd00:a4e0:78::2/128',
                        '0.0.0.0/0, ::/0', '10.203.78.1')
         ident = store.add('CI full tunnel', text)
@@ -272,6 +273,13 @@ def full_tunnel(store, manager, backend, journal, wgpeer, check, info, evidence,
                   'IPv4 and IPv6 default routes on the tunnel adapter', defaults)
             tunnel_dns = {d for d in dns() if d[0] == name}
             check(any('10.203.78.1' in d[2] for d in tunnel_dns), 'tunnel DNS server configured', sorted(tunnel_dns))
+            # Production observer, real WireGuardNT and real Windows socket access-denial
+            # results. Only the DNS responder is an isolated synthetic test endpoint.
+            from akeno.network.dns_probe import verify as verify_dns
+            dns_evidence=verify_dns(name,['10.203.78.1'])
+            evidence['native_dns_probe']=dns_evidence
+            check(dns_evidence['dns_verified'] is True and dns_evidence['denied_paths']>=4,
+                  'production DNS probe measures tunnel DNS replies and native blocked foreign paths',dns_evidence)
             # Leak probes: Internet destinations must arrive inside the tunnel (at the loopback peer). Port 9 is
             # used because WireGuard for Windows' firewall blocks DNS (port 53) to any non-tunnel resolver.
             query = b'\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x07example\x03com\x00\x00\x01\x00\x01'

@@ -76,8 +76,15 @@ def default_probe(claims, tunnel_name):
         routing_verified = bool(routes) and all(value == tunnel_name for value in routes)
     except (ValueError, TypeError, KeyError):
         raise VerificationRequired('The VPN route and DNS configuration could not be inspected.') from None
+    if not routing_verified or configured!=set(dns):
+        raise VerificationRequired('Native VPN routing or DNS configuration does not match the permission.')
+    from akeno.network.dns_probe import verify as verify_dns, DNSVerificationError
+    try:
+        evidence=verify_dns(tunnel_name,dns)
+    except (OSError,DNSVerificationError) as exc:
+        raise VerificationRequired('Native DNS leak measurements did not pass.') from exc
     return {**addresses, 'routing_verified': routing_verified, 'dns_configuration_matches': configured == set(dns),
-            'dns_verified': False, 'source': 'actual_windows_https_and_configuration_observation'}
+            **evidence}
 
 
 class ManagedVPNSession:

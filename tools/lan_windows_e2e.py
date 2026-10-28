@@ -152,6 +152,9 @@ def _run(args):
             session(stop).run()
         except Exception as exc:                          # noqa: BLE001 (reported by the checks below)
             errors.append(repr(exc))
+            from akeno.network.windows import NativeUnavailable
+            if isinstance(exc,(NativeUnavailable,LanError)):
+                print('::error title=LAN session native failure::'+str(exc),flush=True)
     worker = threading.Thread(target=runner, daemon=True)
     try:
         worker.start()
