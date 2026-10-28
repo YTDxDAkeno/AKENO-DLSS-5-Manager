@@ -1,0 +1,7 @@
+runtime/
+.env
+*.key
+*.pem
+*.dump
+*.sqlite*
+__pycache__/

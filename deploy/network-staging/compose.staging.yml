@@ -1,0 +1,147 @@
+# Standalone project. Never merge with deploy/docker-compose.yml.
+# All services require an explicit profile; nothing is started by preparation.
+name: akeno-network-staging
+
+x-log: &logs
+  driver: json-file
+  options: {max-size: "10m", max-file: "3"}
+
+x-env: &env
+  AKENO_ENVIRONMENT: production
+  AKENO_NETWORK_STAGING: "1"
+  AKENO_KEYS_DIR: /data/keys
+  AKENO_MAIL_BACKEND: file
+  AKENO_MAIL_DIR: /data/mail
+  AKENO_PUBLIC_URL: https://${AKENO_STAGING_WEB_HOST:-lan-staging.akeno.online}
+  AKENO_ADMIN_URL: http://localhost:18512
+  AKENO_TOKEN_SECRET_FILE: /run/secrets/token
+  AKENO_CODE_PEPPER_FILE: /run/secrets/pepper
+  AKENO_RATE_LIMIT_ENABLED: "true"
+  AKENO_COOKIE_SECURE: "true"
+  AKENO_TRUSTED_PROXIES: 172.30.78.1/32
+  AKENO_FORWARDED_ALLOW_IPS: 172.30.78.1
+  AKENO_DOWNLOAD_URL: https://${AKENO_STAGING_WEB_HOST:-lan-staging.akeno.online}/no-staging-update-feed
+
+x-app: &app
+  image: ${AKENO_STAGING_IMAGE:?set AKENO_STAGING_IMAGE in the staging-only .env}
+  pull_policy: never
+  profiles: [approved-staging]
+  entrypoint: [python, /staging/entrypoint.py]
+  user: "10001:10001"
+  restart: "no"
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp:rw,noexec,nosuid,size=64m,mode=1777]
+  pids_limit: 96
+  ulimits: {nofile: {soft: 4096, hard: 4096}}
+  logging: *logs
+  stop_grace_period: 20s
+  networks: [control, database]
+  secrets: [token, pepper, db_app]
+  depends_on:
+    staging-db: {condition: service_healthy}
+
+services:
+  staging-db:
+    image: postgres:16-alpine
+    profiles: [approved-staging]
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    security_opt: [no-new-privileges:true]
+    environment:
+      POSTGRES_DB: akeno_network_staging
+      POSTGRES_USER: akeno_network_staging
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_pg
+    secrets: [db_pg]
+    volumes: [staging-db:/var/lib/postgresql/data]
+    tmpfs: [/tmp:rw,noexec,nosuid,size=32m,mode=1777, /var/run/postgresql:rw,noexec,nosuid,size=8m,mode=3777]
+    networks: [database]
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.50
+    pids_limit: 80
+    shm_size: 128m
+    command: [postgres, -c, max_connections=30, -c, shared_buffers=64MB, -c, work_mem=2MB, -c, max_wal_size=256MB]
+    logging: *logs
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 3s
+      retries: 6
+    stop_grace_period: 30s
+
+  staging-api:
+    <<: *app
+    environment:
+      <<: *env
+      AKENO_ROLE: api
+      AKENO_NETWORK_ENABLED: "true"
+      AKENO_NETWORK_DATABASE_PATH: /data/network/rooms.sqlite3
+      AKENO_NETWORK_COORDINATOR_BIND: 0.0.0.0:3478
+      AKENO_NETWORK_COORDINATOR_HOST: ${AKENO_STAGING_UDP_HOST:-lan-staging-udp.akeno.online}
+      AKENO_NETWORK_COORDINATOR_KEY_PATH: /data/network/coordinator.key
+    volumes:
+      - ./entrypoint.py:/staging/entrypoint.py:ro
+      - staging-keys:/data/keys
+      - staging-mail:/data/mail
+      - staging-network:/data/network
+    ports: ["127.0.0.1:18510:8000/tcp", "127.0.0.1:3478:3478/udp"]
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.75
+
+  staging-web:
+    <<: *app
+    environment:
+      <<: *env
+      AKENO_ROLE: web
+      AKENO_NETWORK_ENABLED: "false"
+    volumes:
+      - ./entrypoint.py:/staging/entrypoint.py:ro
+      - staging-mail:/data/mail
+    ports: ["127.0.0.1:18511:8000/tcp"]
+    depends_on:
+      staging-api: {condition: service_healthy}
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.25
+
+  staging-admin:
+    <<: *app
+    environment:
+      <<: *env
+      AKENO_ROLE: admin
+      AKENO_NETWORK_ENABLED: "false"
+      # Only SSH-tunnelled localhost HTTP, never a public route.
+      AKENO_COOKIE_SECURE: "false"
+    volumes:
+      - ./entrypoint.py:/staging/entrypoint.py:ro
+      - staging-mail:/data/mail
+    ports: ["127.0.0.1:18512:8000/tcp"]
+    depends_on:
+      staging-api: {condition: service_healthy}
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.25
+
+networks:
+  control:
+    ipam: {config: [{subnet: 172.30.78.0/28, gateway: 172.30.78.1}]}
+  database:
+    internal: true
+    ipam: {config: [{subnet: 172.30.78.16/28, gateway: 172.30.78.17}]}
+
+volumes:
+  staging-db: {}
+  staging-keys: {}
+  staging-network: {}
+  staging-mail: {}
+
+secrets:
+  token: {file: ./runtime/secrets/token}
+  pepper: {file: ./runtime/secrets/pepper}
+  db_app: {file: ./runtime/secrets/db-app}
+  db_pg: {file: ./runtime/secrets/db-pg}

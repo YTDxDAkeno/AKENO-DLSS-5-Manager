@@ -1,0 +1,7 @@
+# NOT APPROVED/APPLIED. Add only after source-IP ACL + global UDP limit + owner approval.
+# No automatic firewall change. Port is deliberately identical inside and outside.
+services:
+  staging-api:
+    ports: !override
+      - "127.0.0.1:18510:8000/tcp"
+      - "${AKENO_STAGING_PUBLIC_IPV4:?explicit approved IPv4 required}:3478:3478/udp"
