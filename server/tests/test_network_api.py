@@ -57,6 +57,8 @@ def test_auth_license_device_membership_and_short_lived_credential(network):
     r=c.post(f'/api/v1/network/lan/rooms/{rid}/heartbeat',headers=bearer(b),json={'device_id':db['id']})
     assert r.status_code==200,r.text
     assert len(r.json()['members'])==2 and r.json()['transport']=='not_implemented'
+    assert r.json()['room']['name']=='Private room' and r.json()['room']['owner'] is False
+    assert sorted(m['owner'] for m in r.json()['members'])==[False,True]
     from akeno.network.credentials import verify_peer
     from akeno.licensing.crypto import public_key
     with dbmod.session() as session:keys={row.kid:public_key(row.public_key) for row in signing.public_keys(session)}

@@ -74,7 +74,8 @@ def members(actor,room,s,db):
         license_=licenses.license_of(db,uid)
         if user and user.active and device and device.active and device.user_id==uid and \
                 license_ and license_.running(utcnow()) and peer['status']=='registered':
-            valid.append(peer)
+            # only the public display name the member chose for their account; never the e-mail address
+            valid.append({**peer,'name':(user.display_name or '')[:80]})
     return valid
 
 
@@ -144,7 +145,7 @@ def heartbeat(room:str,body:DeviceBody,request:Request,caller:Caller=Depends(cur
     valid=members(actor,room,s,db)
     host=get_config().network_coordinator_host
     info={'public_key':c.public_key,'host':host,'port':c.address[1]} if c is not None and host else None
-    return {'credential':ticket,'expires_at':payload['exp'],'members':valid,
+    return {'credential':ticket,'expires_at':payload['exp'],'members':valid,'room':operation(lambda:s.info(actor,room)),
             'peers':[{'credential':credential(room,p,s.PEER_LEASE,c)[0]} for p in valid if p['actor']!=actor],
             'coordinator':info,'transport':'wireguard' if info else 'not_implemented'}
 

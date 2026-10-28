@@ -168,8 +168,16 @@ class RoomStore:
             return [{'actor':r['actor'],'device_id':r['device'],'public_key':r['public_key'],
                      'virtual_ip':str(ipaddress.ip_address(f"10.203.{room['slot']}.{r['host']}")),
                      'status':'registered' if r['seen']+self.PEER_LEASE>self.clock() else 'expired',
-                     'transport':'not_implemented'}
+                     'owner':r['actor']==room['owner'],'transport':'not_implemented'}
                     for r in db.execute('SELECT * FROM peers WHERE room=? ORDER BY host',(ident,))]
+
+    def info(self,actor,ident):
+        """Room facts a member may see: its name, whether the caller owns it and when it expires."""
+        with self._tx() as db:
+            room=self._room(db,ident)
+            self._member(db,room,actor)
+            return {'name':room['name'],'owner':room['owner']==actor,'expires_at':int(room['expiry']),
+                    'password':bool(room['password'])}
 
     def grant_for(self,public_key):
         """The live membership of a WireGuard key for the coordinator: room, actor, device and lease end (or None).
