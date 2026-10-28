@@ -169,9 +169,12 @@ while True:
         wait(lambda: sh(relay, 'test -f /run/public.json && cat /run/public.json', check=False))
         public = json.loads(sh(relay, 'cat /run/public.json'))['public_key']
         for side, name in names.items():
-            config = f'''from pathlib import Path
+            config = f'''import os
+from pathlib import Path
 key=Path('/run/key').read_text().strip()
-Path('/run/wg.conf').write_text('[Interface]\\nPrivateKey = '+key+'\\nListenPort = 51820\\n[Peer]\\nPublicKey = {public}\\nEndpoint = {relay_ip}:3478\\nAllowedIPs = 10.203.0.1/32\\nPersistentKeepalive = 2\\n')
+fd=os.open('/run/wg.conf',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+with os.fdopen(fd,'w') as f:
+ f.write('[Interface]\\nPrivateKey = '+key+'\\nListenPort = 51820\\n[Peer]\\nPublicKey = {public}\\nEndpoint = {relay_ip}:3478\\nAllowedIPs = 10.203.0.1/32\\nPersistentKeepalive = 2\\n')
 '''
             py(name, config)
             # Outer socket is relay-only even if a peer attempts authenticated roaming. No direct fallback.

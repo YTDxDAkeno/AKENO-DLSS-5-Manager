@@ -1,0 +1,33 @@
+name: akeno-vpn-exit-development
+services:
+  exit:
+    profiles: [approved-exit]
+    image: ${AKENO_EXIT_IMAGE:?Build and record an immutable reviewed exit image first}
+    pull_policy: never
+    restart: "no"
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_ADMIN]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 64
+    mem_limit: 192m
+    cpus: 0.5
+    # These settings are scoped to this container's dedicated network namespace.
+    sysctls:
+      net.ipv4.ip_forward: "1"
+      net.ipv6.conf.all.forwarding: "1"
+    ports:
+      # Loopback-only is deliberate. A public binding requires a separate owner-approved override and ACL review.
+      - "127.0.0.1:51820:51820/udp"
+    volumes:
+      - ./operator.json:/run/operator.json:ro
+      - ./runtime/agent.token:/run/agent.token:ro
+      - ./runtime/wireguard.key:/run/wireguard.key:ro
+      - ./runtime/state:/var/lib/akeno-exit
+    tmpfs:
+      - /tmp:size=8m,mode=1777
+    networks: [approved-uplink]
+networks:
+  approved-uplink:
+    external: true
+    name: ${AKENO_EXIT_UPLINK:?Choose a dedicated owner-approved uplink network}

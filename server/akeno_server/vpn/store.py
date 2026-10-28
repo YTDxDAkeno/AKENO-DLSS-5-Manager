@@ -76,6 +76,7 @@ class VPNStore:
                 generation INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0
             );
             CREATE INDEX IF NOT EXISTS vpn_leases_server ON vpn_leases(server_id, revoked, expires);
+            CREATE TABLE IF NOT EXISTS vpn_probe_replays (nonce TEXT PRIMARY KEY, expires REAL NOT NULL);
             ''')
 
     @contextmanager
@@ -105,9 +106,9 @@ class VPNStore:
         global_ip(match[1].strip('[]'))
         try:
             v4, v6 = ipaddress.ip_network(subnet4), ipaddress.ip_network(subnet6)
-            if v4.version != 4 or v4.prefixlen != 24 or not v4.is_private or v4.overlaps(ipaddress.ip_network('10.203.0.0/16')):
+            if v4.version != 4 or v4.prefixlen != 24 or not v4.subnet_of(ipaddress.ip_network('10.204.0.0/16')):
                 raise ValueError()
-            if v6.version != 6 or v6.prefixlen != 64 or not v6.subnet_of(ipaddress.ip_network('fc00::/7')):
+            if v6.version != 6 or v6.prefixlen != 64 or not v6.subnet_of(ipaddress.ip_network('fd42:204::/48')):
                 raise ValueError()
             if isinstance(capacity, bool) or not 1 <= capacity <= 250:
                 raise ValueError()
@@ -167,6 +168,18 @@ class VPNStore:
             if not matches:
                 self._revoke_server(db, ident)
         return {'server_id': ident, 'country_matches': matches, 'enabled': matches}
+
+    def accept_proof(self, ident, claims):
+        """Consume a cryptographically verified one-use independent measurement before enabling this exit."""
+        with self._db(True) as db:
+            db.execute('DELETE FROM vpn_probe_replays WHERE expires<=?', (self.clock(),))
+            try:
+                db.execute('INSERT INTO vpn_probe_replays VALUES (?,?)', (claims['nonce'], claims['exp']))
+            except sqlite3.IntegrityError:
+                raise VPNError('Independent VPN exit proof was already consumed.') from None
+        return self.verify_exit(ident, country=claims['country'], exit_ipv4=claims['exit_ipv4'],
+                                exit_ipv6=claims['exit_ipv6'], evidence=claims['evidence'],
+                                observed_at=claims['observed_at'])
 
     def disable(self, ident):
         with self._db(True) as db:

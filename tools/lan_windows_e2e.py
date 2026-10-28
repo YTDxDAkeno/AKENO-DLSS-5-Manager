@@ -69,7 +69,7 @@ def child(work: Path):
     LanSession(ROOM, FileControl(work / 'control.json'), native, journal, status, lambda: False).run()
 
 
-def run(args):
+def _run(args):
     if sys.platform != 'win32' or not ctypes.windll.shell32.IsUserAnAdmin():
         raise SystemExit('Run elevated on a disposable Windows machine.')
     work = args.work.resolve()
@@ -82,6 +82,7 @@ def run(args):
     from akeno_server.network.coordinator import Coordinator, Grant
     native, journal, status, LanSession = session_parts(work)
     checks, evidence = [], {}
+    args._checks, args._evidence = checks, evidence
 
     def check(ok, name, detail=''):
         checks.append({'name': name, 'passed': bool(ok), 'detail': str(detail)[:600]})
@@ -168,6 +169,8 @@ def run(args):
         rules = LanFirewall(name, '10.203.9.0/24').rules()
         check('block TCP' in rules and 'block UDP' in rules and 'latency probe' in rules,
               'AKENO LAN firewall rules on the LAN adapter', rules.replace('\n', ' | '))
+        check('relay Inbound' in rules and 'relay Outbound' in rules,
+              'native outer firewall rules constrain inbound and outbound packets to the relay')
 
         def mode():
             return (status.load().get('peers', {}).get(b_pub) or {}).get('mode')
@@ -201,7 +204,7 @@ def run(args):
 
         # A game server: unreachable until the user allows exactly that program, then reachable from the room.
         game = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        game.bind((A_IP, 27015))
+        game.bind((A_IP, 3979))
         game.settimeout(0.2)
         serving = threading.Event()
 
@@ -215,13 +218,13 @@ def run(args):
                 except OSError:
                     return
         threading.Thread(target=serve, daemon=True).start()
-        before = probe(member.udp_packet(B_IP, A_IP, 41015, 27015, b'hello'), lambda i: i['sport'] == 27015)
+        before = probe(member.udp_packet(B_IP, A_IP, 41015, 3979, b'hello'), lambda i: i['sport'] == 3979)
         info('game port before the user allows the program', 'reachable' if before else 'blocked')
-        LanFirewall(name, '10.203.9.0/24').allow_program(sys.executable)
-        after = probe(member.udp_packet(B_IP, A_IP, 41015, 27015, b'hello'),
-                      lambda i: i['sport'] == 27015 and i['body'] == b'GAMEhello')
+        LanFirewall(name, '10.203.9.0/24').allow_program(sys.executable, 'openttd')
+        after = probe(member.udp_packet(B_IP, A_IP, 41015, 3979, b'hello'),
+                      lambda i: i['sport'] == 3979 and i['body'] == b'GAMEhello')
         check(after, 'after the user allows the game program, room members can reach its port')
-        spoof = probe(member.udp_packet('10.203.9.77', A_IP, 41016, 27015, b'spoof'), lambda i: i['sport'] == 27015)
+        spoof = probe(member.udp_packet('10.203.9.77', A_IP, 41016, 3979, b'spoof'), lambda i: i['sport'] == 3979)
         check(not spoof, 'a member cannot send with another address (WireGuard AllowedIPs /32)')
         serving.set()
         game.close()
@@ -273,6 +276,33 @@ def run(args):
     args.report.write_text(json.dumps({'platform': 'real Windows', 'checks': checks, 'evidence': evidence}, indent=2),
                            encoding='utf-8')
     print(f"{sum(1 for c in checks if c['passed'])} real Windows LAN Play checks passed", flush=True)
+
+
+def run(args):
+    """Restore all firewall profile states and the owned tunnel even when a native assertion fails."""
+    if sys.platform != 'win32' or not ctypes.windll.shell32.IsUserAnAdmin():
+        raise SystemExit('Run elevated on a disposable Windows machine.')
+    original = json.loads(ps("Get-NetFirewallProfile | Select-Object Name,@{Name='Enabled';"
+                             "Expression={$_.Enabled.ToString()}} | ConvertTo-Json -Compress"))
+    states = {item['Name']: item['Enabled'] for item in original}
+    if set(states) != {'Domain', 'Private', 'Public'} or any(v not in ('True', 'False') for v in states.values()):
+        raise RuntimeError('Cannot safely preserve the original firewall profile states.')
+    try:
+        ps('Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True')
+        _run(args)
+    finally:
+        try:
+            if args.work and args.work.exists():
+                from akeno.licensing.storage import SecureStore
+                from akeno.network.lan_windows import recover
+                from akeno.network.windows import WindowsWireGuard
+                recover(WindowsWireGuard(), SecureStore(args.work / 'lan-journal'))
+        finally:
+            for profile, enabled in states.items():
+                ps(f'Set-NetFirewallProfile -Profile {profile} -Enabled {enabled}')
+            if hasattr(args, '_checks'):
+                args.report.write_text(json.dumps({'platform': 'real Windows', 'checks': args._checks,
+                                                   'evidence': args._evidence}, indent=2), encoding='utf-8')
 
 
 if __name__ == '__main__':

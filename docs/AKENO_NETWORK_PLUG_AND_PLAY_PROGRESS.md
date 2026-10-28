@@ -43,3 +43,14 @@ Integrate relay-only tickets and path control, add browser/VPN routers behind op
 - Opt-in VPN settings and browser/VPN router registration added; VPN package under development.
 - Windows/component/NAT workflows now include this feature branch. Windows execution of this checkpoint is not verified.
 - This WIP checkpoint may contain cross-file integration still under test; continue integration before a release claim.
+
+## Checkpoint 2 — first working slices
+
+- Verified checkpoint before this update: `d02d010b7cfd23144ba4530bbaa81db58acdde63`; current pushed SHA is also written by the task-local watchdog to `/tmp/akeno-checkpoint-state.json`.
+- Three-minute task-local watchdog is running; bounded source/doc allowlist, private-key/token scan, nonempty WIP commits, push + exact SHA comparison. Runtime credentials, key files, databases and builds are excluded. Check its state after resumption; live processes may not survive a new machine.
+- Public browser: API + legacy RoomStore tests 15 passed; desktop browser 3 passed. Safe listings, password joins, owner publication/lock, expiry, one-public-room quota and bounded reports implemented.
+- Explicit Windows bootstrap: 35 policy tests passed with platform stand-ins; actual installation is NOT executed locally. Fixed official MSI source, online Authenticode revocation, protected privileged staging, explicit consent and UAC helper wired. Native CI now uses this bootstrap.
+- Existing + new UI/browser/bootstrap focused check: 56 passed (Qt offscreen Linux).
+- Actual isolated relay lab: 27/27 checks passed, four wireguard-go clients, three communicating in one room, fourth room denied, real OpenTTD discovery query/game-info TCP, revocation/lease and four outer PCAPs. Captures show only controlled relay destinations and no application plaintext. Explicit UDP game query is not Windows broadcast forwarding, public ISP NAT or two physical PCs.
+- VPN operator/agent/device/proof control plane and automatic DPAPI client are implemented, integration tests ongoing. No authorized real country exit exists; no live country is connectable.
+- Next: privileged automatic VPN session with real handshake/egress checks, private-key-local provisioning, exact game-port firewall UI, full regression and handoff.

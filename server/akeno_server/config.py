@@ -39,6 +39,7 @@ class ServerConfig(BaseSettings):
     # Independent opt-in: no country catalog, control API or exit is enabled by an ordinary update.
     vpn_enabled: bool = False
     vpn_database_path: Path = Path("/data/vpn.sqlite3")
+    vpn_probe_keys_path: Path = Path("/data/vpn-probe-public-keys.json")
     vpn_operator_token: SecretStr = SecretStr("")
     # LAN Play data plane (UDP). Empty bind: no coordinator, rooms stay control-plane only. The host is what members'
     # WireGuard uses as the coordinator/relay endpoint (public name or address of this server).
@@ -103,8 +104,8 @@ class ServerConfig(BaseSettings):
             raise ConfigError("AKENO_PUBLIC_URL must be an https:// address.")
         self.public_url = self.public_url.rstrip("/")
         self.admin_url = self.admin_url.rstrip("/")
-        if self.vpn_enabled and len(self.vpn_operator_token.get_secret_value()) < 32:
-            raise ConfigError("AKENO_VPN_OPERATOR_TOKEN must contain at least 32 characters when VPN is enabled.")
+        if self.vpn_enabled and len(self.vpn_operator_token.get_secret_value()) < 48:
+            raise ConfigError("AKENO_VPN_OPERATOR_TOKEN must contain at least 48 characters when VPN is enabled.")
         return self
 
     @property

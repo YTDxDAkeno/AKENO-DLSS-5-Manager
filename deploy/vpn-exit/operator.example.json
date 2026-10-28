@@ -1,0 +1,7 @@
+{
+  "control_origin": "https://CONTROL-API.example.invalid",
+  "server_id": "REPLACE_WITH_REGISTERED_SERVER_ID",
+  "public_key": "REPLACE_WITH_THIS_EXIT_PUBLIC_KEY",
+  "ipv4_subnet": "10.204.1.0/24",
+  "ipv6_subnet": "fd42:204:0:1::/64"
+}

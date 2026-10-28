@@ -68,8 +68,10 @@ class WireGuard:
             if key in result:
                 raise AgentError('Invalid WireGuard peer inventory.')
             try:
-                addresses = () if raw.strip() == '(none)' else tuple(
-                    str(ipaddress.ip_network(x.strip(), strict=True)) for x in raw.replace(',', ' ').split())
+                parsed = [] if raw.strip() == '(none)' else [
+                    ipaddress.ip_network(x.strip(), strict=True) for x in raw.replace(',', ' ').split()]
+                addresses = tuple(str(net) for net in sorted(parsed,
+                    key=lambda net: (net.version, int(net.network_address), net.prefixlen)))
             except ValueError:
                 raise AgentError('Invalid WireGuard peer inventory.') from None
             result[key] = addresses
@@ -280,20 +282,31 @@ class ExitAgent:
         if not self.started:
             self.startup()
         try:
-            generation, desired = self._manifest(self.control.fetch())
+            manifest = self.control.fetch()
+            generation, desired = self._manifest(manifest)
+            deadline = min([manifest['expires_at'], *(p['expires_at'] for p in manifest['peers'])])
+
+            def fresh():
+                if self.clock() >= deadline:
+                    raise AgentError('The exit peer manifest expired during reconciliation.')
+
             actual = self.native.peers()
             if set(actual) - self.managed:
                 raise AgentError('An unowned peer was added to the dedicated exit interface.')
             self.managed.update(desired)
             self._record()                 # cleanup rights survive a crash during wg set
             for key in set(actual) - set(desired):
+                fresh()
                 self.native.remove(key)
             for key, addresses in desired.items():
+                fresh()
                 if actual.get(key) != addresses:
                     self.native.add(key, addresses)
+            fresh()
             if self.native.peers() != desired:
                 raise AgentError('WireGuard did not apply the requested peer allow-list.')
             self.control.heartbeat(generation, self.expected_key)
+            fresh()
             self.managed = set(desired)
             self._record()
             return {'generation': generation, 'active_peers': len(desired)}

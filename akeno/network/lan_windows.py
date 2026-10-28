@@ -122,6 +122,8 @@ class LanFirewall:
         if net.prefixlen != 24 or not net.subnet_of(LAN_NETWORK):
             raise LanError('Room subnet outside the LAN Play range.')
         self.name, self.subnet, self.run = name, str(net), run
+        self._ports = {'TCP': set(), 'UDP': {PROBE_PORT}}
+        self._policy_version = 0
 
     def require_enabled(self):
         enabled = self.run('(Get-NetFirewallProfile -Name Domain,Private,Public).Enabled').split()
@@ -169,14 +171,47 @@ class LanFirewall:
                      f"-Action Allow -InterfaceAlias '{n}' -Protocol UDP -LocalPort {PROBE_PORT} -RemoteAddress {s} "
                      "-Profile Any | Out-Null")
         self.run('; '.join(lines))
+        self._deny_other_ports()
 
-    def allow_program(self, program: str):
+    def _deny_other_ports(self):
+        """Preexisting broad Windows allow rules cannot expose unrelated listening TCP/UDP services on this adapter.
+
+        Replacement policy is installed before the previous policy is removed, so expanding the reviewed game-port
+        set never briefly exposes all ports. Explicit Windows-service block rules remain authoritative.
+        """
+        previous = self._policy_version
+        self._policy_version += 1
+        label = f'{GROUP} {self.name} default deny {self._policy_version}'
+        commands = []
+        for protocol, allowed in self._ports.items():
+            excluded = []
+            start = 1
+            for port in sorted(allowed):
+                if start < port: excluded.append(f'{start}-{port-1}')
+                start = port+1
+            if start <= 65535: excluded.append(f'{start}-65535')
+            values = ','.join("'"+part+"'" for part in excluded)
+            commands.append(f"New-NetFirewallRule -DisplayName '{label} {protocol}' -Group '{GROUP}' "
+                            f"-Direction Inbound -Action Block -InterfaceAlias '{self.name}' -Protocol {protocol} "
+                            f"-LocalPort {values} -Profile Any | Out-Null")
+        self.run('; '.join(commands))
+        if previous:
+            self.run(f"Get-NetFirewallRule -Group '{GROUP}' | Where-Object DisplayName "
+                     f"-like '{GROUP} {self.name} default deny {previous} *' | Remove-NetFirewallRule")
+
+    def allow_program(self, program: str, game_id: str):
+        from akeno.network.games import profile
         exe = _program(program)
+        reviewed = profile(game_id)
         n, s, g = self.name, self.subnet, GROUP
         self.run('; '.join(
             f"New-NetFirewallRule -DisplayName '{g} {n} game {proto}' -Group '{g}' -Direction Inbound -Action Allow "
-            f"-InterfaceAlias '{n}' -Program '{exe}' -Protocol {proto} -RemoteAddress {s} -Profile Any | Out-Null"
-            for proto in ('TCP', 'UDP')))
+            f"-InterfaceAlias '{n}' -Program '{exe}' -Protocol {proto} -LocalPort {port} "
+            f"-RemoteAddress {s} -Profile Any | Out-Null"
+            for proto, port in reviewed.ports))
+        for proto, port in reviewed.ports:
+            self._ports[proto].add(port)
+        self._deny_other_ports()
 
     def rules(self) -> str:
         return self.run(f"Get-NetFirewallRule -Group '{GROUP}' | Where-Object DisplayName -like '*{self.name}*' | "
@@ -291,9 +326,9 @@ class LanSession:
                 if isinstance(request, dict) and request.get('room') == self.room and request.get('id') not in handled:
                     handled.add(request.get('id'))
                     try:
-                        firewall.allow_program(request.get('program', ''))
+                        firewall.allow_program(request.get('program', ''), request.get('game_id', ''))
                         allowed.append(Path(request['program']).name)
-                    except (LanError, NativeUnavailable) as exc:
+                    except (ValueError, NativeUnavailable) as exc:
                         error = str(exc)[:200]
                 if self.clock() - last_refresh >= self.HEARTBEAT:
                     try:

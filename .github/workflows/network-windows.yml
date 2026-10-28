@@ -24,30 +24,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt
-      - name: Install the official signed WireGuard for Windows (newest MSI, signer verified)
-        shell: pwsh
-        run: |
-          $base = 'https://download.wireguard.com/windows-client/'
-          $index = Invoke-WebRequest -UseBasicParsing $base
-          $msi = $index.Links.href | Where-Object { $_ -match '^wireguard-amd64-[0-9.]+\.msi$' } |
-            Sort-Object { [version]($_ -replace '^wireguard-amd64-|\.msi$', '') } | Select-Object -Last 1
-          if (-not $msi) { throw 'No official WireGuard MSI found in the download index' }
-          $file = Join-Path $env:RUNNER_TEMP $msi
-          Invoke-WebRequest -UseBasicParsing ($base + $msi) -OutFile $file
-          $sig = Get-AuthenticodeSignature $file
-          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=WireGuard LLC') {
-            throw "Unexpected installer signature: $($sig.Status) $($sig.SignerCertificate.Subject)"
-          }
-          Write-Host "Installing $msi (SHA-256 $((Get-FileHash $file).Hash)), signed by $($sig.SignerCertificate.Subject)"
-          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$file`"", '/qn', 'DO_NOT_LAUNCH=1',
-            '/l*v', "`"$env:RUNNER_TEMP\wireguard-msi.log`""
-          if ($p.ExitCode -ne 0) { throw "msiexec failed with $($p.ExitCode)" }
-          & "$env:ProgramFiles\WireGuard\wireguard.exe" /installmanagerservice
-          $store = "$env:ProgramFiles\WireGuard\Data\Configurations"
-          for ($i = 0; $i -lt 60 -and -not (Test-Path $store); $i++) { Start-Sleep 1 }
-          if (-not (Test-Path $store)) { throw 'The WireGuard manager service did not create its configuration store' }
-          Get-Service WireGuardManager | Format-List Name, Status, StartType
-          (Get-Item "$env:ProgramFiles\WireGuard\wireguard.exe").VersionInfo | Format-List ProductVersion, FileVersion
+      - name: Test explicit-consent official component bootstrap (online signature and protected installer)
+        run: python tools/network_bootstrap_windows_e2e.py --consent-install --report network-bootstrap-windows-report.json
       - name: AKENO VPN backend through WireGuardNT (split tunnel, recovery, outage, full tunnel leak checks)
         run: python tools/network_windows_e2e.py --work "$env:RUNNER_TEMP/network-e2e" --report network-windows-report.json --full-tunnel
       - name: WireGuard log on failure
@@ -60,7 +38,9 @@ jobs:
         if: always()
         with:
           name: network-windows-evidence
-          path: network-windows-report.json
+          path: |
+            network-windows-report.json
+            network-bootstrap-windows-report.json
   lan-play:
     runs-on: windows-2022
     timeout-minutes: 25
@@ -72,30 +52,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt argon2-cffi
-      - name: Install the official signed WireGuard for Windows (newest MSI, signer verified)
-        shell: pwsh
-        run: |
-          $base = 'https://download.wireguard.com/windows-client/'
-          $index = Invoke-WebRequest -UseBasicParsing $base
-          $msi = $index.Links.href | Where-Object { $_ -match '^wireguard-amd64-[0-9.]+\.msi$' } |
-            Sort-Object { [version]($_ -replace '^wireguard-amd64-|\.msi$', '') } | Select-Object -Last 1
-          if (-not $msi) { throw 'No official WireGuard MSI found in the download index' }
-          $file = Join-Path $env:RUNNER_TEMP $msi
-          Invoke-WebRequest -UseBasicParsing ($base + $msi) -OutFile $file
-          $sig = Get-AuthenticodeSignature $file
-          if ($sig.Status -ne 'Valid' -or $sig.SignerCertificate.Subject -notmatch 'O=WireGuard LLC') {
-            throw "Unexpected installer signature: $($sig.Status) $($sig.SignerCertificate.Subject)"
-          }
-          Write-Host "Installing $msi (SHA-256 $((Get-FileHash $file).Hash)), signed by $($sig.SignerCertificate.Subject)"
-          $p = Start-Process msiexec.exe -Wait -PassThru -ArgumentList '/i', "`"$file`"", '/qn', 'DO_NOT_LAUNCH=1',
-            '/l*v', "`"$env:RUNNER_TEMP\wireguard-msi.log`""
-          if ($p.ExitCode -ne 0) { throw "msiexec failed with $($p.ExitCode)" }
-          & "$env:ProgramFiles\WireGuard\wireguard.exe" /installmanagerservice
-          $store = "$env:ProgramFiles\WireGuard\Data\Configurations"
-          for ($i = 0; $i -lt 60 -and -not (Test-Path $store); $i++) { Start-Sleep 1 }
-          if (-not (Test-Path $store)) { throw 'The WireGuard manager service did not create its configuration store' }
-          Get-Service WireGuardManager | Format-List Name, Status, StartType
-          (Get-Item "$env:ProgramFiles\WireGuard\wireguard.exe").VersionInfo | Format-List ProductVersion, FileVersion
+      - name: Test explicit-consent official component bootstrap (online signature and protected installer)
+        run: python tools/network_bootstrap_windows_e2e.py --consent-install --report network-bootstrap-windows-report.json
       - name: AKENO LAN Play on WireGuardNT (coordinator proof, relay-only, firewall policy, revocation, crash recovery)
         run: python tools/lan_windows_e2e.py --work "$env:RUNNER_TEMP/lan-e2e" --report lan-windows-report.json
       - name: WireGuard log on failure
@@ -108,4 +66,6 @@ jobs:
         if: always()
         with:
           name: lan-windows-evidence
-          path: lan-windows-report.json
+          path: |
+            lan-windows-report.json
+            network-bootstrap-windows-report.json

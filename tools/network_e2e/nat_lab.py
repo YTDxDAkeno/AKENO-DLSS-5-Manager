@@ -336,18 +336,13 @@ def run_lab(symmetric_b, record):
         expected = ('relay', 'relay')
 
         def path_check(name):
-            via_relay = expected == ('relay', 'relay')
             modes = wait(settled, 75, 1)
             record(modes == expected, f'[{label}] {name}: path chosen from real handshakes', modes)
             before = lab.coordinator.stats['relayed']
             ok = lab.echo('a', 'b', count=200)
             relayed = lab.coordinator.stats['relayed'] - before
             record(ok == 200, f'[{label}] {name}: 200 encrypted UDP echoes between the members', f'{ok}/200')
-            if via_relay:
-                record(relayed >= 400, f'[{label}] {name}: traffic went through the AKENO relay', f'{relayed} relayed')
-            else:
-                record(relayed == 0, f'[{label}] {name}: direct P2P, nothing went through the relay',
-                       f'{relayed} relayed')
+            record(relayed >= 400, f'[{label}] {name}: traffic went through the AKENO relay', f'{relayed} relayed')
 
         refresh()
         path_check('first connection')
@@ -437,7 +432,9 @@ def main():
     finally:
         args.report.write_text(json.dumps({'checks': checks}, indent=2), encoding='utf-8')
     failed = [c for c in checks if c['passed'] is False]
-    print(f'{len(checks) - len(failed)} of {len(checks)} NAT lab checks passed', flush=True)
+    passed = sum(c['passed'] is True for c in checks)
+    skipped = sum(c['passed'] is None for c in checks)
+    print(f'{passed} passed, {len(failed)} failed, {skipped} skipped NAT lab checks', flush=True)
     raise SystemExit(1 if failed else 0)
 
 

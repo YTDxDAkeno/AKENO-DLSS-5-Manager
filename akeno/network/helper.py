@@ -110,9 +110,11 @@ def stop_lan(room):
     stop.save({'stop':True,'room':room})
 
 
-def allow_game(room,program):
+def allow_game(room,program,game_id):
     """Asks the running LAN session to allow one game program for this room (it validates the path itself)."""
-    SecureStore(sub('network')/'lan-allow').save({'room':room,'program':str(program),'id':uuid.uuid4().hex})
+    from akeno.network.games import profile
+    profile(game_id)
+    SecureStore(sub('network')/'lan-allow').save({'room':room,'program':str(program),'game_id':game_id,'id':uuid.uuid4().hex})
 
 
 def lan_status():
