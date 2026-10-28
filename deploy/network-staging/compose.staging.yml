@@ -43,6 +43,28 @@ x-app: &app
     staging-db: {condition: service_healthy}
 
 services:
+  staging-init:
+    image: ${AKENO_STAGING_IMAGE:?set AKENO_STAGING_IMAGE in the staging-only .env}
+    pull_policy: never
+    profiles: [initialize-only]
+    user: "0:0"
+    entrypoint: [python, /staging/init-volumes.py]
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, FOWNER]
+    security_opt: [no-new-privileges:true]
+    network_mode: none
+    volumes:
+      - ./init-volumes.py:/staging/init-volumes.py:ro
+      - staging-keys:/data/keys
+      - staging-mail:/data/mail
+      - staging-network:/data/network
+    mem_limit: 64m
+    memswap_limit: 64m
+    cpus: 0.10
+    pids_limit: 16
+    logging: *logs
+
   staging-db:
     image: postgres:16-alpine
     profiles: [approved-staging]
@@ -85,6 +107,7 @@ services:
       AKENO_NETWORK_COORDINATOR_KEY_PATH: /data/network/coordinator.key
     volumes:
       - ./entrypoint.py:/staging/entrypoint.py:ro
+      - ./seed-test-users.py:/staging/seed-test-users.py:ro
       - staging-keys:/data/keys
       - staging-mail:/data/mail
       - staging-network:/data/network
