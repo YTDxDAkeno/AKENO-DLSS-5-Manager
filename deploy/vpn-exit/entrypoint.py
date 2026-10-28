@@ -38,8 +38,8 @@ table inet akeno_vpn {{
   }}
   chain forward {{ type filter hook forward priority filter; policy drop;
     ct state invalid drop
-    iifname "akenoexit0" ip daddr @blocked4 drop
-    iifname "akenoexit0" ip6 daddr @blocked6 drop
+    iifname "akenoexit0" ip daddr @blocked4 counter drop comment "akeno-denied-ipv4-destination"
+    iifname "akenoexit0" ip6 daddr @blocked6 counter drop comment "akeno-denied-ipv6-destination"
     iifname "akenoexit0" tcp dport {{ 25, 135, 139, 445, 3389 }} drop
     iifname "akenoexit0" udp dport {{ 135, 137, 138, 139, 445, 3389 }} drop
     iifname "akenoexit0" limit rate over 8000000 bytes/second drop

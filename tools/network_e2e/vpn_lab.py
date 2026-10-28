@@ -19,7 +19,8 @@ import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-TARGET4, TARGET6 = '11.204.250.100', '2600:204:ffff::100'
+TARGET6 = '2600:204:ffff::100'
+PRIVATE4 = '10.205.250.100'
 PEER4, PEER6 = '10.204.1.2', 'fd42:204:0:1::2'
 
 
@@ -29,6 +30,12 @@ def run(args):
     client, exit_node, target = (prefix + '-' + role for role in ('client', 'exit', 'target'))
     env, checks = os.environ.copy(), []
     local_ipv6 = {}
+    # An internal Docker bridge drops IPv4 destinations outside its declared pool.
+    # These globally shaped addresses are confined to this disposable internal network,
+    # never public endpoints. Keep the target alias in that pool so bridge isolation
+    # does not discard a correctly forwarded packet before it reaches the target.
+    subnet4 = '11.204.' + str(uuid.uuid4().int % 254 + 1) + '.0/24'
+    destination4 = str(ipaddress.ip_network(subnet4).network_address + 100)
     for key in ('DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'):
         env.pop(key, None)
     args.evidence.mkdir(parents=True, exist_ok=False)
@@ -70,23 +77,36 @@ def run(args):
         return predicate()
 
     def echo(version, count=3, target_ip=None, source_node=None):
-        destination = target_ip or (TARGET4 if version == 4 else TARGET6)
-        source = f'''import base64,json,os,socket
-s=socket.socket(socket.AF_INET{'' if version == 4 else '6'},socket.SOCK_DGRAM);s.settimeout(.6)
+        destination = target_ip or (destination4 if version == 4 else TARGET6)
+        source = f'''import base64,json,os,socket,time
+s=socket.socket(socket.AF_INET{'' if version == 4 else '6'},socket.SOCK_DGRAM);s.settimeout(.2)
 ok=0;seen=[]
 for n in range({count}):
  payload=b'AKENO-VPN-PRIVATE-PAYLOAD:'+os.urandom(400)
  try:
   s.sendto(payload,({destination!r},43000))
-  answer=json.loads(s.recvfrom(4096)[0]);assert base64.b64decode(answer['payload'])==payload
-  ok+=1;seen.append(answer['source'])
- except (OSError,ValueError):pass
+  deadline=time.monotonic()+.6
+  while time.monotonic()<deadline:
+   try:answer=json.loads(s.recvfrom(4096)[0])
+   except socket.timeout:continue
+   if base64.b64decode(answer['payload'])==payload:
+    ok+=1;seen.append(answer['source']);break
+ except (OSError,ValueError,KeyError):pass
 print(json.dumps({{'ok':ok,'seen':seen}}))
 '''
         return json.loads(py(source_node or client, source).stdout)
 
     def peers():
         return sh(exit_node, 'wg show akenoexit0 peers').split()
+
+    def denied_destination_count(version):
+        document = json.loads(sh(exit_node, 'nft -j list chain inet akeno_vpn forward'))
+        comment = f'akeno-denied-ipv{version}-destination'
+        matching = [row['rule'] for row in document['nftables']
+                    if row.get('rule', {}).get('comment') == comment]
+        if len(matching) != 1 or not any('drop' in expr for expr in matching[0]['expr']):
+            raise AssertionError('Missing actual destination drop rule')
+        return next(expr['counter']['packets'] for expr in matching[0]['expr'] if 'counter' in expr)
 
     def publish(generation, public, fixed_deadline=None):
         data = {'generation': generation, 'peers': [] if public is None else [public],
@@ -102,7 +122,7 @@ print(json.dumps({{'ok':ok,'seen':seen}}))
         # Docker's IPv6 network driver may require host ip6tables-legacy modules absent in managed workers.
         # The dedicated bridge remains IPv4/internal; fixture-only IPv6 addresses/routes are set inside its
         # three isolated container namespaces. No host IPv6 route, firewall change or external route is needed.
-        docker('network', 'create', '--internal', network)
+        docker('network', 'create', '--internal', '--subnet', subnet4, network)
         for index, name in enumerate((client, exit_node, target), 2):
             attachment = 'name=' + network + ',driver-opt=com.docker.network.endpoint.sysctls=net.ipv6.conf.IFNAME.disable_ipv6=0'
             options = ['run', '-d', '--name', name, '--network', attachment, '--cap-add', 'NET_ADMIN',
@@ -113,6 +133,7 @@ print(json.dumps({{'ok':ok,'seen':seen}}))
             docker(*options, args.image)
             local_ipv6[name] = ula.removesuffix('/64') + str(index)
             sh(name, f'ip -6 address add {local_ipv6[name]}/64 dev eth0 nodad')
+            sh(name, 'tcpdump -U -n -i any -w /run/lab.pcap >/run/capture.log 2>&1 &')
         exit4, exit6 = addresses(exit_node)
         target4, target6 = addresses(target)
         for name, interface, own4, own6 in ((client, 'wg0', PEER4, PEER6),
@@ -130,8 +151,10 @@ print(json.dumps({{'ok':ok,'seen':seen}}))
         py(exit_node, "import sys;sys.path.insert(0,'/run');from pathlib import Path;from entrypoint import rules;Path('/run/exit.nft').write_text(rules('10.204.1.0/24','fd42:204:0:1::/64'))")
         sh(exit_node, 'nft -c -f /run/exit.nft; nft -f /run/exit.nft')
         record(True, 'actual deployment nftables policy validates and installs in the dedicated exit namespace')
-        sh(target, f'ip address add {TARGET4}/32 dev lo; ip -6 address add {TARGET6}/128 dev lo')
-        sh(exit_node, f'ip route add {TARGET4}/32 via {target4} dev eth0; '
+        sh(target, f'ip address add {destination4}/32 dev lo; ip address add {PRIVATE4}/32 dev lo; '
+                   f'ip -6 address add {TARGET6}/128 dev lo')
+        sh(exit_node, f'ip route add {destination4}/32 via {target4} dev eth0; '
+                      f'ip route add {PRIVATE4}/32 via {target4} dev eth0; '
                       f'ip -6 route add {TARGET6}/128 via {target6} dev eth0')
         write(target, '/run/echo.py', '''import base64,json,socket,threading
 def serve(family,address):
@@ -145,7 +168,7 @@ def serve(family,address):
 # Bind each destination explicitly: a wildcard UDP socket can reply from the private
 # uplink address instead of the global alias, breaking the NAT conntrack tuple.
 # Separate private listeners keep the blocked-destination checks meaningful.
-for family,address in ((socket.AF_INET,{TARGET4!r}),(socket.AF_INET,{target4!r}),
+for family,address in ((socket.AF_INET,{destination4!r}),(socket.AF_INET,{PRIVATE4!r}),
                        (socket.AF_INET6,{TARGET6!r})):
  threading.Thread(target=serve,args=(family,address),daemon=True).start()
 serve(socket.AF_INET6,{target6!r})
@@ -166,7 +189,7 @@ serve(socket.AF_INET6,{target6!r})
             if row.get('dst') == ula:
                 sh(client, 'ip -6 route del ' + row['dst'] + ' dev eth0')
         record(json.loads(sh(client, f'ip -j route get {exit4}'))[0]['dev'] == 'eth0' and
-               json.loads(sh(client, f'ip -j route get {TARGET4}'))[0]['dev'] == 'wg0',
+               json.loads(sh(client, f'ip -j route get {destination4}'))[0]['dev'] == 'wg0',
                'client routes only the outer WireGuard endpoint outside its full tunnel')
         publish(1, client_public)
         write(exit_node, '/run/manage.py', f'''import json,os,time
@@ -197,11 +220,13 @@ while True:
         handshake = sh(client, 'wg show wg0 latest-handshakes').split()
         record(len(handshake) == 2 and int(handshake[1]) > 0, 'actual WireGuard handshake confirmed by the native tool')
         # Prove these services respond before checking the VPN firewall denies access to them.
-        record(echo(4, target_ip=target4, source_node=exit_node)['ok'] == 3 and
-               echo(6, target_ip=target6, source_node=exit_node)['ok'] == 3,
+        record(echo(4, target_ip=PRIVATE4, source_node=target)['ok'] == 3 and
+               echo(6, target_ip=target6, source_node=target)['ok'] == 3,
                'private destination controls have live IPv4 and IPv6 echo listeners')
-        record(echo(4, target_ip=target4)['ok'] == 0, 'deployment policy denies forwarding to a private uplink address')
-        record(echo(6, target_ip=target6)['ok'] == 0, 'deployment policy denies forwarding to a private IPv6 uplink address')
+        for version, address in ((4, PRIVATE4), (6, target6)):
+            before = denied_destination_count(version)
+            record(echo(version, target_ip=address)['ok'] == 0 and denied_destination_count(version) > before,
+                   f'deployment IPv{version} drop rule rejects actual packets to a private destination')
         publish(2, None)
         record(wait(lambda: client_public not in peers()), 'revoked control manifest removes the real native peer')
         record(echo(4)['ok'] == 0 and echo(6)['ok'] == 0, 'revocation blocks actual IPv4 and IPv6 forwarding')
@@ -238,6 +263,9 @@ while True:
             commands = {
                 'routes4': ['ip', '-j', 'route'], 'routes6': ['ip', '-j', '-6', 'route'],
                 'firewall': ['nft', '-j', 'list', 'ruleset'],
+                'packets': ['tcpdump', '-nn', '-r', '/run/lab.pcap', '-c', '60'],
+                'forwarding4': ['cat', '/proc/sys/net/ipv4/ip_forward'],
+                'reverse_path_filter': ['cat', '/proc/sys/net/ipv4/conf/all/rp_filter'],
             }
             if role != 'target':
                 interface = 'wg0' if role == 'client' else 'akenoexit0'
