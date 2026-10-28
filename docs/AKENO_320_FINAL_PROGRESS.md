@@ -94,11 +94,17 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
 | `2f14877` | `drop_records: 0`, probe `seen_in_capture: 0` (no leak observed) — Packet Monitor does not record WFP ALE classify drops | `3eb3d19`: read the BFE classify-drop event log (`akeno/network/wfp_events.py`, `FwpmNetEventEnum0`, read-only) for the exact probe tuple; a probe seen on a link = leak, never "denied"; event collection off = fail closed (setting never changed) |
 | `3eb3d19` | positive reply not captured this time (4 unrelated records): `pktmon start` returns before recording | `7343d86`: wait until pktmon reports the private ETL, settle 0.5 s, second positive control after the denial probes, one captured reply per resolver required |
 
+| `7343d86` | both outbound tunnel queries recorded on the WireGuardNT layer-3 adapter (`query_payload: 2`), inbound reply not handed to Packet Monitor | `118e7e0`: capture control accepts the byte-identical query recorded without a link header (tunnel adapter) or the reply; a query on an Ethernet link never counts; the socket still validates every reply |
+
 ## Other changes since the last table
 
 - `4f864a5` build.yml: packaged `AKENO.exe --network-helper` through the runas verb (read-only status, refusals,
   no tunnel service/adapter afterwards); report uploaded with the Windows evidence.
 - `a8ca408` merged `codex/akeno-network-staging-20261028` @ `325d35c` (history only: the files were already identical).
+- `f66b9eb` upgrade path from the live 3.1.1 installer; `3021400` 3.2.0 release notes (EN + DE/EN Release Manager text);
+  `e15bd43` provider country matrix (web search, unverified); `65a9ab3` report sections 7–9; `ec54292` VPN latency =
+  median DNS round trip through the tunnel (display only).
+- Local: server suite **262 passed** (Python 3.12, `/opt/akeno-server-env`).
 - `23d79e5` LAN privacy row + "IP protection missing" instead of Connected without the lock; browser polish.
 - `92ccc2b` regenerated fixture screenshots incl. a fixture connected-VPN view (documentation IPs).
 - [Production read-only check 40765356305](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40765356305)
