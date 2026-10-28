@@ -101,3 +101,53 @@ def test_reply_to_a_socket_with_unspecified_local_address_is_bound_by_ports_and_
         if ok:assert monitor.finish()==0
         else:
             with pytest.raises(CaptureError,match='shape'):monitor.finish()
+
+
+class DropLog:
+    def __init__(self, proven):
+        self.proven, self.calls = set(proven), []
+
+    def proves(self, flows, start):
+        self.calls.append((list(flows), start))
+        return {flow for flow in flows if flow in self.proven}
+
+
+def monitor_with(tmp_path, observed_flow, drop_log):
+    query=question();reply=query[:2]+b'\x81\x83'+query[4:]
+    positive=('1.1.1.1',53,'10.204.1.2',43001,17)
+    denied=('192.168.1.2',43002,'8.8.8.8',53,17)
+    monitor=DNSCapture.__new__(DNSCapture)
+    monitor.directory=tmp_path;monitor.etl=tmp_path/'capture.etl';monitor._stop=lambda:None
+    monitor._call=lambda *args:None;monitor.started_at=1234;monitor.drop_log=drop_log
+    monitor.positive=[(query,('10.204.1.2',43001),('1.1.1.1',53))];monitor.pending=[denied]
+    raw=capture(positive,reply)
+    if observed_flow:raw+=capture(denied,query)[len(block(0x0a0d0d0a,struct.pack('<IHHq',0x1a2b3c4d,1,0,-1))):]
+    (tmp_path/'all.pcapng').write_bytes(raw)
+    (tmp_path/'drops.pcapng').write_bytes(capture(('10.0.0.9',1,'10.0.0.8',2,17),b'x'*12))
+    return monitor,denied
+
+
+def test_wfp_classify_drop_event_proves_a_silently_denied_probe(tmp_path):
+    log=DropLog([('192.168.1.2',43002,'8.8.8.8',53,17)])
+    monitor,denied=monitor_with(tmp_path,False,log)
+    assert monitor.finish()==1 and log.calls==[([denied],1234)]
+
+
+def test_without_any_drop_record_the_denial_stays_unproven(tmp_path):
+    monitor,_=monitor_with(tmp_path,False,DropLog([]))
+    with pytest.raises(CaptureError,match="wfp_drop_events': 0"):monitor.finish()
+
+
+def test_probe_seen_on_a_link_is_a_leak_even_if_a_drop_event_exists(tmp_path):
+    log=DropLog([('192.168.1.2',43002,'8.8.8.8',53,17)])
+    monitor,_=monitor_with(tmp_path,True,log)
+    with pytest.raises(CaptureError,match='observed on a network link'):monitor.finish()
+    assert log.calls==[]
+
+
+def test_unavailable_drop_events_fail_closed_as_capture_errors(tmp_path):
+    from akeno.network.wfp_events import EventsUnavailable
+    class Off:
+        def proves(self,flows,start):raise EventsUnavailable('Windows does not record firewall drop events.')
+    monitor,_=monitor_with(tmp_path,False,Off())
+    with pytest.raises(CaptureError,match='does not record'):monitor.finish()

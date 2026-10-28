@@ -2,7 +2,11 @@
 
 Never takes over an existing capture/filter set. Raw DNS captures are accessible only
 to Administrators/SYSTEM, never exported, and removed on normal cleanup. The observer
-requires a captured positive control and actual kernel drop records for pending probes.
+requires a captured positive control and, for every probe Windows accepted without an
+explicit denial, a recorded drop: a Packet Monitor drop record or, because Packet Monitor
+does not see WFP ALE classify drops, the Base Filtering Engine's own classify-drop event
+for exactly that tuple (akeno.network.wfp_events). A probe seen on any captured link is
+never counted as denied.
 """
 from __future__ import annotations
 
@@ -117,6 +121,8 @@ class DNSCapture:
         for port in (53,853):
             name='AKENO-DNS-'+uuid.uuid4().hex
             self._call('filter','add',name,'-p',str(port));self.filters.append(name)
+        from akeno.network.wfp_events import now
+        self.started_at=now()
         self._call('start','--capture','--comp','all','--pkt-size','0','--file-name',self.etl,
                    '--file-size','4','--log-mode','circular')
         self.started=True
@@ -156,14 +162,27 @@ class DNSCapture:
                 raise CaptureError(f'The actual positive DNS reply was not captured (capture metadata={stats}; '
                                    f'parsed={len(observed)}; shape={shape}).')
         missing=[flow for flow in self.pending if flow not in dropped]
-        if missing:
+        leaked=[flow for flow in self.pending if any(item==flow for item,_ in observed)]
+        wfp_proven=set()
+        if missing and not leaked:
+            log=getattr(self,'drop_log',None)
+            if log is None:
+                from akeno.network.wfp_events import DropLog
+                log=DropLog()
+            from akeno.network.windows import NativeUnavailable
+            try:wfp_proven=log.proves(missing,getattr(self,'started_at',0))
+            except NativeUnavailable as exc:raise CaptureError(str(exc)) from None
+            missing=[flow for flow in missing if flow not in wfp_proven]
+        if missing or leaked:
             # Structural counts only. 'seen_in_capture' > 0 would mean a denied probe was observed on a link: a leak.
             shape={'pending':len(self.pending),'missing':len(missing),'drop_records':drop_stats.get('records',0),
                    'drop_parsed':len(dropped_flows),'drop_links':drop_stats.get('links',[]),
                    'same_destination':sum(1 for f in missing if any(d[2:]==f[2:] for d in dropped)),
                    'same_source_address':sum(1 for f in missing if any(d[0]==f[0] for d in dropped)),
                    'protocols':sorted({f[4] for f in missing}),
-                   'seen_in_capture':sum(1 for f in missing if any(item==f for item,_ in observed))}
+                   'seen_in_capture':len(leaked),'wfp_drop_events':len(wfp_proven)}
+            if leaked:
+                raise CaptureError(f'A DNS probe outside the tunnel was observed on a network link (shape={shape}).')
             raise CaptureError(f'No kernel drop record proves an asynchronous DNS denial (shape={shape}).')
         return len(self.pending)
 
