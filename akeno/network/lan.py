@@ -9,7 +9,7 @@ import base64
 import ipaddress
 import time
 
-from akeno.network.credentials import verify_peer, verify_network_keys
+from akeno.network.credentials import verify_peer, verify_network_keys, validate_relay
 
 LAN_NETWORK = ipaddress.ip_network('10.203.0.0/16')
 COORDINATOR_ADDRESS = '10.203.0.1'
@@ -31,6 +31,8 @@ def verified_peers(result: dict, keys: dict, room: str, own_public: str, now=Non
     for item in result.get('peers', [])[:64]:
         try:
             claims = verify_peer(item.get('credential'), keys, room, now)
+            if claims['relay'] != result.get('coordinator'):
+                continue
         except (ValueError, AttributeError):
             continue
         if claims['public_key'] == own_public or claims['public_key'] in seen_keys or claims['virtual_ip'] in seen_ips:
@@ -49,15 +51,9 @@ def coordinator_of(result: dict) -> dict:
     if not isinstance(c, dict):
         raise LanError('LAN Play is not available on this server.')
     try:
-        key = base64.b64decode(c['public_key'], validate=True)
-        if len(key) != 32:
-            raise ValueError()
-        host, port = c['host'], c['port']
-        if not isinstance(host, str) or not 1 <= len(host) <= 253 or type(port) is not int or not 1 <= port <= 65535:
-            raise ValueError()
-    except (KeyError, TypeError, ValueError):
+        return validate_relay(c)
+    except ValueError:
         raise LanError('Invalid coordinator information.') from None
-    return {'public_key': c['public_key'], 'host': host, 'port': port}
 
 
 def interface_profile(private_key: str, virtual_ip: str, coordinator: dict, mtu=1380, listen_port=None) -> str:
@@ -164,6 +160,8 @@ class LanControl:
         identity = self.client._identity()
         keys = verify_network_keys(result.get('network_keys'), self.client.license.trusted_keys())
         own = verify_peer(result['credential'], keys, self.room)
+        if own['relay'] != result.get('coordinator') or result.get('relay_only') is not True:
+            raise LanError('LAN relay information does not match the signed authorization.')
         return {'self': {'public_key': identity['public_key'], 'private_key': identity['private_key'],
                          'virtual_ip': own['virtual_ip']},
                 'coordinator': coordinator_of(result),

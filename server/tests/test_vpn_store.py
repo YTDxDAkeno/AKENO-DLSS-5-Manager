@@ -140,6 +140,8 @@ def test_idempotent_request_is_bound_to_same_actor_device_and_key(inventory):
         s.provision(str(uuid.uuid4()), device, public, 'DE', request)
     with pytest.raises(VPNError):
         s.provision(actor, device, key(), 'DE', request)
+    with pytest.raises(VPNError):
+        s.provision(actor, device, public, 'US', request)
 
 
 def test_one_device_and_key_cannot_occupy_multiple_leases(inventory):

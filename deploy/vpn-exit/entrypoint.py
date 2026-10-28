@@ -20,7 +20,9 @@ def call(*argv, data=None):
 def rules(v4, v6):
     # Values have already been canonicalized as subnets, never arbitrary configuration text.
     return f'''
-table inet akeno_exit {{
+table inet akeno_vpn {{
+  set leased4 {{ type ipv4_addr; flags timeout; timeout 30s; size 250; }}
+  set leased6 {{ type ipv6_addr; flags timeout; timeout 30s; size 250; }}
   set blocked4 {{ type ipv4_addr; flags interval; elements = {{
     0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16,
     172.16.0.0/12, 192.0.0.0/24, 192.0.2.0/24, 192.168.0.0/16,
@@ -41,9 +43,10 @@ table inet akeno_exit {{
     iifname "akenoexit0" tcp dport {{ 25, 135, 139, 445, 3389 }} drop
     iifname "akenoexit0" udp dport {{ 135, 137, 138, 139, 445, 3389 }} drop
     iifname "akenoexit0" limit rate over 8000000 bytes/second drop
-    iifname "akenoexit0" oifname "eth0" ip saddr {v4} accept
-    iifname "akenoexit0" oifname "eth0" ip6 saddr {v6} accept
-    iifname "eth0" oifname "akenoexit0" ct state established,related accept
+    iifname "akenoexit0" oifname "eth0" ip saddr {v4} ip saddr @leased4 accept
+    iifname "akenoexit0" oifname "eth0" ip6 saddr {v6} ip6 saddr @leased6 accept
+    iifname "eth0" oifname "akenoexit0" ip daddr @leased4 ct state established,related accept
+    iifname "eth0" oifname "akenoexit0" ip6 daddr @leased6 ct state established,related accept
   }}
   chain output {{ type filter hook output priority filter; policy accept; }}
 }}

@@ -125,11 +125,20 @@ def credential(room,peer,lease,c):
     """A short-lived signed binding of one member: room, account, device, WireGuard key, virtual address and the
     relay-only policy. Proven home endpoints stay inside the coordinator and never enter client-visible tickets."""
     now=int(utcnow().timestamp())
+    host=get_config().network_coordinator_host
+    relay={'public_key':c.public_key,'host':host,'port':c.address[1]} if c is not None and host else None
     payload={'iss':'akeno-lan','aud':'akeno-lan-peer','sub':peer['actor'],'device_id':peer['device_id'],'room_id':room,
              'public_key':peer['public_key'],'virtual_ip':peer['virtual_ip'],'iat':now,'exp':now+lease,
-             'nonce':secrets.token_urlsafe(16),'transport':'relay-only'}
+             'nonce':secrets.token_urlsafe(16),'transport':'relay-only','relay':relay}
     try:
         return signing.sign_token('akeno-lan-peer',payload),payload
+    except signing.SigningUnavailable:
+        raise unavailable('peer_signing_unavailable','Peer credentials cannot be issued.') from None
+
+
+def network_keys():
+    try:
+        return signing.delegation()
     except signing.SigningUnavailable:
         raise unavailable('peer_signing_unavailable','Peer credentials cannot be issued.') from None
 
@@ -144,7 +153,7 @@ def heartbeat(room:str,body:DeviceBody,request:Request,caller:Caller=Depends(cur
     valid=members(actor,room,s,db)
     host=get_config().network_coordinator_host
     info={'public_key':c.public_key,'host':host,'port':c.address[1]} if c is not None and host else None
-    return {'credential':ticket,'network_keys':signing.delegation(),'expires_at':payload['exp'],'members':valid,'room':operation(lambda:s.info(actor,room)),
+    return {'credential':ticket,'network_keys':network_keys(),'expires_at':payload['exp'],'members':valid,'room':operation(lambda:s.info(actor,room)),
             'peers':[{'credential':credential(room,p,s.PEER_LEASE,c)[0]} for p in valid if p['actor']!=actor],
             'coordinator':info,'transport':'wireguard' if info else 'not_implemented','relay_only':True}
 

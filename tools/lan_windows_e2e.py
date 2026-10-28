@@ -182,6 +182,31 @@ def _run(args):
         latency = wait(lambda: (status.load().get('peers', {}).get(b_pub) or {}).get('latency_ms'), 15)
         check(latency is not None, 'latency to the member measured (AKENO probe)', f'{latency} ms')
 
+        # A known peer possesses valid WireGuard transport keys. Send valid encrypted probe datagrams directly
+        # to the tunnel socket, bypassing the relay in this artificial loopback fixture. The outer firewall
+        # must drop them before WireGuard can authenticate/roam to the peer's source endpoint.
+        direct_session = member._member_session()
+        check(direct_session is not None, 'test responder has a confirmed encrypted peer session')
+        prior_endpoint = direct_session.addr
+        token = b'AKLP' + os.urandom(12)
+        before_direct = len(member.inbox_snapshot())
+        try:
+            direct_session.addr = coordinator.endpoint(a_pub)
+            for _ in range(8):
+                member.send_ip(member.udp_packet(B_IP, A_IP, 41998, 51999, token))
+                time.sleep(.03)
+        finally:
+            direct_session.addr = prior_endpoint
+        time.sleep(.3)
+        direct_replies = [item for item in member.inbox_snapshot()[before_direct:]
+                          if item['protocol'] == 17 and item['sport'] == 51999
+                          and item['body'] == b'AKLR' + token[4:]]
+        check(not direct_replies, 'valid encrypted direct datagrams cannot bypass the outer relay-only filter')
+        native_peer = native._call('wg.exe', 'show', name, 'endpoints').stdout
+        expected_endpoint = f'{coordinator.address[0]}:{coordinator.address[1]}'
+        check(any(line.split() == [b_pub, expected_endpoint] for line in native_peer.splitlines()),
+              'native peer endpoint stays on the relay after an authenticated direct-roaming attempt')
+
         # -- inbound policy as seen by a room member ---------------------------------------------------------------
         def probe(packet, want, wait_s=2.5):
             seen = len(member.inbox_snapshot())
@@ -208,26 +233,33 @@ def _run(args):
         game.settimeout(0.2)
         serving = threading.Event()
 
-        def serve():
+        def serve(server):
             while not serving.is_set():
                 try:
-                    data, addr = game.recvfrom(2048)
-                    game.sendto(b'GAME' + data, addr)
+                    data, addr = server.recvfrom(2048)
+                    server.sendto(b'GAME' + data, addr)
                 except socket.timeout:
                     continue
                 except OSError:
                     return
-        threading.Thread(target=serve, daemon=True).start()
+        threading.Thread(target=serve, args=(game,), daemon=True).start()
+        other_port = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        other_port.bind((A_IP, 27015))
+        other_port.settimeout(.2)
+        threading.Thread(target=serve, args=(other_port,), daemon=True).start()
         before = probe(member.udp_packet(B_IP, A_IP, 41015, 3979, b'hello'), lambda i: i['sport'] == 3979)
-        info('game port before the user allows the program', 'reachable' if before else 'blocked')
+        check(not before, 'game port is blocked before the user allows its reviewed profile')
         LanFirewall(name, '10.203.9.0/24').allow_program(sys.executable, 'openttd')
         after = probe(member.udp_packet(B_IP, A_IP, 41015, 3979, b'hello'),
                       lambda i: i['sport'] == 3979 and i['body'] == b'GAMEhello')
         check(after, 'after the user allows the game program, room members can reach its port')
+        unrelated = probe(member.udp_packet(B_IP, A_IP, 41017, 27015, b'other'), lambda i: i['sport'] == 27015)
+        check(not unrelated, 'the same allowed program remains unreachable on ports outside the game profile')
         spoof = probe(member.udp_packet('10.203.9.77', A_IP, 41016, 3979, b'spoof'), lambda i: i['sport'] == 3979)
         check(not spoof, 'a member cannot send with another address (WireGuard AllowedIPs /32)')
         serving.set()
         game.close()
+        other_port.close()
 
         # -- B refuses any non-relay source; relay-only must continue without exposing a direct endpoint ----------
         member.accept_from = {coordinator.address}

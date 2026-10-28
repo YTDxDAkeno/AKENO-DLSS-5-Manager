@@ -228,7 +228,8 @@ class VPNStore:
         with self._db(True) as db:
             old = db.execute('SELECT * FROM vpn_leases WHERE request_id=?', (request_id,)).fetchone()
             if old is not None:
-                if old['actor'] != actor or old['device'] != device or old['public_key'] != public_key:
+                old_server = self._server(db, old['server_id'])
+                if old['actor'] != actor or old['device'] != device or old['public_key'] != public_key or old_server['country'] != country:
                     raise VPNError('Request identity does not match this device.')
                 return self._lease(db, old['id'], actor, device)
             if db.execute('SELECT 1 FROM vpn_leases WHERE device=? AND revoked=0 AND expires>?',

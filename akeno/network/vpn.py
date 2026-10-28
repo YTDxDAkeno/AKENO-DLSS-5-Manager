@@ -52,6 +52,8 @@ class VPNClient(LanClient):
     def _verify(self, result, country=None):
         i = self._identity()
         try:
+            if not isinstance(result, dict) or not isinstance(result.get('credential'), str) or len(result['credential']) > 8192:
+                raise ValueError()
             keys = verify_network_keys(result['network_keys'], self.license.trusted_keys(), purpose='akeno-vpn-tunnel')
             _, claims = verify(result['credential'], keys, 'akeno-vpn-tunnel')
             now = time.time()
@@ -62,18 +64,27 @@ class VPNClient(LanClient):
                     claims['expires_at'] != claims['exp'] or claims['state'] not in ('ready', 'awaiting_exit'):
                 raise ValueError()
             uuid.UUID(claims['sub'])
+            if claims['actor'] != claims['sub']:
+                raise ValueError()
             if not re.fullmatch('[0-9a-f]{32}', claims['lease_id']) or not re.fullmatch('[0-9a-f]{32}', claims['server_id']) or \
                     not re.fullmatch('[A-Z]{2}', claims['country']) or country and claims['country'] != country:
                 raise ValueError()
-            if len(base64.b64decode(claims['server_public_key'], validate=True)) != 32 or \
+            raw_key = base64.b64decode(claims['server_public_key'], validate=True)
+            if len(raw_key) != 32 or not any(raw_key) or base64.b64encode(raw_key).decode() != claims['server_public_key'] or \
                     claims['routes'] != ['0.0.0.0/0', '::/0'] or len(claims['addresses']) != 2 or \
                     {ipaddress.ip_interface(a).version for a in claims['addresses']} != {4, 6}:
                 raise ValueError()
             for address in claims['addresses']:
                 interface = ipaddress.ip_interface(address)
-                if not interface.ip.is_private or interface.network.prefixlen != interface.max_prefixlen or \
-                        interface.version == 4 and interface.ip in ipaddress.ip_network('10.203.0.0/16'):
+                pool = ipaddress.ip_network('10.204.0.0/16' if interface.version == 4 else 'fd42:204::/48')
+                if interface.ip not in pool or interface.network.prefixlen != interface.max_prefixlen:
                     raise ValueError()
+            if not isinstance(claims['dns'], list) or not 1 <= len(claims['dns']) <= 4 or \
+                    any(not ipaddress.ip_address(dns).is_global for dns in claims['dns']):
+                raise ValueError()
+            endpoint = re.fullmatch(r'(\[[0-9a-fA-F:]+\]|[0-9.]+):([0-9]{1,5})', claims['endpoint'])
+            if not endpoint or not ipaddress.ip_address(endpoint[1].strip('[]')).is_global:
+                raise ValueError()
             for field, version in (('expected_exit_ipv4', 4), ('expected_exit_ipv6', 6)):
                 address = ipaddress.ip_address(claims[field])
                 if address.version != version or not address.is_global:
@@ -140,7 +151,10 @@ class VPNClient(LanClient):
     def profile_text(self, claims=None):
         """Return only to protected native/profile-store code, never diagnostics or cloud sync."""
         i = self._current()
-        claims = claims or i.get('vpn_claims', {})
+        stored = i.get('vpn_claims', {})
+        if claims is not None and claims != stored:
+            raise ProfileError('The VPN configuration does not match its verified tunnel permission.')
+        claims = stored
         if claims.get('lease_id') != i['vpn_lease_id'] or claims.get('state') != 'ready' or \
                 not time.time() < claims.get('exp', 0):
             raise ProfileError('Wait for a fresh acknowledged VPN lease before starting its tunnel.')

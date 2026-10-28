@@ -85,6 +85,8 @@ class LanClient:
         claims=verify_peer(result['credential'],keys,room)
         if claims['device_id']!=i['device_id'] or claims['public_key']!=i['public_key']:
             raise ValueError('Peer credential does not match this PC.')
+        if claims['relay']!=result.get('coordinator') or result.get('relay_only') is not True:
+            raise ValueError('LAN relay information does not match the signed authorization.')
         return result
 
     def leave(self,room):

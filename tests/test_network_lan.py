@@ -47,7 +47,7 @@ def credential(signer, public_key, ip, endpoint=None, room=ROOM, life=45, now=No
     now = int(now or time.time())
     payload = {'iss': 'akeno-lan', 'aud': 'akeno-lan-peer', 'sub': str(uuid.uuid4()), 'device_id': str(uuid.uuid4()),
                'room_id': room, 'public_key': public_key, 'virtual_ip': ip, 'iat': now, 'exp': now + life,
-               'nonce': secrets.token_urlsafe(16), 'transport':'relay-only'}
+               'nonce': secrets.token_urlsafe(16), 'transport':'relay-only','relay':None}
     if endpoint is not None: payload['endpoint']=endpoint
     return {'credential': sign(key, kid, 'akeno-lan-peer', payload)}
 

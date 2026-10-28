@@ -62,8 +62,8 @@ HOW_LAN = msg('Games that connect by IP address work across the room: the host s
               'that only find servers that way may not list the host. Not every game has been tested. LAN Play '
               'creates its own adapter and Windows Firewall rules for the room only: file sharing, Remote Desktop '
               'and NetBIOS stay unreachable for members, and your normal internet traffic is not changed.')
-INFO_VPN = msg('The VPN sends your internet traffic through the server you choose. It is separate from LAN Play: '
-               'you can use either one alone, or both.')
+INFO_VPN = msg('The VPN sends your internet traffic through the server you choose. Disconnect LAN Play before '
+               'connecting a VPN; simultaneous routing has not been verified yet.')
 INFO_SOURCES = msg('AKENO server: run by AKENO. Your own server: a WireGuard profile you imported. Third-party '
                    'provider: a VPN service AKENO has reviewed. Only locations with a real, reviewed server can be '
                    'connected.')
@@ -750,6 +750,9 @@ class AkenoNetworkPage(QWidget):
         content = QVBoxLayout(self.vpn_content)
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(16)
+        from akeno.ui.network_vpn import AutomaticVPN
+        self.automatic_vpn=AutomaticVPN(self)
+        content.addWidget(self.automatic_vpn)
         content.addWidget(row)
         content.addWidget(self._vpngate_card())
         lay.addWidget(self.vpn_content)

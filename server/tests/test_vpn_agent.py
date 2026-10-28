@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from akeno_server.vpn.agent import AgentError, Control, ExitAgent, Journal, WireGuard, private_read
+from akeno_server.vpn.agent import AgentError, Control, ExitAgent, Journal, NftLeaseFence, WireGuard, private_read
 
 
 def key(byte):
@@ -64,10 +64,24 @@ class API:
         self.acks.append((generation, public))
 
 
+class MemoryFence:
+    def __init__(self):
+        self.allowed = []
+
+    def ready(self):
+        pass
+
+    def apply(self, document):
+        self.allowed = copy.deepcopy(document['peers'])
+
+    def clear(self):
+        self.allowed = []
+
+
 @pytest.fixture
 def stack():
     native, api, journal = Native(), API(), MemoryJournal()
-    return ExitAgent(native, api, journal, SERVER, clock=lambda: 1000), native, api, journal
+    return ExitAgent(native, api, journal, SERVER, fence=MemoryFence(), clock=lambda: 1000), native, api, journal
 
 
 def test_reconciles_real_command_contract_and_removes_revoked_peer(stack):
@@ -146,7 +160,7 @@ def test_applied_peers_removed_when_heartbeat_fails(stack):
 def test_restart_cleans_previous_recorded_peers_before_accepting_new_manifest(stack):
     agent, native, api, journal = stack
     agent.tick()
-    replacement = ExitAgent(native, api, journal, SERVER, clock=lambda: 1000)
+    replacement = ExitAgent(native, api, journal, SERVER, fence=MemoryFence(), clock=lambda: 1000)
     replacement.startup()
     assert native.calls[-1] == ('remove', A) and not native.values
 
@@ -218,3 +232,51 @@ def test_control_rejects_insecure_or_redirectable_origins(tmp_path):
     assert c.origin == 'https://example.com/api/v1/network/vpn/agent/' + 'a' * 32
     assert not any(isinstance(h, __import__('urllib.request').request.HTTPSHandler) and h._context
                    and not h._context.check_hostname for h in c.opener.handlers)
+
+
+def test_kernel_fence_generates_only_fixed_atomic_timeout_commands():
+    calls = []
+
+    def run(argv, **options):
+        calls.append((argv, options))
+        return SimpleNamespace(stdout='')
+
+    fence = NftLeaseFence(run=run, clock=lambda: 1000.5)
+    fence.apply(API().document)
+    argv, options = calls[0]
+    assert argv == ['/usr/sbin/nft', '-f', '-']
+    assert options['input'] == ('flush set inet akeno_vpn leased4\nflush set inet akeno_vpn leased6\n'
+        'add element inet akeno_vpn leased4 { 10.204.1.2 timeout 19s }\n'
+        'add element inet akeno_vpn leased6 { fd42:204:0:1::2 timeout 19s }\n')
+    assert 'shell' not in options
+    fence.clear()
+    assert calls[-1][1]['input'] == 'flush set inet akeno_vpn leased4\nflush set inet akeno_vpn leased6\n'
+
+
+def test_kernel_fence_rejects_expired_or_non_host_addresses():
+    calls = []
+    fence = NftLeaseFence(run=lambda *args, **kw: calls.append(args), clock=lambda: 1021)
+    with pytest.raises(AgentError):
+        fence.apply(API().document)
+    fence.clock = lambda: 1000
+    data = API().document
+    data['peers'][0]['addresses'][0] = '0.0.0.0/0'
+    with pytest.raises(AgentError):
+        fence.apply(data)
+    assert calls == []
+
+
+def test_manifest_expiring_during_native_reconcile_is_removed(stack):
+    agent, native, _, _ = stack
+    when = [1000]
+    agent.clock = lambda: when[0]
+    original = native.add
+
+    def delayed(key, addresses):
+        original(key, addresses)
+        when[0] = 1030
+
+    native.add = delayed
+    with pytest.raises(AgentError, match='expired'):
+        agent.tick()
+    assert not native.values and not agent.fence.allowed

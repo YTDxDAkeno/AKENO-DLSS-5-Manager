@@ -10,6 +10,7 @@ import argparse
 import base64
 import ipaddress
 import json
+import math
 import os
 import re
 import signal
@@ -94,6 +95,62 @@ class WireGuard:
 
     def remove(self, key):
         self._call('set', self.interface, 'peer', public_key(key), 'remove')
+
+
+class NftLeaseFence:
+    """Kernel-owned timeout fences stop forwarding even when this agent is frozen or killed.
+
+    The operator-installed dedicated namespace rules must require these sets for outgoing source addresses AND
+    returning destination addresses. Only fixed table/set names and validated literal host addresses reach nft.
+    """
+    def __init__(self, *, run=subprocess.run, clock=time.time):
+        self.run, self.clock = run, clock
+
+    def _call(self, args, text=None):
+        try:
+            result = self.run(['/usr/sbin/nft', *args], input=text, capture_output=True, text=True,
+                              timeout=5, check=True)
+        except (OSError, subprocess.SubprocessError):
+            raise AgentError('The kernel lease fence could not be applied.') from None
+        if not isinstance(result.stdout, str) or len(result.stdout) > 256 * 1024:
+            raise AgentError('Invalid kernel lease fence status.')
+        return result.stdout
+
+    def ready(self):
+        for name, address_type in (('leased4', 'ipv4_addr'), ('leased6', 'ipv6_addr')):
+            try:
+                document = json.loads(self._call(['-j', 'list', 'set', 'inet', 'akeno_vpn', name]))
+                rows = [r['set'] for r in document['nftables'] if 'set' in r]
+                if len(rows) != 1 or rows[0].get('family') != 'inet' or rows[0].get('table') != 'akeno_vpn' or \
+                        rows[0].get('name') != name or rows[0].get('type') != address_type or \
+                        'timeout' not in rows[0].get('flags', []):
+                    raise ValueError()
+            except (ValueError, TypeError, KeyError):
+                raise AgentError('Dedicated kernel lease-timeout sets are required.') from None
+
+    def apply(self, manifest):
+        now = self.clock()
+        values = ([], [])
+        for peer in manifest['peers']:
+            ttl = math.floor(min(manifest['expires_at'], peer['expires_at']) - now)
+            if not 1 <= ttl <= 30:
+                raise AgentError('The kernel lease fence deadline has expired.')
+            for index, address in enumerate(peer['addresses']):
+                try:
+                    net = ipaddress.ip_network(address, strict=True)
+                    if net.prefixlen != net.max_prefixlen or net.version != (4 if index == 0 else 6):
+                        raise ValueError()
+                except (TypeError, ValueError):
+                    raise AgentError('Invalid kernel lease fence host address.') from None
+                values[index].append(f'{net.network_address} timeout {ttl}s')
+        commands = ['flush set inet akeno_vpn leased4', 'flush set inet akeno_vpn leased6']
+        for name, entries in zip(('leased4', 'leased6'), values):
+            if entries:
+                commands.append(f'add element inet akeno_vpn {name} {{ ' + ', '.join(entries) + ' }')
+        self._call(['-f', '-'], '\n'.join(commands) + '\n')
+
+    def clear(self):
+        self._call(['-f', '-'], 'flush set inet akeno_vpn leased4\nflush set inet akeno_vpn leased6\n')
 
 
 def private_read(path, limit):
@@ -199,9 +256,10 @@ class Control:
 class ExitAgent:
     MAX_PEERS = 250
 
-    def __init__(self, native, control, journal, expected_key, *, ipv4_pool='10.204.0.0/16',
+    def __init__(self, native, control, journal, expected_key, *, fence, ipv4_pool='10.204.0.0/16',
                  ipv6_pool='fd42:204::/48', clock=time.time):
         self.native, self.control, self.journal, self.clock = native, control, journal, clock
+        self.fence = fence
         self.expected_key = public_key(expected_key)
         self.pools = (ipaddress.IPv4Network(ipv4_pool), ipaddress.IPv6Network(ipv6_pool))
         # These pools must never overlap LAN Play (10.203/16), physical private networks, or default routes.
@@ -216,6 +274,7 @@ class ExitAgent:
                            'managed': sorted(self.managed)})
 
     def startup(self):
+        self.fence.ready()
         if self.native.key() != self.expected_key:
             raise AgentError('The local WireGuard identity does not match this exit registration.')
         previous = self.journal.load()
@@ -265,6 +324,7 @@ class ExitAgent:
 
     def fail_closed(self):
         """Remove only identities recorded as ours. Persist first so retries/restarts retain cleanup authority."""
+        self.fence.clear()              # kernel blocks forwarding before native cleanup can fail or block
         self._record()
         actual = self.native.peers()
         failure = False
@@ -295,6 +355,7 @@ class ExitAgent:
                 raise AgentError('An unowned peer was added to the dedicated exit interface.')
             self.managed.update(desired)
             self._record()                 # cleanup rights survive a crash during wg set
+            self.fence.apply(manifest)     # no added peer can forward without a short kernel-owned lease
             for key in set(actual) - set(desired):
                 fresh()
                 self.native.remove(key)
@@ -327,7 +388,8 @@ def main(argv=None):
     parser.add_argument('--ipv6-pool', default='fd42:204::/48')
     args = parser.parse_args(argv)
     agent = ExitAgent(WireGuard(args.interface), Control(args.control_origin, args.server_id, args.secret_file),
-                      Journal(args.journal), args.public_key, ipv4_pool=args.ipv4_pool, ipv6_pool=args.ipv6_pool)
+                      Journal(args.journal), args.public_key, fence=NftLeaseFence(),
+                      ipv4_pool=args.ipv4_pool, ipv6_pool=args.ipv6_pool)
     stopping = False
 
     def stop(signum, frame):
