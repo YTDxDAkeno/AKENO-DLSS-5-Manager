@@ -134,7 +134,9 @@ class DNSCapture:
         self._call('etl2pcap',self.etl,'--out',all_file)
         self._call('etl2pcap',self.etl,'--drop-only','--out',drops_file)
         stats={}
-        observed=list(packets(all_file.read_bytes(),stats));dropped={flow for flow,_ in packets(drops_file.read_bytes())}
+        drop_stats={}
+        observed=list(packets(all_file.read_bytes(),stats))
+        dropped_flows=[flow for flow,_ in packets(drops_file.read_bytes(),drop_stats)];dropped=set(dropped_flows)
         if not self.positive:raise CaptureError('DNS capture lacks a positive control.')
         from akeno.network.dns_probe import valid_reply
         for query,source,target in self.positive:
@@ -153,8 +155,16 @@ class DNSCapture:
                        'unspecified_local':any_local}
                 raise CaptureError(f'The actual positive DNS reply was not captured (capture metadata={stats}; '
                                    f'parsed={len(observed)}; shape={shape}).')
-        if any(flow not in dropped for flow in self.pending):
-            raise CaptureError('No kernel drop record proves an asynchronous DNS denial.')
+        missing=[flow for flow in self.pending if flow not in dropped]
+        if missing:
+            # Structural counts only. 'seen_in_capture' > 0 would mean a denied probe was observed on a link: a leak.
+            shape={'pending':len(self.pending),'missing':len(missing),'drop_records':drop_stats.get('records',0),
+                   'drop_parsed':len(dropped_flows),'drop_links':drop_stats.get('links',[]),
+                   'same_destination':sum(1 for f in missing if any(d[2:]==f[2:] for d in dropped)),
+                   'same_source_address':sum(1 for f in missing if any(d[0]==f[0] for d in dropped)),
+                   'protocols':sorted({f[4] for f in missing}),
+                   'seen_in_capture':sum(1 for f in missing if any(item==f for item,_ in observed))}
+            raise CaptureError(f'No kernel drop record proves an asynchronous DNS denial (shape={shape}).')
         return len(self.pending)
 
     def _stop(self):
