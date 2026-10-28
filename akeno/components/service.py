@@ -157,3 +157,39 @@ class ComponentService:
         with self._db() as db:
             db.execute("INSERT INTO components VALUES ('security_center', ?) "
                        "ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled", (int(bool(enabled)),))
+
+
+# -- AKENO Network modules -------------------------------------------------------------------------------------------
+# LAN Play and the VPN are part of the Core bundle (a few Python modules, no driver or service of their own: the
+# network adapter comes from the official WireGuard for Windows the user installs). What is optional is whether
+# they are switched on. Both start switched off on new installs and after updates, so an update never enables a
+# network feature; each can be used without the other.
+NETWORK_MODULES = ("lan_play", "vpn")
+
+
+class NetworkModules:
+    def __init__(self, state: Path | None = None):
+        self.state = Path(state) if state else app_home() / "components.sqlite3"
+        self.state.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self.state, timeout=10) as db:
+            db.execute("CREATE TABLE IF NOT EXISTS components (id TEXT PRIMARY KEY, enabled INTEGER NOT NULL)")
+
+    def enabled(self, module: str) -> bool:
+        if module not in NETWORK_MODULES:
+            raise ComponentError("Unknown network module.")
+        try:
+            with sqlite3.connect(self.state, timeout=10) as db:
+                row = db.execute("SELECT enabled FROM components WHERE id=?", ("network:" + module,)).fetchone()
+        except sqlite3.Error:
+            return False                          # a damaged state never switches a network feature on
+        return bool(row and row[0] == 1)
+
+    def set_enabled(self, module: str, enabled: bool) -> None:
+        if module not in NETWORK_MODULES or type(enabled) is not bool:
+            raise ComponentError("Invalid network module selection.")
+        with sqlite3.connect(self.state, timeout=10) as db:
+            db.execute("INSERT INTO components VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET enabled=excluded.enabled",
+                       ("network:" + module, int(enabled)))
+
+    def status(self) -> dict:
+        return {m: self.enabled(m) for m in NETWORK_MODULES}

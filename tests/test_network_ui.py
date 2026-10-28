@@ -34,7 +34,10 @@ class Ctl:
 
 @pytest.fixture
 def page(qtbot):
+    from akeno.components.service import NetworkModules
     from akeno.ui.pages.akeno_network import AkenoNetworkPage
+    for module in ('lan_play', 'vpn'):
+        NetworkModules().set_enabled(module, True)
     p = AkenoNetworkPage(Ctl(), SimpleNamespace(license=None))
     qtbot.addWidget(p)
     p.resize(1500, 1200)
@@ -98,6 +101,8 @@ def test_locations_show_only_countries_the_catalog_really_lists(page, monkeypatc
 
 
 def test_page_renders_in_german(qtbot, monkeypatch):
+    from akeno.components.service import NetworkModules
+    NetworkModules().set_enabled('lan_play', True)
     i18n.set_language('de')
     try:
         from akeno.ui.pages.akeno_network import AkenoNetworkPage
@@ -248,3 +253,18 @@ def test_status_orb_animates_only_while_changing(page):
     assert page.lan_dash.orb.animating()
     page.lan_dash.set_state('Connected', 'ok')
     assert not page.lan_dash.orb.animating()
+
+
+def test_network_modules_start_off_and_switch_on_separately(qtbot):
+    from akeno.ui.pages.akeno_network import AkenoNetworkPage
+    p = AkenoNetworkPage(Ctl(), SimpleNamespace(license=None))
+    qtbot.addWidget(p)
+    p.show()
+    assert p.lan_off.isVisible() and not p.lan_card.isVisible()
+    assert p.lan_dash.state_label.text() == 'Off' and p.vpn_dash.state_label.text() == 'Off'
+    p.set_module('vpn', True)
+    p.show_tab(1)
+    assert p.vpn_content.isVisible() and not p.vpn_off.isVisible()
+    assert p.vpn_dash.state_label.text() == 'Disconnected' and p.lan_dash.state_label.text() == 'Off'
+    p.show_tab(0)
+    assert p.lan_off.isVisible()

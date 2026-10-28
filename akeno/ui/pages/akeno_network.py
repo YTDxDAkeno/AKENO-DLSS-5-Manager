@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QFileDialog, QHBoxL
                                QVBoxLayout, QWidget)
 
 from akeno.i18n import msg, t
+from akeno.components.service import NetworkModules
 from akeno.licensing.storage import SecureStore
 from akeno.network import messages, providers
 from akeno.network.client import LanClient
@@ -105,6 +106,7 @@ class AkenoNetworkPage(QWidget):
         self.room_info, self.service, self.game_allowed, self._probed = {}, None, False, False
         self.vpn_started, self.profile_meta, self.location_items, self.diag_rows = None, [], {}, []
         self.prefs = providers.Preferences(sub('network') / 'vpn-preferences.json')
+        self.modules = NetworkModules()
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(16)
@@ -130,7 +132,41 @@ class AkenoNetworkPage(QWidget):
         self.timer.timeout.connect(self.poll_session)
         self.show_tab(0)
         self.refresh_profiles()
+        self.show_modules()
+
+    # -- modules ------------------------------------------------------------------------------------------------------
+    def _off_card(self, module, title, icon, text):
+        card = Card(title, icon, right=StatusPill(t('Off'), 'unknown'))
+        card.body.addWidget(label(text, 'dim', wrap=True))
+        card.body.addWidget(label(t('Switching it on connects nothing yet and changes no Windows settings. You can '
+                                    'switch it off again here or in Settings → Components.'), 'muted', wrap=True))
+        card.body.addWidget(button(t('Turn on {name}').format(name=title), 'power', 'primary',
+                                   on_click=lambda: self.set_module(module, True)))
+        return card
+
+    def set_module(self, module, enabled):
+        if not enabled and module == 'lan_play' and self.session.get('state') in ('starting', 'active'):
+            info(self, t('AKENO Network'), t('Stop the LAN session before switching LAN Play off.'))
+            return
+        if not enabled and module == 'vpn' and self.tile_status.value.text() not in (t('Disconnected'), '—'):
+            info(self, t('AKENO Network'), t('Disconnect the VPN before switching it off.'))
+            return
+        self.modules.set_enabled(module, enabled)
+        self.show_modules()
+
+    def show_modules(self):
+        lan, vpn = self.modules.enabled('lan_play'), self.modules.enabled('vpn')
+        self.lan_card.setVisible(lan)
+        self.lan_off.setVisible(not lan)
+        self.vpn_content.setVisible(vpn)
+        self.vpn_off.setVisible(not vpn)
         self.show_room()
+        if not lan:
+            self.lan_dash.set_state(t('Off'), 'unknown', t('Turn on LAN Play in the LAN Play tab.'))
+        if not vpn:
+            self.vpn_dash.set_state(t('Off'), 'unknown', t('Turn on the VPN in the VPN tab.'))
+        elif self.vpn_dash.state_label.text() == t('Off'):
+            self.vpn_dash.set_state(t('Disconnected'), 'unknown', t('Your internet traffic uses your normal connection.'))
 
     # -- frame --------------------------------------------------------------------------------------------------------
     def say(self, text, kind='info'):
@@ -322,6 +358,10 @@ class AkenoNetworkPage(QWidget):
         for b in (self.start_button, self.stop_button, self.allow_button):
             b.setEnabled(BUILT)
         lay.addWidget(card)
+        self.lan_off = self._off_card('lan_play', t('LAN Play'), 'wifi', t(
+            'Play LAN games with friends over the internet in a private, encrypted room. Needs the official WireGuard '
+            'for Windows; it does not need the VPN.'))
+        lay.addWidget(self.lan_off)
         return page
 
     def identity(self):
@@ -352,6 +392,8 @@ class AkenoNetworkPage(QWidget):
         self.in_room.setVisible(room is not None)
         state = self.session.get('state')
         text, pill_state = SESSION.get(state, SESSION[None])
+        if not self.modules.enabled('lan_play'):
+            return
         if room is None:
             self.session_pill.set(t('No room'), 'unknown')
             off = self.service is not None and not self.service.get('enabled')
@@ -674,8 +716,17 @@ class AkenoNetworkPage(QWidget):
         side_lay.addWidget(hist)
         side_lay.addStretch(1)
         row.add(side, 2)
-        lay.addWidget(row)
-        lay.addWidget(self._vpngate_card())
+        self.vpn_content = QWidget()
+        content = QVBoxLayout(self.vpn_content)
+        content.setContentsMargins(0, 0, 0, 0)
+        content.setSpacing(16)
+        content.addWidget(row)
+        content.addWidget(self._vpngate_card())
+        lay.addWidget(self.vpn_content)
+        self.vpn_off = self._off_card('vpn', t('VPN'), 'shield', t(
+            'Send your internet traffic through a WireGuard server you choose, for example your own. Needs the '
+            'official WireGuard for Windows; it does not need LAN Play.'))
+        lay.addWidget(self.vpn_off)
         for b in (self.disconnect_button, self.status_button, self.exit_button):
             b.setEnabled(BUILT)
         self.render_history()

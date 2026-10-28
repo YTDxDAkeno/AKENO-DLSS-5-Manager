@@ -52,6 +52,13 @@ class ComponentCard(Card):
             self.operations[action] = b
             actions.addWidget(b)
         self.body.addLayout(actions)
+        net = FlowLayout(spacing=8)
+        self.network_buttons = {}
+        for module in ("lan_play", "vpn"):
+            b = button("", "power", on_click=lambda _=False, m=module: self.toggle_network(m))
+            self.network_buttons[module] = b
+            net.addWidget(b)
+        self.body.addLayout(net)
         self.body.addWidget(label(t("Component changes use the signed package for this AKENO version and restart "
                                    "the application. The previous installation is kept for rollback."), "muted", wrap=True))
         self.refresh()
@@ -64,13 +71,21 @@ class ComponentCard(Card):
                  "incompatible": "fail"}
         installed = state not in ("not_installed",)
         wireguard = wireguard_detected()
+        from akeno.components.service import NetworkModules
+        network = NetworkModules().status()
+        names_net = {"lan_play": t("LAN Play"), "vpn": t("VPN")}
+        for module, b in self.network_buttons.items():
+            b.setText((t("Turn off {name}") if network[module] else t("Turn on {name}")).format(name=names_net[module]))
         self.overview.set_rows([
             (t("AKENO Core"), StatusPill(t("Installed · always active"), "ok")),
             (t("Security Center"), StatusPill((t("Installed") if installed else t("Not installed")) + " · " +
                                               names[state], pills[state])),
             (t("Requires"), t("Microsoft Defender and Windows Security Center (part of Windows)")),
             (t("Permissions"), t("Your user rights; scans are run by Microsoft Defender itself")),
-            (t("AKENO Network"), StatusPill(t("Part of Core · no separate installation"), "ok")),
+            (t("AKENO LAN Play"), StatusPill(t("On") if network["lan_play"] else t("Off"),
+                                              "ok" if network["lan_play"] else "unknown")),
+            (t("AKENO VPN"), StatusPill(t("On") if network["vpn"] else t("Off"), "ok" if network["vpn"] else "unknown")),
+            (t("Packaging"), t("Part of Core; switched off until you turn it on. Updates never switch it on.")),
             (t("Requires"), t("Official WireGuard for Windows (not installed by AKENO)") + " — " +
              (t("detected") if wireguard else t("not detected") if wireguard is False else t("Windows only"))),
             (t("Permissions"), t("Administrator rights once per LAN session or VPN action (Windows asks)")),
@@ -81,6 +96,15 @@ class ComponentCard(Card):
         supported = self.services.components.frozen and self.window is not None
         for action, b in self.operations.items():
             b.setEnabled(supported and (state == "not_installed" if action == "install" else state != "not_installed"))
+
+    def toggle_network(self, module):
+        from akeno.components.service import NetworkModules
+        modules = NetworkModules()
+        modules.set_enabled(module, not modules.enabled(module))
+        page = self.window.pages.get("akeno_network") if self.window is not None else None
+        if page is not None:
+            page.show_modules()
+        self.refresh()
 
     def operate(self, action):
         if self.window is None or any(k.startswith("security:") for k in self.window.ctl.busy):
