@@ -1,4 +1,4 @@
-"""Packet evidence parser/positive controls; synthetic fixtures are not native Windows evidence."""
+"""Packet evidence parser, drop evidence and capture reporting; synthetic fixtures are not native Windows evidence."""
 import ipaddress
 import struct
 
@@ -56,7 +56,9 @@ def test_capture_stop_preserves_foreign_collector_and_requires_own_private_file(
 
 
 @pytest.mark.parametrize('missing',['none','drop','positive'])
-def test_async_success_requires_actual_drop_and_captured_positive_reply(tmp_path,missing):
+def test_async_success_requires_an_actual_drop_record_and_reports_the_capture(tmp_path,missing):
+    """The drop record is the evidence; an unrecorded positive control is reported, never a pass or a fail by itself
+    (Packet Monitor does not reliably record WireGuardNT packets)."""
     query=question();reply=query[:2]+b'\x81\x83'+query[4:]
     positive=('1.1.1.1',53,'10.204.1.2',43001,17)
     denied=('192.168.1.2',43002,'8.8.8.8',53,17)
@@ -66,9 +68,9 @@ def test_async_success_requires_actual_drop_and_captured_positive_reply(tmp_path
     monitor.positive=[(query,('10.204.1.2',43001),('1.1.1.1',53))];monitor.pending=[denied]
     (tmp_path/'all.pcapng').write_bytes(capture(positive,reply if missing!='positive' else query))
     (tmp_path/'drops.pcapng').write_bytes(capture(denied if missing!='drop' else positive,query))
-    if missing=='none':assert monitor.finish()==1
-    else:
+    if missing=='drop':
         with pytest.raises(CaptureError):monitor.finish()
+    else:assert monitor.finish()==1 and monitor.recorded is (missing=='none')
 
 
 def test_bare_ip_records_of_layer3_adapters_are_parsed_only_with_a_valid_ip_header():
@@ -98,9 +100,8 @@ def test_reply_to_a_socket_with_unspecified_local_address_is_bound_by_ports_and_
                             (('10.203.78.9',53,'10.203.78.2',43001,17),reply,False),
                             (('10.203.78.1',53,'10.203.78.2',43001,17),query,False)]:
         (tmp_path/'all.pcapng').write_bytes(capture(flow,payload,framing=b''))
-        if ok:assert monitor.finish()==0
-        else:
-            with pytest.raises(CaptureError,match='shape'):monitor.finish()
+        assert monitor.finish()==0 and monitor.recorded is ok
+        assert (monitor.shape=={})==ok
 
 
 class DropLog:
@@ -164,18 +165,27 @@ def positive_monitor(tmp_path,record):
     return monitor
 
 
-def test_query_recorded_on_the_tunnel_adapter_is_a_valid_positive_control(tmp_path):
+def test_query_recorded_on_the_tunnel_adapter_counts_as_recorded(tmp_path):
     flow=('10.203.78.2',43001,'10.203.78.1',53,17)
-    assert positive_monitor(tmp_path,lambda q:capture(flow,q,framing=b'')).finish()==0
+    monitor=positive_monitor(tmp_path,lambda q:capture(flow,q,framing=b''))
+    assert monitor.finish()==0 and monitor.recorded is True
 
 
-def test_query_seen_on_an_ethernet_link_is_not_a_positive_control(tmp_path):
+def test_query_seen_on_an_ethernet_link_does_not_count_as_recorded(tmp_path):
     flow=('10.203.78.2',43001,'10.203.78.1',53,17)
-    with pytest.raises(CaptureError,match='positive DNS reply'):
-        positive_monitor(tmp_path,lambda q:capture(flow,q)).finish()
+    monitor=positive_monitor(tmp_path,lambda q:capture(flow,q))
+    assert monitor.finish()==0 and monitor.recorded is False
+    assert monitor.shape['to_resolver']==1 and monitor.shape['bare_ip']==0
 
 
-def test_a_different_query_on_the_tunnel_is_not_a_positive_control(tmp_path):
+def test_a_different_query_on_the_tunnel_does_not_count_as_recorded(tmp_path):
     flow=('10.203.78.2',43001,'10.203.78.1',53,17)
-    with pytest.raises(CaptureError,match='positive DNS reply'):
-        positive_monitor(tmp_path,lambda q:capture(flow,question(),framing=b'')).finish()
+    monitor=positive_monitor(tmp_path,lambda q:capture(flow,question(),framing=b''))
+    assert monitor.finish()==0 and monitor.recorded is False and monitor.shape['probe_ids']==0
+
+
+def test_unrecorded_capture_never_replaces_drop_evidence(tmp_path):
+    """Nothing seen in the capture and no drop record: the denial stays unproven (fails closed)."""
+    monitor,_=monitor_with(tmp_path,False,DropLog([]))
+    (tmp_path/'all.pcapng').write_bytes(capture(('10.0.0.9',1,'10.0.0.8',2,17),b'x'*12))
+    with pytest.raises(CaptureError,match='No kernel drop record'):monitor.finish()

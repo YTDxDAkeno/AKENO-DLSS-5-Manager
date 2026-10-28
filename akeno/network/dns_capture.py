@@ -1,12 +1,16 @@
 """Bounded, private Packet Monitor evidence for asynchronous Windows packet drops.
 
 Never takes over an existing capture/filter set. Raw DNS captures are accessible only
-to Administrators/SYSTEM, never exported, and removed on normal cleanup. The observer
-requires a captured positive control and, for every probe Windows accepted without an
-explicit denial, a recorded drop: a Packet Monitor drop record or, because Packet Monitor
-does not see WFP ALE classify drops, the Base Filtering Engine's own classify-drop event
-for exactly that tuple (akeno.network.wfp_events). A probe seen on any captured link is
-never counted as denied.
+to Administrators/SYSTEM, never exported, and removed on normal cleanup. Every probe Windows
+accepted without an explicit denial needs its own recorded kernel drop: a Packet Monitor drop
+record or, because Packet Monitor does not see WFP ALE classify drops, the Base Filtering
+Engine's own classify-drop event for exactly that tuple (akeno.network.wfp_events). A probe
+seen on any captured link is a leak, never a denial.
+
+Packet Monitor's view of the WireGuardNT adapter is a sample, not a guarantee: native CI runs
+showed the tunnel's DNS packets recorded in one run and absent in the next. "Not seen in the
+capture" is therefore never evidence for anything; whether the capture recorded the positive
+tunnel control is reported (``recorded``) instead of being a condition for the verdict.
 """
 from __future__ import annotations
 
@@ -107,7 +111,7 @@ class DNSCapture:
         self.directory=WindowsWireGuard().root.parent/('.AkenoDNS-'+uuid.uuid4().hex)
         _protected_directory(self.directory)
         self.etl=self.directory/'measurement.etl'
-        self.filters=[];self.started=False;self.pending=[];self.positive=[]
+        self.filters=[];self.started=False;self.pending=[];self.positive=[];self.recorded=None
 
     def _call(self,*arguments):
         result=subprocess.run([self.exe,*map(str,arguments)],capture_output=True,text=True,
@@ -158,14 +162,14 @@ class DNSCapture:
         dropped_flows=[flow for flow,_ in packets(drops_file.read_bytes(),drop_stats)];dropped=set(dropped_flows)
         if not self.positive:raise CaptureError('DNS capture lacks a positive control.')
         from akeno.network.dns_probe import valid_reply
-        # Each resolver is asked at least twice (before and after the denial probes). The socket already validated
-        # each reply; here one capture record of a probe per resolver proves that Packet Monitor recorded the tunnel
-        # while the denial probes ran: the reply, or the byte-identical query on the layer-3 tunnel adapter (Windows
-        # does not always hand WireGuardNT's inbound packets to Packet Monitor). A query seen on an Ethernet link
-        # never counts: there it would be a DNS lookup outside the tunnel.
+        # Each resolver is asked at least twice (before and after the denial probes) and the socket validated every
+        # reply. Whether the capture also recorded one of those probes per resolver (the reply, or the byte-identical
+        # query on the layer-3 tunnel adapter) is reported as ``recorded``. A query seen on an Ethernet link never
+        # counts: there it would be a DNS lookup outside the tunnel.
         resolvers={}
         for query,source,target in self.positive:
             resolvers.setdefault(target,[]).append((query,source))
+        recorded=True;self.shape={}
         for target,probes in resolvers.items():
             # A connected UDP socket may report an unspecified local address on Windows; the reply is then bound
             # by the resolver address, both ports and the random transaction id/question it must echo.
@@ -182,16 +186,15 @@ class DNSCapture:
             queried=any(sent(item,source) and payload==query
                         for query,source in probes for item,payload in tunnel_records)
             if not (replied or queried):
-                query,source=probes[-1]
-                any_local=ipaddress.ip_address(source[0]).is_unspecified
+                recorded=False
                 # Structural metadata only: no addresses, names or payload bytes leave this function.
-                shape={'from_resolver':sum(1 for item,_ in observed if item[:2]==(target[0],target[1])),
-                       'to_probe_port':sum(1 for item,_ in observed if item[3]==source[1]),
-                       'valid_reply_payload':sum(1 for _,payload in observed if valid_reply(query,payload)),
-                       'query_payload':sum(1 for _,payload in observed if payload[:2]==query[:2]),
-                       'unspecified_local':any_local}
-                raise CaptureError(f'The actual positive DNS reply was not captured (capture metadata={stats}; '
-                                   f'parsed={len(observed)}; shape={shape}).')
+                ports={source[1] for _,source in probes};ids={query[:2] for query,_ in probes}
+                self.shape={'records':stats.get('records',0),'bare_ip':stats.get('bare_ip',0),
+                            'from_resolver':sum(1 for item,_ in observed if item[:2]==(target[0],target[1])),
+                            'to_resolver':sum(1 for item,_ in observed if item[2:4]==(target[0],target[1])),
+                            'probe_ports':sum(1 for item,_ in observed if item[1] in ports or item[3] in ports),
+                            'probe_ids':sum(1 for _,payload in observed if payload[:2] in ids)}
+        self.recorded=recorded
         missing=[flow for flow in self.pending if flow not in dropped]
         leaked=[flow for flow in self.pending if any(item==flow for item,_ in observed)]
         wfp_proven=set()

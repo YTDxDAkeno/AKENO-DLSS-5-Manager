@@ -78,3 +78,19 @@ def test_no_route_requires_independent_evidence_and_is_not_a_firewall_denial(mon
     assert probe.blocked('8.8.8.8',interface=3,route_check=lambda a,i:False)=='unroutable'
     with pytest.raises(probe.DNSVerificationError):
         probe.blocked('8.8.8.8',interface=3,route_check=lambda a,i:True)
+
+
+@pytest.mark.parametrize('recorded',[True,False])
+def test_capture_result_reports_drop_proofs_and_whether_the_tunnel_was_recorded(monkeypatch,recorded):
+    monkeypatch.setattr(probe.sys,'platform','win32')
+    class Capture:
+        def __init__(self):self.pending=0;self.recorded=recorded;self.shape={} if recorded else {'records':3}
+        def defer(self,source,target,tcp):self.pending+=1;return 'pending'
+        def finish(self):return self.pending
+    capture=Capture()
+    def deny(address,**kw):return capture.defer(None,None,kw['tcp']) if not kw['tcp'] else True
+    result=probe._verify(NAME,['1.1.1.1'],run=lambda *a,**k:json.dumps(native_document()),
+                         resolve=lambda address:True,deny=deny,capture=capture)
+    assert result['dns_verified'] is True and result['kernel_drop_proofs']==2 and result['denied_paths']==6
+    assert result['capture_recorded_tunnel'] is recorded
+    assert ('capture_shape' in result)==(not recorded)

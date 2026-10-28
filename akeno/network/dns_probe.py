@@ -187,14 +187,21 @@ def _verify(tunnel_name,dns,*,run,resolve,deny,capture=None):
                     raise DNSVerificationError('Windows did not explicitly deny a foreign DNS path.')
                 else:probes+=1
     if pending and capture is None:raise DNSVerificationError('DNS kernel drop evidence is missing.')
+    recorded=None
     if capture is not None:
-        # A second positive control while the capture has certainly been recording during the denial probes.
+        # The tunnel DNS must still answer after the denial probes (also a second chance for the capture to record
+        # the tunnel; that recording is reported, never required: see akeno.network.dns_capture).
         if not all(resolve(address) is True for address in before['dns']):
             raise DNSVerificationError('The configured tunnel DNS did not return a valid measured response.')
         measured=capture.finish()
         if measured!=pending:raise DNSVerificationError('DNS drop evidence does not match its probes.')
-        probes+=measured
+        probes+=measured;recorded=capture.recorded
     if inventory(tunnel_name,dns,run)!=before:
         raise DNSVerificationError('Network configuration changed during DNS verification.')
-    return {'dns_verified':True,'resolver_responses':len(before['dns']),'denied_paths':probes,
-            'unroutable_paths':unroutable,'source':'native_socket_results_routes_and_tunnel_dns_response'}
+    result={'dns_verified':True,'resolver_responses':len(before['dns']),'denied_paths':probes,
+            'unroutable_paths':unroutable,'kernel_drop_proofs':pending,
+            'source':'native_socket_results_routes_and_tunnel_dns_response'}
+    if capture is not None:
+        result['capture_recorded_tunnel']=recorded
+        if not recorded:result['capture_shape']=dict(getattr(capture,'shape',{}))
+    return result

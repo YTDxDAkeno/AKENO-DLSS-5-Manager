@@ -98,6 +98,8 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
 
 | `118e7e0` | **[WireGuard on Windows 40766590526](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40766590526) `wireguard`: green, 41 real Windows WireGuard checks** — production DNS probe `dns_verified: True`, `denied_paths: 3` (explicit denials plus the silent UDP denial proven by the WFP classify-drop event), `unroutable_paths: 3`; IPv4/IPv6 Internet packets through the tunnel; foreign DNS not delivered; system DNS to the tunnel resolver; no direct Internet while up; routes/DNS restored; Internet works after disconnect | — |
 
+| `eaef058` | [40767466098](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40767466098) `wireguard` red: the same code as `118e7e0`, but Packet Monitor recorded none of the probe packets on the tunnel (12 records, 0 matching ports/ids) — its view of WireGuardNT is a sample, not a guarantee; a real user's VPN connect would have failed the same way | next commit: the verdict rests only on per-probe kernel evidence (explicit denial, Packet Monitor drop record or WFP classify-drop event for the exact tuple; a probe seen on a link is a leak). Whether the capture recorded the tunnel is reported (`capture_recorded_tunnel`, structural `capture_shape`), never inferred from absence |
+
 ## Other changes since the last table
 
 - `4f864a5` build.yml: packaged `AKENO.exe --network-helper` through the runas verb (read-only status, refusals,
@@ -117,7 +119,7 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
 
 ## Final verification commit
 
-Code freeze candidate: **`eaef058ec4bd08d487a9e44e24e2c1dc924bd8d0`** (later commits are documentation only; verify with
+Superseded: `eaef058` (wireguard red, see the DNS table). Previous code freeze candidate: **`eaef058ec4bd08d487a9e44e24e2c1dc924bd8d0`** (later commits are documentation only; verify with
 `git diff --stat eaef058 HEAD -- . ':!docs'`). Runs on exactly this commit:
 
 - build.yml [40767392705](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40767392705) — running
