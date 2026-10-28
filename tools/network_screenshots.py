@@ -28,6 +28,9 @@ def main(out: Path):
     from akeno.licensing import manager as license_manager
     from akeno.ui import theme
     from akeno.ui.widgets import CheckRow, clear_layout
+    from akeno.ui.pages import akeno_network
+    # fixture run: no request to the real AKENO server; show the state of a server that offers LAN Play
+    akeno_network.AkenoNetworkPage.probe_service = lambda self: None
     out.mkdir(parents=True, exist_ok=True)
     app = QApplication(sys.argv[:1])
     theme.apply(app, None)
@@ -61,9 +64,19 @@ def main(out: Path):
             relayed: {'mode': 'relay', 'latency_ms': 41.0, 'handshake': now - 30, 'rx': 650_000, 'tx': 720_000,
                       'virtual_ip': '10.203.5.4'}}}
         page.invite_out.setText('fixture-invitation-code')
+        page.room_info = {'name': 'Friday LAN', 'owner': True}
+        page.members_data[1]['name'] = 'Mira'
         page.show_room()
         settle()
         win.grab().save(str(out / f'akeno-network-session-{language}-fixture.png'))
+        # VPN tab: one own profile (fixture) besides the real target-country list, which has no AKENO servers
+        page.profile_meta = [{'id': 'f' * 32, 'name': 'Home server (fixture)'}]
+        page.prefs.set_country('f' * 32, 'DE')
+        page.render_locations()
+        page.show_tab(1)
+        settle()
+        win.grab().save(str(out / f'akeno-network-vpn-{language}-fixture.png'))
+        page.show_tab(2)
         clear_layout(page.diag_box)
         for state, title, detail in (('ok', 'Signed in on this PC', 'This PC is registered with your AKENO account.'),
                                      ('ok', 'AKENO license', 'Active.'),

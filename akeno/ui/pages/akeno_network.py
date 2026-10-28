@@ -306,7 +306,7 @@ class AkenoNetworkPage(QWidget):
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setMinimumHeight(180)
+        self.table.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         room.addWidget(self.table)
         self.empty = EmptyState('user', t('No members yet'), t('Share the invitation. Members appear here after '
                                                               'joining; refresh to update.'))
@@ -423,6 +423,8 @@ class AkenoNetworkPage(QWidget):
                 elif c == 3 and latency is not None:
                     item.setIcon(QIcon(quality_pixmap(quality(latency))))
                 self.table.setItem(i, c, item)
+        # the table is as tall as its rows (max 16 members): no inner scrolling inside the scrolling page
+        self.table.setFixedHeight(self.table.horizontalHeader().height() + 40 * max(1, len(rows)) + 4)
         self.table.setVisible(bool(rows))
         self.empty.setVisible(not rows)
         self.tile_members.set(str(connected) if active else '—')
@@ -661,7 +663,7 @@ class AkenoNetworkPage(QWidget):
         conn.body.addLayout(actions)
         conn.body.addWidget(Details(t('Security notes'), t(HOW_VPN)))
         side_lay.addWidget(conn)
-        hist = Card(t('Connection history'), 'clock', right=button(t('Clear'), 'trash', 'ghost',
+        hist = Card(t('Connection history'), 'clock', right=button(t('Clear history'), 'trash', 'ghost',
                                                                  on_click=self.clear_history))
         hist.body.addWidget(heading(t('Only when, where and how long'), t(
             'AKENO keeps the last 20 connections on this PC: start, end and location. No addresses, traffic or '
