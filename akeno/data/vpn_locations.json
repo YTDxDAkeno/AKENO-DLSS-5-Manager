@@ -1,0 +1,14 @@
+{
+ "_comment": "Target countries for AKENO VPN servers. A country is connectable only when a reviewed provider delivers a real server for it; no AKENO VPN server runs yet, so akeno_servers is empty. Never add an entry without a running server and the right to use it.",
+ "countries": {
+  "TR": "Turkey",
+  "US": "United States",
+  "DE": "Germany",
+  "NL": "Netherlands",
+  "GB": "United Kingdom",
+  "FR": "France",
+  "JP": "Japan",
+  "CA": "Canada"
+ },
+ "akeno_servers": []
+}
