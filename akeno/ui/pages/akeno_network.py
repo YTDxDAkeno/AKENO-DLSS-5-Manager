@@ -51,8 +51,9 @@ TABS = (msg('LAN Play'), msg('VPN'), msg('Diagnostics'))
 # Explanations behind (i) buttons and "How it works" (kept off the main surface on purpose).
 INFO_LAN = msg('LAN Play connects the PCs in a room through an encrypted WireGuard network. Each member gets a '
                'virtual IP address (10.203.x.x) that the others can reach; nothing else on your PC is opened.')
-INFO_PATH = msg('Direct: your PCs talk peer-to-peer. Relay: traffic passes through the AKENO coordinator when a '
-                'direct path cannot be opened (strict routers); it stays end-to-end encrypted either way.')
+INFO_PATH = msg('Room traffic uses an encrypted AKENO relay. Other players receive virtual LAN addresses, never '
+                'your public peer endpoint. AKENO processes source addresses to operate the relay. Games may '
+                'contact separate external services. Direct P2P is disabled.')
 INFO_VIP = msg('Give this address to friends whose game asks for a server IP. It only works inside this room.')
 INFO_PING = msg('Round-trip time measured through the tunnel to each connected member. "—" means nothing has been '
                 'measured yet.')
@@ -115,6 +116,10 @@ class AkenoNetworkPage(QWidget):
         self.notice = Banner()
         self.work_status = self.notice.label           # the line every action reports to
         lay.addWidget(self.notice)
+        self.components_button = button(t('Install or repair network components…'), 'download',
+                                        on_click=self.install_components)
+        self.components_button.setEnabled(BUILT)
+        lay.addWidget(self.components_button)
         lay.addWidget(self._dashboard())
         self.tab_bar = QTabBar()
         self.tab_bar.setDrawBase(False)
@@ -358,6 +363,9 @@ class AkenoNetworkPage(QWidget):
         for b in (self.start_button, self.stop_button, self.allow_button):
             b.setEnabled(BUILT)
         lay.addWidget(card)
+        from akeno.ui.network_browser import PublicRooms
+        self.public_browser = PublicRooms(self)
+        card.body.addWidget(self.public_browser)
         self.lan_off = self._off_card('lan_play', t('LAN Play'), 'wifi', t(
             'Play LAN games with friends over the internet in a private, encrypted room. Needs the official WireGuard '
             'for Windows; it does not need the VPN.'))
@@ -366,6 +374,16 @@ class AkenoNetworkPage(QWidget):
 
     def identity(self):
         return SecureStore(sub('network') / 'lan-identity')
+
+    def install_components(self):
+        if not BUILT or not confirm(self,t('Network components'),t('Download and install the official signed '
+                'WireGuard for Windows component? AKENO checks its online signature and Windows asks for '
+                'administrator permission. This installs a shared component but connects no tunnel.')):
+            return
+        from akeno.network.helper import invoke
+        self.work(lambda:invoke('install_components',consent=True),
+                  lambda result:self.say(t('Restart Windows to finish component installation.') if result.get('reboot_required')
+                                         else t('Network components are ready.'),'success'))
 
     def lan(self):
         return LanClient(self.window.license, self.identity())

@@ -138,10 +138,12 @@ class RoomStore:
                       (actor, self.clock(), excluding)).fetchone()[0] >= self.MAX_PUBLIC_ROOMS:
             raise RoomError('Public room limit reached.')
 
-    def create(self,actor,name,public_key,password='',device_id='',*,visibility='private',game_id='',region='',capacity=16):
+    def create(self,actor,name,public_key,password='',device_id='',*,visibility='private',game_id='',region='',capacity=16,locked=False):
         self._actor(actor)
         self._key(public_key)
         self._metadata(visibility, game_id, region, capacity)
+        if type(locked) is not bool:
+            raise RoomError('Invalid room lock.')
         if not isinstance(name,str) or not 1 <= len(name.strip()) <= 64 or any(ord(c)<32 for c in name):
             raise RoomError('Invalid room name.')
         if not isinstance(password,str) or len(password)>128:
@@ -160,10 +162,10 @@ class RoomStore:
             slot=next((n for n in range(1,255) if n not in slots),None)
             if slot is None:
                 raise RoomError('No room capacity.')
-            db.execute('INSERT INTO rooms (id,owner,name,slot,password,invite,invite_expiry,expiry,visibility,game_id,region,capacity) '
-                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+            db.execute('INSERT INTO rooms (id,owner,name,slot,password,invite,invite_expiry,expiry,visibility,game_id,region,capacity,locked) '
+                       'VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
                        (ident,actor,name.strip(),slot,password_hash,self._hash(invite),now+self.INVITE_TTL,
-                        now+self.ROOM_TTL,visibility,game_id,region,capacity))
+                        now+self.ROOM_TTL,visibility,game_id,region,capacity,int(locked)))
             db.execute('INSERT INTO peers VALUES (?,?,?,?,?,?)',(ident,actor,public_key,2,now,device_id))
         return {'room_id':ident,'invite':invite,'invite_expires_at':now+self.INVITE_TTL,
                 'subnet':f'10.203.{slot}.0/24','transport':'not_implemented'}

@@ -30,7 +30,7 @@ class SignatureInfo:
         return self.checked and self.valid and " ".join((self.signer or "").casefold().split()) == "nvidia corporation"
 
 
-def verify(path: str) -> SignatureInfo:
+def verify(path: str, *, online: bool = False) -> SignatureInfo:
     if not is_windows():
         return SignatureInfo(False, False, None, "Signature checks need Windows.")
     if not os.path.isfile(path):
@@ -59,11 +59,13 @@ def verify(path: str) -> SignatureInfo:
     wd = WINTRUST_DATA()
     wd.cbStruct = ctypes.sizeof(WINTRUST_DATA)
     wd.dwUIChoice = 2            # WTD_UI_NONE
-    wd.fdwRevocationChecks = 0   # WTD_REVOKE_NONE (offline friendly)
+    # Existing imported/local binaries retain their offline trust contract. New privileged installers explicitly
+    # request online revocation and fail closed when Windows cannot establish it; never fall back to cache-only.
+    wd.fdwRevocationChecks = 1 if online else 0   # WTD_REVOKE_WHOLECHAIN / WTD_REVOKE_NONE
     wd.dwUnionChoice = 1         # WTD_CHOICE_FILE
     wd.pFile = ctypes.pointer(fi)
     wd.dwStateAction = 1         # WTD_STATEACTION_VERIFY
-    wd.dwProvFlags = 0x1000        # WTD_CACHE_ONLY_URL_RETRIEVAL
+    wd.dwProvFlags = 0x80 if online else 0x1000  # CHECK_CHAIN_EXCLUDE_ROOT / CACHE_ONLY_URL_RETRIEVAL
     wintrust = ctypes.WinDLL("wintrust")
     wintrust.WinVerifyTrust.restype = ctypes.c_long
     wintrust.WinVerifyTrust.argtypes = [wintypes.HWND, ctypes.POINTER(GUID), ctypes.POINTER(WINTRUST_DATA)]

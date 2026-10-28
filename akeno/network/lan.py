@@ -60,7 +60,7 @@ def coordinator_of(result: dict) -> dict:
     return {'public_key': c['public_key'], 'host': host, 'port': port}
 
 
-def interface_profile(private_key: str, virtual_ip: str, coordinator: dict, mtu=1380) -> str:
+def interface_profile(private_key: str, virtual_ip: str, coordinator: dict, mtu=1380, listen_port=None) -> str:
     """The LAN tunnel: own /24 address, the coordinator as its only static peer (10.203.0.1/32, keepalive)."""
     address = ipaddress.ip_address(virtual_ip)
     if address not in LAN_NETWORK:
@@ -68,7 +68,10 @@ def interface_profile(private_key: str, virtual_ip: str, coordinator: dict, mtu=
     subnet = ipaddress.ip_network(f'{address}/24', strict=False)
     host = coordinator['host']
     endpoint = f'[{host}]:{coordinator["port"]}' if ':' in host else f'{host}:{coordinator["port"]}'
-    return (f'[Interface]\nPrivateKey = {private_key}\nAddress = {address}/{subnet.prefixlen}\nMTU = {mtu}\n\n'
+    if listen_port is not None and (type(listen_port) is not int or not 1024 <= listen_port <= 65535):
+        raise LanError('Invalid LAN listen port.')
+    listen = f'ListenPort = {listen_port}\n' if listen_port is not None else ''
+    return (f'[Interface]\nPrivateKey = {private_key}\nAddress = {address}/{subnet.prefixlen}\nMTU = {mtu}\n{listen}\n'
             f'[Peer]\nPublicKey = {coordinator["public_key"]}\nAllowedIPs = {COORDINATOR_ADDRESS}/32\n'
             f'Endpoint = {endpoint}\nPersistentKeepalive = {KEEPALIVE}\n')
 

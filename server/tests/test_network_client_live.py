@@ -22,6 +22,7 @@ class MemoryIdentity:
 
 def test_two_desktop_clients_share_authenticated_device_bound_room(tmp_path,monkeypatch,keys):
     monkeypatch.setenv('AKENO_NETWORK_ENABLED','true');monkeypatch.setenv('AKENO_NETWORK_DATABASE_PATH',str(tmp_path/'rooms.sqlite3'))
+    monkeypatch.setenv('AKENO_NETWORK_SIGNING_KEY_PATH',str(tmp_path/'network-signing.key'))
     reset_config()
     from akeno_server.main import create_app
     with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
@@ -57,6 +58,7 @@ def test_two_desktop_clients_share_authenticated_device_bound_room(tmp_path,monk
 def test_client_against_server_without_lan_api_reports_unavailable_not_404(tmp_path,monkeypatch,keys):
     """Regression for the "Not Found" text: the production server runs without AKENO_NETWORK_ENABLED."""
     monkeypatch.delenv('AKENO_NETWORK_ENABLED',raising=False)
+    monkeypatch.setenv('AKENO_NETWORK_SIGNING_KEY_PATH',str(tmp_path/'network-signing.key'))
     reset_config()
     from akeno_server.main import create_app
     from akeno.network.client import LanUnavailable

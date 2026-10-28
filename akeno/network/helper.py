@@ -70,6 +70,14 @@ def execute(ident):
     if request.get('action') in ('lan_session','lan_recover'):
         return lan(store,request)
     try:
+        if request.get('action') == 'install_components':
+            if set(request) != {'action','consent','created'} or request['consent'] is not True or \
+                    type(request['created']) not in (int,float) or not 0 <= time.time()-request['created'] <= 120:
+                raise ProfileError('The network request is invalid or expired.')
+            from akeno.network.bootstrap import install
+            result = install(consent=True)
+            store.save({'done':True,'result':result})
+            return 0
         if set(request)!={'action','profile_id','created'} or request['action'] not in ('connect','disconnect','status','exit_ip') \
                 or type(request['created']) not in (int,float) or not 0<=time.time()-request['created']<=120:
             raise ProfileError('The network request is invalid or expired.')
@@ -112,14 +120,18 @@ def lan_status():
     return status.load()
 
 
-def invoke(action,profile_id=None):
+def invoke(action,profile_id=None,*,consent=False):
     """Only explicit UI actions call this. Administrator rights are scoped to one helper process."""
     if sys.platform!='win32' or not getattr(sys,'frozen',False):
         raise NativeUnavailable('Network elevation is available in the built Windows application only.')
-    if action not in ('connect','disconnect','status','exit_ip','lan_session','lan_recover'):
+    if action not in ('connect','disconnect','status','exit_ip','lan_session','lan_recover','install_components'):
         raise ProfileError('Unknown network operation.')
     ident=uuid.uuid4().hex;store=request_store(ident)
-    if action.startswith('lan_'):
+    if action == 'install_components':
+        if consent is not True:
+            raise ProfileError('Explicit consent is required to install the network components.')
+        store.save({'action':action,'consent':True,'created':time.time()})
+    elif action.startswith('lan_'):
         if not re.fullmatch('[0-9a-f]{32}',str(profile_id)):raise ProfileError('Invalid room identity.')
         store.save({'action':action,'room_id':profile_id,'created':time.time()})
     else:
@@ -152,7 +164,8 @@ def invoke(action,profile_id=None):
             result=store.load()
             if result.get('error'):raise NativeUnavailable(result['error'])
             raise NativeUnavailable('LAN Play did not start. Recover before retrying.')
-        if kernel.WaitForSingleObject(info.hProcess,90000)!=0:
+        timeout=300000 if action=='install_components' else 90000
+        if kernel.WaitForSingleObject(info.hProcess,timeout)!=0:
             raise NativeUnavailable('The network helper did not finish. Recover the tunnel before retrying.')
         result=store.load()
         if not result.get('done'):raise NativeUnavailable('The network helper did not return a result.')

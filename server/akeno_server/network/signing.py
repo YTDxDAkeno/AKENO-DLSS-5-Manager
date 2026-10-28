@@ -55,7 +55,10 @@ def _private(path: Path) -> Ed25519PrivateKey:
 
 
 def active():
-    key = _private(get_config().network_signing_key_path)
+    try:
+        key = _private(get_config().network_signing_key_path)
+    except OSError as exc:
+        raise SigningUnavailable('The network signing key is unavailable.') from exc
     public = account_signing.raw_public(key.public_key())
     return account_signing.kid_for(public), key
 

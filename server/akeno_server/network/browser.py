@@ -65,10 +65,7 @@ def create(body:CreatePublicRoom, request:Request, caller:Caller=Depends(current
     game(body.game_id)
     result = operation(lambda:s.create(actor,body.name,body.public_key,body.password,device,
                                       visibility=body.visibility,game_id=body.game_id,region=body.region,
-                                      capacity=body.capacity))
-    if body.locked:
-        operation(lambda:s.publish(actor,result['room_id'],visibility=body.visibility,game_id=body.game_id,
-                                   region=body.region,capacity=body.capacity,locked=True))
+                                      capacity=body.capacity,locked=body.locked))
     return result
 
 

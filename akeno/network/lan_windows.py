@@ -98,7 +98,7 @@ def powershell(script: str, timeout=60) -> str:
     """Runs a fixed script built only from validated values, read from stdin. Deliberately no -EncodedCommand or
     execution-policy override: those are what malware uses, and security products rightly flag them."""
     p = subprocess.run([_system_tool('WindowsPowerShell', 'v1.0', 'powershell.exe'), '-NoProfile', '-NonInteractive',
-                        '-Command', '-'], input=script + '\n', capture_output=True, text=True, timeout=timeout,
+                        '-Command', '-'], input="$ErrorActionPreference = 'Stop'\n" + script + '\n', capture_output=True, text=True, timeout=timeout,
                        creationflags=0x08000000)
     if p.returncode:
         raise NativeUnavailable('Windows refused the firewall configuration for LAN Play.')
@@ -124,9 +124,40 @@ class LanFirewall:
         self.name, self.subnet, self.run = name, str(net), run
 
     def require_enabled(self):
-        if 'True' not in self.run('(Get-NetFirewallProfile -Name Public).Enabled'):
-            raise LanError('Windows Defender Firewall (Public profile) is off. LAN Play stays disabled so that file '
+        enabled = self.run('(Get-NetFirewallProfile -Name Domain,Private,Public).Enabled').split()
+        if len(enabled) != 3 or any(value != 'True' for value in enabled):
+            raise LanError('Windows Defender Firewall is off for a network profile. LAN Play stays disabled so that file '
                            'sharing, Remote Desktop and other services cannot be reached by room members.')
+
+    def relay_only(self, listen_port: int, relay: tuple[str, int]):
+        """Outer UDP isolation, installed before the tunnel starts.
+
+        WireGuardNT sockets may be kernel-owned, so these rules bind to the tunnel's explicit random UDP port,
+        rather than assuming Windows attributes packets to a user process/service. A peer cannot cause endpoint
+        roaming to bypass the relay: all other remote addresses AND ports are blocked inbound and outbound.
+        """
+        address = ipaddress.ip_address(relay[0])
+        if address.version != 4 or type(listen_port) is not int or not 1024 <= listen_port <= 65535 \
+                or type(relay[1]) is not int or not 1 <= relay[1] <= 65535:
+            raise LanError('Invalid relay firewall boundary.')
+        others = list(ipaddress.ip_network('0.0.0.0/0').address_exclude(ipaddress.ip_network(f'{address}/32')))
+        addresses = ','.join("'" + str(value) + "'" for value in [*others, '::/0'])
+        ports = []
+        if relay[1] > 1: ports.append(f'1-{relay[1]-1}')
+        if relay[1] < 65535: ports.append(f'{relay[1]+1}-65535')
+        port_list = ','.join("'" + value + "'" for value in ports)
+        lines = []
+        for direction in ('Inbound', 'Outbound'):
+            base = (f"New-NetFirewallRule -DisplayName '{GROUP} {self.name} relay {direction} "
+                    f"{{suffix}}' -Group '{GROUP}' -Direction {direction} -Action Block -Protocol UDP "
+                    f"-LocalPort {listen_port} -Profile Any ")
+            lines.append(base.format(suffix='addresses') + f'-RemoteAddress {addresses} | Out-Null')
+            lines.append(base.format(suffix='ports') + f"-RemoteAddress '{address}' -RemotePort {port_list} | Out-Null")
+        # This narrow inbound exception is only the controlled relay's socket, never another member.
+        lines.append(f"New-NetFirewallRule -DisplayName '{GROUP} {self.name} relay receive' -Group '{GROUP}' "
+                     f"-Direction Inbound -Action Allow -Protocol UDP -LocalPort {listen_port} "
+                     f"-RemoteAddress '{address}' -RemotePort {relay[1]} -Profile Any | Out-Null")
+        self.run('; '.join(lines))
 
     def apply(self):
         n, s, g = self.name, self.subnet, GROUP
@@ -150,6 +181,10 @@ class LanFirewall:
     def rules(self) -> str:
         return self.run(f"Get-NetFirewallRule -Group '{GROUP}' | Where-Object DisplayName -like '*{self.name}*' | "
                         "Select-Object -ExpandProperty DisplayName")
+
+    def remove(self):
+        self.run(f"Get-NetFirewallRule -Group '{GROUP}' -ErrorAction SilentlyContinue | "
+                 f"Where-Object DisplayName -like '*{self.name}*' | Remove-NetFirewallRule")
 
     @staticmethod
     def remove_all(run=powershell):
@@ -230,11 +265,18 @@ class LanSession:
         subnet = str(ipaddress.ip_network(f"{own['virtual_ip']}/24", strict=False))
         firewall = self.firewall_type(self.name, subnet)
         firewall.require_enabled()
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as reservation:
+            reservation.bind(('0.0.0.0', 0))
+            listen_port = reservation.getsockname()[1]
         self.journal.save({'phase': 'lan_starting', 'room': self.room, 'name': self.name, 'public_key': own['public_key']})
         probe = None
         try:
+            firewall.relay_only(listen_port, (relay_ip, coord['port']))
             self.native.start(self.name, interface_profile(own['private_key'], own['virtual_ip'],
-                                                           dict(coord, host=relay_ip)))
+                                                           dict(coord, host=relay_ip), listen_port=listen_port))
+            actual_port = self.native._call('wg.exe', 'show', self.name, 'listen-port').stdout.strip()
+            if actual_port != str(listen_port):
+                raise LanError('WireGuard did not retain the protected LAN listen port.')
             firewall.apply()
             self.journal.save({'phase': 'lan_active', 'room': self.room, 'name': self.name,
                                'public_key': own['public_key']})
@@ -263,7 +305,7 @@ class LanSession:
                     last_refresh = self.clock()
                 peers = controller.tick()
                 for key, peer in peers.items():
-                    peer['latency_ms'] = probe.measure(peer['virtual_ip'], 0.5) if peer['mode'] in ('direct', 'relay') \
+                    peer['latency_ms'] = probe.measure(peer['virtual_ip'], 0.5) if peer['mode'] == 'relay' \
                         else None
                 self.status.save({'state': 'active', 'room': self.room, 'virtual_ip': own['virtual_ip'],
                                   'peers': peers, 'error': error, 'allowed': allowed, 'updated': self.clock()})
@@ -277,9 +319,12 @@ class LanSession:
         state = self.journal.load()
         name = state.get('name') or self.name
         try:
-            self.firewall_type.remove_all()
-        finally:
             self.native.stop(name, public_key=state.get('public_key'))
+        except Exception:
+            self.journal.save({**state, 'phase': 'lan_recovery_required'})
+            raise
+        else:
+            self.firewall_type(name, str(ipaddress.ip_network('10.203.0.0/24'))).remove()
             self.journal.save({'phase': 'disconnected'})
             self.status.save({'state': 'stopped', 'room': self.room, 'updated': self.clock()})
 
@@ -287,8 +332,8 @@ class LanSession:
 def recover(native, journal, run=powershell):
     """After a crash or power loss: remove AKENO LAN firewall rules and the LAN tunnel recorded in the journal."""
     state = journal.load()
-    LanFirewall.remove_all(run)
-    if state.get('phase') in ('lan_starting', 'lan_active') and TUNNEL.fullmatch(state.get('name', '')):
+    if state.get('phase') in ('lan_starting', 'lan_active', 'lan_recovery_required') and TUNNEL.fullmatch(state.get('name', '')):
         native.stop(state['name'], public_key=state.get('public_key'))
+        LanFirewall(state['name'], '10.203.0.0/24', run=run).remove()
     journal.save({'phase': 'disconnected'})
 

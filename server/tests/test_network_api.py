@@ -19,6 +19,7 @@ def key():return base64.b64encode(os.urandom(32)).decode()
 def network(tmp_path,monkeypatch,keys):
     monkeypatch.setenv('AKENO_NETWORK_ENABLED','true')
     monkeypatch.setenv('AKENO_NETWORK_DATABASE_PATH',str(tmp_path/'rooms.sqlite3'))
+    monkeypatch.setenv('AKENO_NETWORK_SIGNING_KEY_PATH',str(tmp_path/'network-signing.key'))
     reset_config()
     from akeno_server.main import create_app
     with TestClient(create_app()) as client:yield client
@@ -59,10 +60,12 @@ def test_auth_license_device_membership_and_short_lived_credential(network):
     assert len(r.json()['members'])==2 and r.json()['transport']=='not_implemented'
     assert r.json()['room']['name']=='Private room' and r.json()['room']['owner'] is False
     assert sorted(m['owner'] for m in r.json()['members'])==[False,True]
-    from akeno.network.credentials import verify_peer
+    from akeno.network.credentials import verify_peer, verify_network_keys
     from akeno.licensing.crypto import public_key
     with dbmod.session() as session:keys={row.kid:public_key(row.public_key) for row in signing.public_keys(session)}
-    ticket=r.json()['credential'];now=clock.utcnow().timestamp()
+    now=clock.utcnow().timestamp()
+    keys=verify_network_keys(r.json()['network_keys'],keys,now)
+    ticket=r.json()['credential']
     assert verify_peer(ticket,keys,rid,now)['device_id']==db['id']
     for room_id,at in ((rid,now+46),('wrong-room',now)):
         with pytest.raises(ValueError):verify_peer(ticket,keys,room_id,at)
@@ -103,6 +106,7 @@ def test_session_cannot_take_over_membership_from_another_device(network):
 def lan_play(tmp_path,monkeypatch,keys):
     monkeypatch.setenv('AKENO_NETWORK_ENABLED','true')
     monkeypatch.setenv('AKENO_NETWORK_DATABASE_PATH',str(tmp_path/'rooms.sqlite3'))
+    monkeypatch.setenv('AKENO_NETWORK_SIGNING_KEY_PATH',str(tmp_path/'network-signing.key'))
     monkeypatch.setenv('AKENO_NETWORK_COORDINATOR_BIND','127.0.0.1:0')
     monkeypatch.setenv('AKENO_NETWORK_COORDINATOR_HOST','lan.example.test')
     monkeypatch.setenv('AKENO_NETWORK_COORDINATOR_KEY_PATH',str(tmp_path/'coordinator.key'))
@@ -122,9 +126,9 @@ def handshake(coordinator,member):
         except socket.timeout:return None
 
 
-def test_coordinator_proves_endpoints_and_signs_them_into_peer_credentials(lan_play):
+def test_coordinator_keeps_proven_endpoints_private_and_signs_relay_only_tickets(lan_play):
     from wg_initiator import Member
-    from akeno.network.credentials import verify_peer
+    from akeno.network.credentials import verify_peer, verify_network_keys
     from akeno.licensing.crypto import public_key
     c,coordinator=lan_play
     a,da=player(c,'one@example.test');b,db=player(c,'two@example.test')
@@ -143,9 +147,19 @@ def test_coordinator_proves_endpoints_and_signs_them_into_peer_credentials(lan_p
     assert body['transport']=='wireguard' and body['coordinator']=={'public_key':coordinator.public_key,
                                                                    'host':'lan.example.test','port':coordinator.address[1]}
     with dbmod.session() as session:keys={row.kid:public_key(row.public_key) for row in signing.public_keys(session)}
+    account_keys=keys
+    keys=verify_network_keys(body['network_keys'],account_keys,clock.utcnow().timestamp())
     [peer]=body['peers']
+    with pytest.raises(ValueError):
+        verify_peer(peer['credential'],account_keys,rid,clock.utcnow().timestamp())
     claims=verify_peer(peer['credential'],keys,rid,clock.utcnow().timestamp())
-    assert claims['public_key']==mb.key and claims['endpoint']==list(source_b)
+    assert claims['public_key']==mb.key and claims['transport']=='relay-only'
+    assert 'endpoint' not in claims and body['relay_only'] is True
+    assert '127.0.0.1' not in str(body)
+    from akeno.licensing.crypto import b64d
+    import json
+    for token in [body['credential'], *(p['credential'] for p in body['peers'])]:
+        assert 'endpoint' not in json.loads(b64d(token.split('.')[1]))
     assert claims['device_id']==db['id'] and claims['virtual_ip'].startswith('10.203.')
 
 
