@@ -129,8 +129,16 @@ Superseded: `eaef058` (wireguard red, see the DNS table). Previous code freeze c
 - Earlier build on `acacccc` (cancelled to free the runner) already passed: Linux tests, server (SQLite/PostgreSQL/
   Docker), real upstream assets, **Windows unit/integration/UI tests**, 150 % UI, smoke from source, system tools.
 
+New code freeze candidate: **`d32a0ccee995a911fef1f9e9f64e879e6552c3f7`** (DNS verdict on kernel evidence). All five
+workflows started on push: build.yml [40768763138](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768763138),
+network-windows.yml [40768762884](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768762884),
+lan-lab.yml [40768763301](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768763301),
+network-local-e2e.yml [40768762916](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768762916),
+components-windows.yml [40768763287](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768763287).
+On `eaef058` before it was superseded: lan-lab green, network-local-e2e green, `lan-play` 44-check job green; build
+cancelled (superseded).
+
 ## Next concrete step
 
-Read `network-windows.yml` for `7343d86` (wireguard: DNS gate), the production read-only check, and the full
-build.yml on the newest commit; finish the local full client run (`/tmp/claude-0/linux-full2.log`) and the server
-suite; then write `docs/AKENO_320_FINAL_RELEASE_REPORT.md`.
+Wait for the five runs on `d32a0cc`; fill report sections 3–5 from them (run links, SHA-256, Release Manager
+values from the green build's log) and record the local full client run.

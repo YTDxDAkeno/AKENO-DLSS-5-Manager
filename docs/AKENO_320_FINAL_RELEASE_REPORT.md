@@ -28,11 +28,14 @@ angefasst. Der laufende Arbeitsstand steht in `docs/AKENO_320_FINAL_PROGRESS.md`
    Prüfung vor dem Tunnelstart und bei jedem Heartbeat (fehlt sie → Sitzung endet, nie „Verbunden“), bleibt nach
    Absturz bis zur Wiederherstellung, wird erst nach dem Tunnel entfernt; nur AKENO-eigene Objekte werden gelöscht.
 2. **LAN-Firewall:** neue Default-Deny-Sätze entfernen alle älteren Sätze desselben Tunnels (Kollision gefunden in CI).
-3. **DNS-Leckprüfung (VPN):** Packet-Monitor-Datensätze von Layer-3-Adaptern werden korrekt gelesen (nur mit
-   gültigem IP-Header); Antwortzuordnung über Resolver, Ports und Transaktion; Packet Monitor wird erst nach
-   bestätigter Aufzeichnung benutzt; zweite Positivkontrolle nach den Sperrproben; stille Verwerfungen werden über das
-   **WFP-Classify-Drop-Ereignisprotokoll** (`akeno/network/wfp_events.py`, nur lesend) für genau das Proben-Tupel
-   nachgewiesen; eine auf einer Leitung beobachtete Probe gilt als Leck. Ist die Ereignissammlung aus → fail closed.
+3. **DNS-Leckprüfung (VPN):** Jede fremde DNS-Probe (UDP/TCP 53, TCP 853, über jede physische Quelle) braucht
+   einen eigenen Kernel-Nachweis: explizite Zugriffsverweigerung, Packet-Monitor-Drop-Datensatz oder ein Eintrag im
+   **WFP-Classify-Drop-Ereignisprotokoll** (`akeno/network/wfp_events.py`, nur lesend) für genau das Proben-Tupel.
+   Eine auf einer Leitung beobachtete Probe gilt als Leck; fehlt ein Nachweis oder ist die Ereignissammlung aus →
+   fail closed. Packet Monitor sieht den WireGuardNT-Adapter nur stichprobenartig (CI: in einem Lauf aufgezeichnet,
+   im nächsten nicht) — „nicht gesehen“ ist deshalb nie ein Beweis; ob die Aufzeichnung den Tunnel erfasst hat, wird
+   gemeldet (`capture_recorded_tunnel`), nicht vorausgesetzt. Layer-3-Datensätze werden nur mit gültigem IP-Header
+   gelesen.
 4. **Linux-Segfault (Exit 139) behoben:** Fortschritts-Relay der System-Seiten lebt jetzt prozessweit; geschlossene
    Seiten brechen ihre Messung ab; Tests warten nach jedem Test auf alle Hintergrundaufgaben.
 5. **Windows-Tests:** msiexec-Pfadvergleich nativ; zu lange Test-ID (Windows-Umgebungsvariablenlimit) gekürzt —
