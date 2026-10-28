@@ -29,3 +29,17 @@ def db(akeno_home):
     d = Database(akeno_home / "test.sqlite3")
     yield d
     d.close()
+
+
+@pytest.fixture(autouse=True)
+def finish_background_tasks():
+    """No worker of a UI test may outlive it. pytest-qt closes the test's widgets before fixture teardown; a closed
+    page cancels its operation, so this normally returns at once. A task still running into the next test's setup
+    caused a segfault in the Linux CI run (a worker reporting to a page that was being destroyed)."""
+    yield
+    workers = sys.modules.get("akeno.ui.workers")
+    if workers is None:
+        return
+    from PySide6.QtCore import QCoreApplication
+    if QCoreApplication.instance() is not None:
+        assert workers.drain(60000), "a background task outlived its test"

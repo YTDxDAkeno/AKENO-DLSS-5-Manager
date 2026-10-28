@@ -57,8 +57,15 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
   itself (length field == captured length, valid IPv4 header checksum); non-IP EtherTypes are reported as metadata.
   Windows proof pending: `network-windows.yml` `wireguard`.
 - `network-local-e2e.yml` now also runs on `claude/**` (relay/OpenTTD and VPN-exit labs).
+- (this push) Linux segfault (exit 139) root cause: `TaskBar` created one `_Relay` QObject per bar and handed its
+  `progress.emit` to worker threads. When a page was closed while its doctor/network sampler still ran, the relay was
+  destroyed on the GUI thread while a worker could emit on it (use-after-free; not reproducible on every run, the
+  local run did not hit the window). Fix: one process-lifetime relay created on the GUI thread, bars reached only by
+  weak reference and `shiboken6.isValid`, and a closed bar cancels its running operation (`destroyed` captures the
+  context holder, not the widget). `tests/conftest.py` now drains workers after every test and fails a test whose
+  background task outlives it (60 s). No test was skipped or disabled.
 
 ## Next concrete step
 
-Reproduce the Linux Qt segfault locally (Python 3.12 venv at `/opt/akeno-env`, offscreen Qt), then implement the WFP
-transport lock and iterate with `network-windows.yml`.
+Read `network-windows.yml` run for `acacccc` (lan-play: WFP lock vs. direct attack; wireguard: DNS positive
+control). Full local client run with the drain fixture (Python 3.12 venv at `/opt/akeno-env`, offscreen Qt).

@@ -14,8 +14,12 @@ Universal Mod Scanner.
 
 from __future__ import annotations
 
+import functools
 import logging
+import weakref
 from typing import Callable, Iterable
+
+import shiboken6
 
 from PySide6.QtCore import QObject, QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
@@ -151,7 +155,36 @@ class TabbedPage(QWidget):
 
 
 class _Relay(QObject):
-    progress = Signal(object)
+    """Carries progress from worker threads to the GUI thread.
+
+    One instance for the whole process, created on the GUI thread and never deleted: a worker may still report
+    progress while the page that started it is being closed, and emitting on a QObject that another thread is
+    destroying at that moment crashes the process (seen as a segfault in the Linux test run). The bar itself is only
+    reached through a weak reference and only while its C++ object is alive."""
+    progress = Signal(object, object)
+
+    def __init__(self):
+        super().__init__()
+        self.progress.connect(self._deliver)
+
+    @staticmethod
+    def _deliver(ref, value) -> None:
+        bar = ref()
+        if bar is not None and shiboken6.isValid(bar):
+            bar._progress(value)
+
+
+_RELAY: list[_Relay] = []
+
+
+def _relay() -> _Relay:
+    if not _RELAY:
+        _RELAY.append(_Relay())
+    return _RELAY[0]
+
+
+def _report(relay: _Relay, ref, value) -> None:
+    relay.progress.emit(ref, value)
 
 
 class TaskBar(QWidget):
@@ -181,8 +214,11 @@ class TaskBar(QWidget):
         self.cancel = button(cancel_text or t("Cancel"), "stop", "ghost", on_click=self.stop)
         self.cancel.hide()
         lay.addWidget(self.cancel)
-        self._relay = _Relay()
-        self._relay.progress.connect(self._progress)
+        self._relay = _relay()
+        # A closed page cancels its operation; the holder (not ``self``) is captured so this works during deletion.
+        self._running: dict[str, TaskContext] = {}
+        running = self._running
+        self.destroyed.connect(lambda *_: [ctx.cancel() for ctx in running.values()])
         self.setVisible(False)
 
     @property
@@ -194,15 +230,17 @@ class TaskBar(QWidget):
               cancellable: bool = True) -> bool:
         if self.ctx is not None:
             return False
-        ctx = TaskContext(progress=self._relay.progress.emit, timeout=timeout)
+        ctx = TaskContext(progress=functools.partial(_report, self._relay, weakref.ref(self)), timeout=timeout)
 
         def done(res):
+            self._running.pop("ctx", None)
             self._stop_ui()
             self.finished.emit(True)
             if on_done:
                 on_done(res)
 
         def failed(exc):
+            self._running.pop("ctx", None)
             self._stop_ui()
             self.finished.emit(False)
             if isinstance(exc, Cancelled):
@@ -217,6 +255,7 @@ class TaskBar(QWidget):
         if not self.ctl.run(self.key, lambda: fn(ctx), done, failed, silent=True):
             return False
         self.ctx = ctx
+        self._running["ctx"] = ctx
         self.text.setStyleSheet("")
         self.text.setText(text or t("Working…"))
         self.spinner.start()
