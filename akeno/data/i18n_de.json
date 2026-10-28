@@ -4899,5 +4899,6 @@
   "Spam": "Spam",
   "The relay-only IP protection is not verified. Stop the session and use Recover.": "Der Relay-only-IP-Schutz ist nicht bestätigt. Beende die Sitzung und nutze „Wiederherstellen“.",
   "Unsafe content": "Unangemessene Inhalte",
-  "Your PC is in the room network. Other players see only your virtual IP.": "Dein PC ist im Raumnetz. Andere Spieler sehen nur deine virtuelle IP."
+  "Your PC is in the room network. Other players see only your virtual IP.": "Dein PC ist im Raumnetz. Andere Spieler sehen nur deine virtuelle IP.",
+  "Round trip of a DNS query through the VPN to its resolver, measured after connecting. \"—\" means not measured.": "Laufzeit einer DNS-Anfrage durch das VPN zu seinem Resolver, gemessen nach dem Verbinden. „—“ bedeutet: nicht gemessen."
 }

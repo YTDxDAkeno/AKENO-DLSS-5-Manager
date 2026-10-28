@@ -126,7 +126,8 @@ class AutomaticVPN(Card):
         self.fact_country = Fact(t('Verified country'), hint=t('The exit server\'s country was verified '
                                                               'independently; the observed IP must match it.'))
         self.fact_time = Fact(t('Connected for'))
-        self.fact_latency = Fact(t('Latency'), hint=t('Shown only when AKENO measured it. "—" means not measured.'))
+        self.fact_latency = Fact(t('Latency'), hint=t('Round trip of a DNS query through the VPN to its resolver, '
+                                                      'measured after connecting. "—" means not measured.'))
         self.fact_protection = Fact(t('Leak protection'), hint=t('Routes, IPv4, IPv6 and DNS were checked natively '
                                                                  'before Connected was shown.'))
         for index, fact in enumerate((self.fact_ip, self.fact_ipv6, self.fact_country, self.fact_time,

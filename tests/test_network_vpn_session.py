@@ -245,3 +245,17 @@ def test_unverifiable_default_observer_is_not_replaced_by_synthetic_success(worl
     w.session.probe=default_probe
     assert w.session.run('DE')['state']=='verification_required'
     assert not w.native.active and not any(value['state']=='connected' for value in w.status.history)
+
+
+def test_tunnel_latency_is_the_median_of_successful_dns_round_trips_only():
+    from akeno.network.vpn_session import tunnel_latency
+    answers = iter([True, OSError('timeout'), True])
+
+    def measure(resolver):
+        value = next(answers)
+        if isinstance(value, Exception):
+            raise value
+        return value
+    latency = tunnel_latency('203.0.113.53', samples=3, measure=measure)
+    assert isinstance(latency, float) and latency >= 0
+    assert tunnel_latency('203.0.113.53', samples=2, measure=lambda r: False) is None

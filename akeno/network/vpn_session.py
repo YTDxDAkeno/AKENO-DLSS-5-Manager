@@ -75,7 +75,25 @@ def default_probe(claims, tunnel_name):
     except (OSError,ValueError,EgressError) as exc:
         raise VerificationRequired('Source-bound HTTPS exit measurements did not pass.') from exc
     return {**addresses, 'routing_verified': routing_verified, 'dns_configuration_matches': configured == set(dns),
-            **evidence}
+            **evidence, 'latency_ms': tunnel_latency(dns[0])}
+
+
+def tunnel_latency(resolver, samples=3, measure=None):
+    """Median round trip of a nonce-bound DNS query to the tunnel's resolver, i.e. through the VPN; None when no
+    sample succeeded. Shown as the VPN latency; it never decides whether the tunnel counts as connected."""
+    if measure is None:
+        from akeno.network.dns_probe import resolver_responds
+        measure = resolver_responds
+    times = []
+    for _ in range(samples):
+        start = time.perf_counter()
+        try:
+            ok = measure(resolver) is True
+        except OSError:
+            ok = False
+        if ok:
+            times.append((time.perf_counter() - start) * 1000)
+    return round(sorted(times)[len(times) // 2], 1) if times else None
 
 
 class ManagedVPNSession:
@@ -114,6 +132,9 @@ class ManagedVPNSession:
             result.update(exit_ipv4=observation['ipv4'], exit_ipv6=observation['ipv6'],
                           routing_verified=True, dns_verified=True,
                           connected_since=self.state.get('connected_since', self.clock()))
+            latency = observation.get('latency_ms')
+            if type(latency) in (int, float) and 0 < latency < 10000:
+                result['latency_ms'] = latency
         if error:
             result['error'] = error     # only a fixed code from this module, never server/native exception text
         self.status.save(result)
