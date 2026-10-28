@@ -682,6 +682,7 @@
  "Clear DNS cache": "DNS-Cache leeren",
  "Clear Windows' DNS cache?": "Den DNS-Cache von Windows leeren?",
  "Clear download cache": "Download-Cache leeren",
+ "Clear history": "Verlauf löschen",
  "Clearing…": "Leere …",
  "Click a widget in the layout.": "Klicke im Layout auf ein Widget.",
  "Client graphics mods are a client-side choice. FiveM's pure mode (sv_pureLevel) only checks game archives (RPF files); it does not block FiveM.app\\plugins.": "Grafik-Mods sind eine Entscheidung des Clients. Der Pure-Modus von FiveM (sv_pureLevel) prüft nur Spielarchive (RPF-Dateien); FiveM.app\\plugins blockiert er nicht.",

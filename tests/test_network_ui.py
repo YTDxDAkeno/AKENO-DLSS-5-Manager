@@ -157,3 +157,94 @@ def test_room_errors_become_sentences(page):
         raise ApiError(403, 'room_access_denied', 'Invalid or expired invitation.')
     page.work(denied, lambda _: None)
     assert 'Ask the room owner for a new one' in page.work_status.text()
+
+
+# -- redesigned page ----------------------------------------------------------------------------------------------------
+
+def test_server_without_lan_play_disables_create_and_join_and_says_why(page):
+    page.service = {'enabled': False, 'transport': 'not_implemented', 'relay': False}
+    page.apply_service()
+    assert not page.create_button.isEnabled() and not page.join_button.isEnabled()
+    assert page.notice.isVisible() and 'not active on the AKENO server' in page.work_status.text()
+    assert 'not active on the AKENO server' in page.lan_dash.detail_label.text()
+    page.service = {'enabled': True, 'transport': 'wireguard', 'relay': True}
+    page.apply_service()
+    assert page.create_button.isEnabled()
+
+
+def test_status_probe_runs_once_and_only_with_a_license(qtbot):
+    from akeno.ui.pages.akeno_network import AkenoNetworkPage
+    calls = []
+
+    class Probe(Ctl):
+        def run(self, key, fn, done=None, failed=None, **kw):
+            calls.append(key)
+            done({'enabled': False, 'transport': 'not_implemented', 'relay': False})
+            return True
+    p = AkenoNetworkPage(Probe(), SimpleNamespace(license=object()))
+    qtbot.addWidget(p)
+    p.show()
+    p.hide()
+    p.show()
+    assert calls == ['akeno-network-status'] and not p.create_button.isEnabled()
+
+
+def test_dashboard_shows_room_owner_names_and_virtual_ip(page, monkeypatch):
+    in_session(page, monkeypatch)
+    page.room_info = {'name': 'Friday LAN', 'owner': True}
+    page.members_data[1].update(name='Mira')
+    page.members_data[2].update(owner=False)
+    page.show_room()
+    assert page.tile_room.value.text() == 'Friday LAN' and page.tile_vip.value.text() == '10.203.5.2'
+    assert cells(page, 1)[0] == 'Mira' and page.owner_pill.isVisible() and page.invite_box.isVisible()
+    assert page.steps.current == 2           # session active, no game allowed yet
+    page.room_info = {'name': 'Their room', 'owner': False}
+    page.show_room()
+    assert not page.invite_box.isVisible() and not page.remove_button.isEnabled()
+    assert page.leave_button.isVisible() and not page.delete_button.isVisible()
+
+
+def test_create_needs_a_name_and_join_a_code(page):
+    page.create()
+    assert 'room name' in page.work_status.text()
+    page.join()
+    assert 'invitation code' in page.work_status.text()
+
+
+def test_vpn_locations_only_own_profiles_are_connectable(page):
+    page.profile_meta = [{'id': 'c' * 32, 'name': 'My box'}]
+    page.render_locations()
+    ids = [page.location_list.item(i).data(256) for i in range(page.location_list.count())]
+    assert ids[0] == 'own:' + 'c' * 32 and 'akeno:TR' in ids and 'vpngate' in ids
+    page.location_list.setCurrentRow(ids.index('akeno:TR'))
+    assert not page.connect_button.isEnabled() and 'No AKENO VPN server' in page.location_reason.text()
+    page.location_search.setText('germ')
+    assert [page.location_list.item(i).data(256) for i in range(page.location_list.count())] == ['akeno:DE']
+
+
+def test_vpn_dashboard_reflects_a_real_connection_result(page):
+    from akeno.network.providers import Location
+    loc = Location('own:x', 'NL', 'My box', 'own-wireguard', 'own', 'WireGuard', True, profile_id='x')
+    page.show_vpn({'state': 'connected', 'exit_ip': '203.0.113.7', 'last_handshake': time.time() - 5}, loc)
+    assert page.vpn_dash.state_label.text() == 'Connected' and page.tile_exit.value.text() == '203.0.113.7'
+    assert page.tile_location.value.text() == 'My box' and page.tile_provider.value.text() == 'Your own server'
+    page.show_vpn({'state': 'disconnected'}, loc)
+    assert page.tile_location.value.text() == '—' and page.tile_exit.value.text() == '—'
+    assert page.prefs.history()[0]['location'] == 'My box' and page.prefs.history()[0]['ended']
+
+
+def test_diagnostics_export_never_contains_secrets():
+    from akeno.ui.pages.akeno_network import redact, report
+    text = report([('ok', 'AKENO server', 'Reachable.'),
+                   ('fail', 'Leak', 'key ' + 'A' * 43 + '= token=abc password: hunter2 '
+                                    'eyJhbGciOi.eyJzdWIiOi.c2lnbmF0dXJl')])
+    assert 'A' * 43 not in text and 'hunter2' not in text and 'eyJhbGciOi' not in text and 'abc' not in text
+    assert '[OK  ] AKENO server: Reachable.' in text
+    assert redact('nothing secret') == 'nothing secret'
+
+
+def test_status_orb_animates_only_while_changing(page):
+    page.lan_dash.set_state('Starting…', 'pending')
+    assert page.lan_dash.orb.animating()
+    page.lan_dash.set_state('Connected', 'ok')
+    assert not page.lan_dash.orb.animating()
