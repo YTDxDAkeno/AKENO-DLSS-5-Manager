@@ -138,6 +138,15 @@ components-windows.yml [40768763287](https://github.com/YTDxDAkeno/AKENO-DLSS-5-
 On `eaef058` before it was superseded: lan-lab green, network-local-e2e green, `lan-play` 44-check job green; build
 cancelled (superseded).
 
+`d32a0cc` results: network-windows (wireguard 41/41 with `kernel_drop_proofs: 1`, `capture_recorded_tunnel: True`;
+lan-play 44/44), lan-lab, network-local-e2e, components-windows **green**; build.yml
+[40768763138](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768763138): Linux, server, real assets,
+Windows unit/UI tests, packaged smoke/GUI green, then **red** in the new packaged helper check: `AKENO.exe
+--network-helper not-a-request-id` never exited (180 s). Root cause: `request_store()` raised `ValueError` outside the
+helper's error handling, so the exception reached the start guard's error dialog, which the hidden elevated process can
+never close. Fix (next commit): `execute()` refuses a malformed id with exit 2 before reading/writing anything and
+never raises (also when the result cannot be saved); regression tests added.
+
 ## Next concrete step
 
 Wait for the five runs on `d32a0cc`; fill report sections 3–5 from them (run links, SHA-256, Release Manager

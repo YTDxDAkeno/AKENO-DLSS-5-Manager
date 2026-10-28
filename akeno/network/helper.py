@@ -197,16 +197,24 @@ def vpn(store,request):
 
 
 def execute(ident):
-    """Called by the built AKENO.exe before Qt startup. No arbitrary command/path is accepted."""
+    """Called by the built AKENO.exe before Qt startup. No arbitrary command/path is accepted.
+
+    Never raises: this elevated process is hidden, so an exception would reach the start guard's error dialog that
+    nobody can close (CI: a malformed request id left the packaged helper waiting forever). A malformed id is refused
+    before anything is read or written."""
     if sys.platform!='win32':return 2
-    store=request_store(ident);request=store.load()
+    try:store=request_store(ident)
+    except ValueError:return 2
     try:
+        request=store.load()
         with network_operation():
             return _execute(store,request)
     except (ProfileError,NativeUnavailable) as exc:
-        store.save({'done':True,'error':str(exc)[:300]})
+        error=str(exc)[:300]
     except Exception:
-        store.save({'done':True,'error':'The network operation failed; inspect the connection and recover before retrying.'})
+        error='The network operation failed; inspect the connection and recover before retrying.'
+    try:store.save({'done':True,'error':error})
+    except Exception:pass   # no result: the waiting GUI reports the request as failed
     return 1
 
 

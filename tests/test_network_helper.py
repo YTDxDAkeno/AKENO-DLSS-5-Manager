@@ -209,3 +209,18 @@ def test_mutex_release_on_native_exception(monkeypatch):
     with pytest.raises(RuntimeError):
         with h.network_operation():raise RuntimeError('native failure')
     assert events[-3:]==['release','close','free']
+
+
+@pytest.mark.parametrize('ident',['not-a-request-id','A'*32,'a'*31,'../'+'a'*29,'',None])
+def test_malformed_request_id_is_refused_without_store_lock_or_exception(helper,ident):
+    """The hidden elevated helper must exit; an exception would open the start guard's dialog nobody can close."""
+    assert h.execute(ident)==2
+    assert not helper.stores and not helper.events
+
+
+def test_helper_never_raises_even_if_the_result_cannot_be_saved(helper,monkeypatch):
+    class Broken:
+        def load(self):raise OSError('unreadable request')
+        def save(self,value):raise OSError('read-only store')
+    monkeypatch.setattr(h,'request_store',lambda ident:Broken())
+    assert h.execute('a'*32)==1 and not helper.events
