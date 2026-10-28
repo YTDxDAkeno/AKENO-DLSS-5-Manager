@@ -278,7 +278,8 @@ def full_tunnel(store, manager, backend, journal, wgpeer, check, info, evidence,
             from akeno.network.dns_probe import verify as verify_dns
             dns_evidence=verify_dns(name,['10.203.78.1'])
             evidence['native_dns_probe']=dns_evidence
-            check(dns_evidence['dns_verified'] is True and dns_evidence['denied_paths']>=3,
+            check(dns_evidence['dns_verified'] is True and
+                  dns_evidence['denied_paths']+dns_evidence['unroutable_paths']>=3,
                   'production DNS probe measures tunnel DNS replies and native blocked foreign paths',dns_evidence)
             # Leak probes: Internet destinations must arrive inside the tunnel (at the loopback peer). Port 9 is
             # used because WireGuard for Windows' firewall blocks DNS (port 53) to any non-tunnel resolver.

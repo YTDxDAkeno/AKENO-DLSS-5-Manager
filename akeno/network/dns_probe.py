@@ -63,7 +63,7 @@ def resolver_responds(address):
         return valid_reply(packet,s.recv(4096))
 
 
-def blocked(address, *, source=None, interface=None, tcp=False, port=53):
+def blocked(address, *, source=None, interface=None, tcp=False, port=53, route_check=None):
     # Bind/configuration errors happen outside the measured send/connect. Only
     # Windows' explicit network access denial is positive block evidence.
     with _socket(address,source,interface,tcp) as s:
@@ -73,6 +73,11 @@ def blocked(address, *, source=None, interface=None, tcp=False, port=53):
         except OSError as exc:
             code=getattr(exc,'winerror',None)
             if code==10013:return True
+            # A host-only adapter without a matching native route cannot carry
+            # this DNS probe. Require independent route-table evidence; never
+            # describe WSAENETUNREACH alone as a firewall denial.
+            if code==10051 and route_check is not None and route_check(address,interface) is False:
+                return 'unroutable'
             raise DNSVerificationError(f'Native DNS probe has no explicit block: IPv{ipaddress.ip_address(address).version}, '
                 f'{"TCP" if tcp else "UDP"}, port={port}, bound={interface is not None}, winerror={code}.') from None
         raise DNSVerificationError(f'Native DNS send accepted: IPv{ipaddress.ip_address(address).version}, '
@@ -93,7 +98,8 @@ def inventory(tunnel_name, dns, run):
         script+=f"$r+=@(Find-NetRoute -RemoteIPAddress '{address}' -ErrorAction Stop | Select-Object -ExpandProperty InterfaceAlias); "
     script+="$a=@(Get-NetIPAddress -AddressState Preferred -ErrorAction Stop | Select-Object InterfaceIndex,IPAddress,InterfaceAlias); "
     script+="$otherDns=@(Get-DnsClientServerAddress | Where-Object InterfaceIndex -ne $adapter.ifIndex | ForEach-Object {$_.ServerAddresses}); "
-    script+="@{index=[int]$adapter.ifIndex;dns=$d;routes=$r;addresses=$a;other_dns=$otherDns} | ConvertTo-Json -Depth 4 -Compress"
+    script+="$nativeRoutes=@(Get-NetRoute -PolicyStore ActiveStore -ErrorAction Stop | Select-Object InterfaceIndex,DestinationPrefix); "
+    script+="@{index=[int]$adapter.ifIndex;dns=$d;routes=$r;addresses=$a;other_dns=$otherDns;native_routes=$nativeRoutes} | ConvertTo-Json -Depth 4 -Compress"
     try:
         raw=json.loads(run(script,timeout=10))
         if type(raw['index']) is not int or raw['index']<=0 or set(raw['dns'])!=set(targets) or \
@@ -113,23 +119,34 @@ def inventory(tunnel_name, dns, run):
                                             or address.is_multicast):
                 sources.add((index,str(address)))
         if not sources or len(sources)>32:raise ValueError()
-        return {'index':raw['index'],'dns':sorted(targets),'sources':sorted(sources)}
+        routes=[]
+        rows=raw.get('native_routes')
+        if not isinstance(rows,list) or len(rows)>4096:raise ValueError()
+        for row in rows:
+            if type(row['InterfaceIndex']) is not int:raise ValueError()
+            routes.append((row['InterfaceIndex'],str(ipaddress.ip_network(row['DestinationPrefix'],strict=False))))
+        return {'index':raw['index'],'dns':sorted(targets),'sources':sorted(sources),'native_routes':sorted(routes)}
     except (ValueError,TypeError,KeyError):
         raise DNSVerificationError('Native DNS routes, resolver or interface inventory is incomplete.') from None
 
 
-def verify(tunnel_name,dns,*,run=None,resolve=resolver_responds,deny=blocked):
+def verify(tunnel_name,dns,*,run=None,resolve=resolver_responds,deny=None):
     if sys.platform!='win32':
         raise DNSVerificationError('DNS leak verification requires native Windows.')
     if run is None:
         from akeno.network.lan_windows import powershell
         run=powershell
     before=inventory(tunnel_name,dns,run)
+    if deny is None:
+        def has_route(address,index):
+            target=ipaddress.ip_address(address)
+            return any(target in ipaddress.ip_network(prefix) for iface,prefix in before['native_routes'] if iface==index)
+        def deny(address,**values):return blocked(address,route_check=has_route,**values)
     if not all(resolve(address) is True for address in before['dns']):
         raise DNSVerificationError('The configured tunnel DNS did not return a valid measured response.')
     candidates={4:('1.1.1.1','8.8.8.8','9.9.9.9'),
                 6:('2606:4700:4700::1111','2001:4860:4860::8888','2620:fe::fe')}
-    probes=0
+    probes,unroutable=0,0
     for family,choices in candidates.items():
         foreign=next(value for value in choices if value not in before['dns'])
         # A DNS send accepted on the full tunnel is not an outside-tunnel leak:
@@ -141,10 +158,12 @@ def verify(tunnel_name,dns,*,run=None,resolve=resolver_responds,deny=blocked):
             # Encrypted DNS may legitimately use the full tunnel. Port 853 is
             # required to be denied only on a physical/non-tunnel source path.
             for tcp,port in ((False,53),(True,53),(True,853)):
-                if deny(foreign,source=address,interface=index,tcp=tcp,port=port) is not True:
+                measured=deny(foreign,source=address,interface=index,tcp=tcp,port=port)
+                if measured=='unroutable':unroutable+=1
+                elif measured is not True:
                     raise DNSVerificationError('Windows did not explicitly deny a foreign DNS path.')
-                probes+=1
+                else:probes+=1
     if inventory(tunnel_name,dns,run)!=before:
         raise DNSVerificationError('Network configuration changed during DNS verification.')
     return {'dns_verified':True,'resolver_responses':len(before['dns']),'denied_paths':probes,
-            'source':'windows_wsaeacces_and_valid_tunnel_dns_response'}
+            'unroutable_paths':unroutable,'source':'native_socket_results_routes_and_tunnel_dns_response'}

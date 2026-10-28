@@ -10,7 +10,9 @@ NAME='AkenoVPN'+'a'*24
 
 
 def native_document():
-    return {'index':9,'dns':['1.1.1.1'],'routes':[NAME], 'addresses':[
+    return {'index':9,'dns':['1.1.1.1'],'routes':[NAME], 'native_routes':[
+        {'InterfaceIndex':9,'DestinationPrefix':'0.0.0.0/0'},
+        {'InterfaceIndex':3,'DestinationPrefix':'192.168.1.0/24'}], 'addresses':[
         {'InterfaceIndex':9,'IPAddress':'10.204.1.2','InterfaceAlias':NAME},
         {'InterfaceIndex':3,'IPAddress':'192.168.1.2','InterfaceAlias':'Wi-Fi'},
         {'InterfaceIndex':3,'IPAddress':'2001:4860::1234','InterfaceAlias':'Wi-Fi'}]}
@@ -64,3 +66,15 @@ def test_reply_is_bound_to_nonce_question_and_response_flags():
     altered=bytearray(answer);altered[-5]^=1
     assert not probe.valid_reply(query,bytes(altered))
     assert not probe.valid_reply(probe.question(),answer)
+
+
+def test_no_route_requires_independent_evidence_and_is_not_a_firewall_denial(monkeypatch):
+    class Socket:
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def sendto(self,*args):
+            error=OSError();error.winerror=10051;raise error
+    monkeypatch.setattr(probe,'_socket',lambda *a,**kw:Socket())
+    assert probe.blocked('8.8.8.8',interface=3,route_check=lambda a,i:False)=='unroutable'
+    with pytest.raises(probe.DNSVerificationError):
+        probe.blocked('8.8.8.8',interface=3,route_check=lambda a,i:True)
