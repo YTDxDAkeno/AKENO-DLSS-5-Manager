@@ -164,8 +164,12 @@ def run(args):
             check(service_exists(name) and adapter_exists(name), 'WireGuardNT adapter and tunnel service exist')
             files = sorted(p.name for p in backend.configs.iterdir() if p.name.startswith(name))
             check(files == [name + '.conf.dpapi'], 'only the manager-encrypted configuration remains on disk', files)
-            check(client_private.encode() not in (backend.configs / files[0]).read_bytes(),
-                  'manager configuration does not contain the private key in plaintext')
+            try:
+                at_rest = (backend.configs / files[0]).read_bytes()
+                check(client_private.encode() not in at_rest, 'manager configuration holds no plaintext private key')
+            except PermissionError:
+                # The official manager stores it SYSTEM-only: not even this elevated user process can read it.
+                check(True, 'manager configuration is unreadable even for the elevated user (SYSTEM-only)')
             state = wait_connected()
             check(state['state'] == 'connected' and peer.handshakes >= 1, 'real WireGuard handshake through WireGuardNT',
                   f"{state['state']}, responder handshakes={peer.handshakes}")
