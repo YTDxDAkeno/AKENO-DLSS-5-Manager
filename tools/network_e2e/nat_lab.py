@@ -137,10 +137,10 @@ class Lab:
         for side, ip in (('a', '10.203.5.2'), ('b', '10.203.5.3')):
             self.member_up(side, ip)
 
-    def masquerade(self, side, ports=None):
+    def masquerade(self, side, ports=None, symmetric=False):
         router = self.ns['nat' + side]
         sh('iptables', '-t', 'nat', '-F', 'POSTROUTING', ns=router)
-        extra = ['--random-fully'] if side == 'b' and self.symmetric_b else []
+        extra = ['--random-fully'] if symmetric or (side == 'b' and self.symmetric_b) else []
         if ports:
             sh('iptables', '-t', 'nat', '-A', 'POSTROUTING', '-o', f'w{side}n', '-p', 'udp', '-j', 'MASQUERADE',
                '--to-ports', ports, *extra, ns=router)
@@ -329,9 +329,9 @@ def run_lab(symmetric_b, record):
         path_check('after the network change')
 
         if not symmetric_b:
-            # A's router starts allocating a port per destination (endpoint-dependent mapping): the endpoint the
-            # coordinator proved no longer works for B, so AKENO must fall back to the relay on its own.
-            lab.masquerade('a', ports='45000-45100')
+            # A's router starts allocating a random port per destination (endpoint-dependent mapping): the endpoint
+            # the coordinator proved no longer works for B, so AKENO must fall back to the relay on its own.
+            lab.masquerade('a', ports='45000-45100', symmetric=True)
             sh('conntrack', '-F', check=False, ns=lab.ns['nata'])
             remapped = wait(lambda: (lab.proven('a') or (None, 0))[1] in range(45000, 45101) and lab.proven('a'), 60, 1)
             record(bool(remapped), f'[{label}] router remapped A and the coordinator re-proved it', remapped)

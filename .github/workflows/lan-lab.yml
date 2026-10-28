@@ -1,0 +1,31 @@
+name: LAN Play NAT lab
+# Real WireGuard traffic between two members behind real Linux NAT routers (cone and symmetric), with the unchanged
+# AKENO coordinator and AKENO's path controller. Isolated network namespaces on a disposable runner only.
+on:
+  push:
+    branches: [feature/akeno-network-modular, 'claude/**']
+    paths: ['akeno/network/**', 'server/akeno_server/network/**', 'tools/network_e2e/**', '.github/workflows/lan-lab.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: lan-lab-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  nat-lab:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y wireguard-tools conntrack iptables iproute2
+      - run: pip install cryptography==44.0.0 argon2-cffi
+      - name: NAT traversal, relay fallback, outage, network change, revocation, lease expiry
+        run: sudo -E env "PATH=$PATH" python tools/network_e2e/nat_lab.py --report nat-lab-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lan-nat-lab-evidence
+          path: nat-lab-report.json
