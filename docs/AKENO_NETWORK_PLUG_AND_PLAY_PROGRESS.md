@@ -2,6 +2,37 @@
 
 This is unfinished development. No production deployment, public listener, purchase, merge, tag or release is authorized.
 
+## Cloud continuation — 2026-10-28
+
+Active continuation branch: `codex/akeno-network-cloud-20261028`, based on the existing
+remote checkpoint `4190496ee7e470927e6ee905c6c635cd4f62b3b6`. That branch was discovered
+before replacing any remote history; the original development branch is preserved.
+The sections below describe inherited work and must not be read as new runtime evidence.
+
+Current cloud evidence:
+
+- Python 3.12 virtual environment `/workspace/akeno-env`; pinned client/dev/server dependencies installed.
+- Server suite: **260 passed**, three dependency deprecation warnings.
+- Client network and i18n suite: **206 passed, 2 skipped** (native Windows checks).
+- Actual relay-only lab: **27 passed**, including three communicating WireGuard clients,
+  OpenTTD UDP/TCP, cross-room refusal, revocation and four outer packet captures.
+- Local API initialized with separate development-only keys/database; loopback HTTP and UDP only.
+  Six readiness/authentication/web requests passed. No production credentials or data reused.
+- Full client regression is running; no final result yet.
+- Managed exit lab initially failed. Native diagnostics proved its fixture deleted the outer
+  endpoint /32 route because iproute2 serializes it without `/32`. Correct network comparison,
+  explicit route assertions, destination-bound echo listeners and private-listener controls
+  are under real packet validation. Production firewall rules are unchanged.
+- Native Windows DNS leak verification is still deliberately incomplete in `default_probe`;
+  managed VPN disconnects with `verification_required`. This is a repository release blocker,
+  not a dependency setup failure or working country VPN.
+- Current proxy denies official provider pages, WireGuard download/docs website and GitHub API
+  with CONNECT 403. Git HTTPS access works. No prices, live CI results or country exits are inferred.
+
+Next: finish actual exit validation, full client regression, save tested installation/startup
+configuration, publish an honest technical handoff and production gate list. Local helper files
+are outside the checkout in `/workspace/akeno-cloud`; they do not change product configuration.
+
 ## Resume here
 
 - Branch: `codex/akeno-network-plug-and-play`.

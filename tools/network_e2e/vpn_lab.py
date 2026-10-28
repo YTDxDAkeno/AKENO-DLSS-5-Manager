@@ -10,6 +10,7 @@ Build Dockerfile.relay with the managed CA first (tag akeno-relay-e2e:latest).
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import subprocess
@@ -68,7 +69,7 @@ def run(args):
             time.sleep(.2)
         return predicate()
 
-    def echo(version, count=3, target_ip=None):
+    def echo(version, count=3, target_ip=None, source_node=None):
         destination = target_ip or (TARGET4 if version == 4 else TARGET6)
         source = f'''import base64,json,os,socket
 s=socket.socket(socket.AF_INET{'' if version == 4 else '6'},socket.SOCK_DGRAM);s.settimeout(.6)
@@ -82,7 +83,7 @@ for n in range({count}):
  except (OSError,ValueError):pass
 print(json.dumps({{'ok':ok,'seen':seen}}))
 '''
-        return json.loads(py(client, source).stdout)
+        return json.loads(py(source_node or client, source).stdout)
 
     def peers():
         return sh(exit_node, 'wg show akenoexit0 peers').split()
@@ -140,8 +141,14 @@ def serve(family,address):
  while True:
   payload,peer=s.recvfrom(4096)
   s.sendto(json.dumps({'payload':base64.b64encode(payload).decode(),'source':peer[0]}).encode(),peer)
-threading.Thread(target=serve,args=(socket.AF_INET,'0.0.0.0'),daemon=True).start()
-serve(socket.AF_INET6,'::')
+'''+f'''
+# Bind each destination explicitly: a wildcard UDP socket can reply from the private
+# uplink address instead of the global alias, breaking the NAT conntrack tuple.
+# Separate private listeners keep the blocked-destination checks meaningful.
+for family,address in ((socket.AF_INET,{TARGET4!r}),(socket.AF_INET,{target4!r}),
+                       (socket.AF_INET6,{TARGET6!r})):
+ threading.Thread(target=serve,args=(family,address),daemon=True).start()
+serve(socket.AF_INET6,{target6!r})
 ''')
         docker('exec', '-d', target, 'python3', '/run/echo.py')
         # Literal host routes keep only this client's encrypted outer socket outside its full-tunnel routes.
@@ -150,11 +157,17 @@ serve(socket.AF_INET6,'::')
                    f'ip route add {exit4}/32 dev eth0; ip -6 route add {exit6}/128 dev eth0; '
                    'ip route replace default dev wg0; ip -6 route replace default dev wg0')
         for row in json.loads(sh(client, 'ip -j route show dev eth0')):
-            if row.get('scope') == 'link' and row.get('dst') != exit4 + '/32':
+            # iproute2 renders /32 routes as a bare address. Compare networks so the
+            # outer WireGuard endpoint route survives removal of the bridge subnet.
+            destination = ipaddress.ip_network(row['dst'], strict=False)
+            if row.get('scope') == 'link' and destination != ipaddress.ip_network(exit4 + '/32'):
                 sh(client, 'ip route del ' + row['dst'] + ' dev eth0')
         for row in json.loads(sh(client, 'ip -j -6 route show dev eth0')):
             if row.get('dst') == ula:
                 sh(client, 'ip -6 route del ' + row['dst'] + ' dev eth0')
+        record(json.loads(sh(client, f'ip -j route get {exit4}'))[0]['dev'] == 'eth0' and
+               json.loads(sh(client, f'ip -j route get {TARGET4}'))[0]['dev'] == 'wg0',
+               'client routes only the outer WireGuard endpoint outside its full tunnel')
         publish(1, client_public)
         write(exit_node, '/run/manage.py', f'''import json,os,time
 from pathlib import Path
@@ -183,8 +196,12 @@ while True:
         record(all(ip == exit6 for ip in echo(6)['seen']), 'target observes actual namespace exit IPv6 after NAT66', exit6)
         handshake = sh(client, 'wg show wg0 latest-handshakes').split()
         record(len(handshake) == 2 and int(handshake[1]) > 0, 'actual WireGuard handshake confirmed by the native tool')
-        # This ordinary private destination also exists in the target container, but must never be routed by exit.
+        # Prove these services respond before checking the VPN firewall denies access to them.
+        record(echo(4, target_ip=target4, source_node=exit_node)['ok'] == 3 and
+               echo(6, target_ip=target6, source_node=exit_node)['ok'] == 3,
+               'private destination controls have live IPv4 and IPv6 echo listeners')
         record(echo(4, target_ip=target4)['ok'] == 0, 'deployment policy denies forwarding to a private uplink address')
+        record(echo(6, target_ip=target6)['ok'] == 0, 'deployment policy denies forwarding to a private IPv6 uplink address')
         publish(2, None)
         record(wait(lambda: client_public not in peers()), 'revoked control manifest removes the real native peer')
         record(echo(4)['ok'] == 0 and echo(6)['ok'] == 0, 'revocation blocks actual IPv4 and IPv6 forwarding')
@@ -213,6 +230,23 @@ while True:
         record(wait(lambda: client_public not in peers(), seconds=10), 'expired device lease removes the actual native peer')
         record(echo(4)['ok'] == 0 and echo(6)['ok'] == 0, 'expired lease blocks real dual-stack traffic')
         docker('cp', exit_node + ':/run/ack.json', str(args.evidence / 'agent-ack.json'))
+    except Exception:
+        # Preserve only public native state from these disposable namespaces before cleanup.
+        # Never use wg dump/showconf: those include private interface keys.
+        diagnostics = {}
+        for role, name in (('client', client), ('exit', exit_node), ('target', target)):
+            commands = {
+                'routes4': ['ip', '-j', 'route'], 'routes6': ['ip', '-j', '-6', 'route'],
+                'firewall': ['nft', '-j', 'list', 'ruleset'],
+            }
+            if role != 'target':
+                interface = 'wg0' if role == 'client' else 'akenoexit0'
+                commands.update({field: ['wg', 'show', interface, field] for field in
+                                 ('public-key', 'peers', 'latest-handshakes', 'transfer', 'allowed-ips', 'endpoints')})
+            diagnostics[role] = {field: docker('exec', name, *argv, check=False).stdout
+                                 for field, argv in commands.items()}
+        (args.evidence / 'failure-native-state.json').write_text(json.dumps(diagnostics, indent=2))
+        raise
     finally:
         for name in (client, exit_node, target):
             docker('rm', '-f', name, check=False)
