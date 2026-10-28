@@ -164,7 +164,9 @@ class LanFirewall:
                 or type(relay[1]) is not int or not 1 <= relay[1] <= 65535:
             raise LanError('Invalid relay firewall boundary.')
         others = list(ipaddress.ip_network('0.0.0.0/0').address_exclude(ipaddress.ip_network(f'{address}/32')))
-        addresses = ','.join("'" + str(value) + "'" for value in [*others, '::/0'])
+        # Windows NetSecurity rejects ::/0 with ERROR_INVALID_PARAMETER. Two
+        # disjoint /1 prefixes cover exactly the same complete IPv6 address set.
+        addresses = ','.join("'" + str(value) + "'" for value in [*others, '::/1', '8000::/1'])
         ports = []
         if relay[1] > 1: ports.append(f'1-{relay[1]-1}')
         if relay[1] < 65535: ports.append(f'{relay[1]+1}-65535')

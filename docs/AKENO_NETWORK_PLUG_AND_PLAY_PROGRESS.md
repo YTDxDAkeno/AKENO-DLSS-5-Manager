@@ -15,6 +15,22 @@ HRESULT, never raw native output or script arguments. The old catch-all message 
 failing operation, including possible cleanup failures. Firewall policy is unchanged at this
 checkpoint. Windows reexecution must identify the actual failing cmdlet before a root-cause claim.
 
+### Windows cause identified; native completion in progress
+
+Native run https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40740995137
+on `5cacd30` confirms the exact LAN cause: Windows rejects **`::/0`** in NetSecurity
+RemoteAddress with HRESULT `0x80070057`. Per-CIDR isolated block-rule diagnostics
+identified it; no accept rule was introduced. The replacement is `::/1` plus
+`8000::/1`, mathematically the same complete IPv6 set. Native revalidation follows.
+
+DNS verification now measures valid nonce/question-bound DNS responses plus explicit
+Windows blocked send/connect results and rechecks NIC/configuration changes. Initial
+native tests deliberately failed when evidence was insufficient; diagnostic expansion
+continues. No constant DNS success flag, fake country or unverified live server was added.
+Bounded managed-session reconnect is implemented with cleanup, fresh signed configuration,
+reverification, cancellation during backoff and expired-lease handling after resume.
+Focused reconnect/session/DNS/firewall tests: 37 passed with labelled native stand-ins.
+
 ## Cloud continuation — 2026-10-28
 
 Active continuation branch: `codex/akeno-network-cloud-20261028`, based on the existing

@@ -25,6 +25,9 @@ def test_relay_boundary_blocks_every_other_v4_v6_address_and_remote_port():
         assert any(ipaddress.ip_address('45.11.12.12') in net for net in nets)
         assert any(ipaddress.ip_address('45.11.12.14') in net for net in nets)
         assert any(ipaddress.ip_address('2001:db8::1') in net for net in nets)
+        for value in ('::','::1','7fff::1','8000::1','ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'):
+            assert any(ipaddress.ip_address(value) in net for net in nets)
+        assert '::/0' not in addresses
         [port_rule]=[line for line in rules if f'relay {direction} ports' in line]
         assert "-RemotePort '1-3477','3479-65535'" in port_rule
         assert '-LocalPort 49173' in address_rule and '-LocalPort 49173' in port_rule
