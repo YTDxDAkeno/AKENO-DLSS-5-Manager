@@ -91,7 +91,7 @@ def parse_wireguard(text: str) -> WireGuardProfile:
             raise ValueError()
         interface, peer = dict(cfg['Interface']), dict(cfg['Peer'])
         if not {'PrivateKey', 'Address'} <= interface.keys() or \
-                not interface.keys() <= {'PrivateKey', 'Address', 'DNS', 'MTU'} or \
+                not interface.keys() <= {'PrivateKey', 'Address', 'DNS', 'MTU', 'ListenPort'} or \
                 not {'PublicKey', 'AllowedIPs', 'Endpoint'} <= peer.keys() or \
                 not peer.keys() <= {'PublicKey', 'PresharedKey', 'AllowedIPs', 'Endpoint', 'PersistentKeepalive'}:
             raise ValueError()
@@ -107,7 +107,8 @@ def parse_wireguard(text: str) -> WireGuardProfile:
     routes = _list(peer['AllowedIPs'], lambda v: ipaddress.ip_network(v, strict=True))
     dns = _list(interface['DNS'], ipaddress.ip_address) if 'DNS' in interface else ()
     _endpoint(peer['Endpoint'])
-    for data, name, low, high in ((interface, 'MTU', 576, 9000), (peer, 'PersistentKeepalive', 0, 65535)):
+    for data, name, low, high in ((interface, 'MTU', 576, 9000), (interface,'ListenPort',1,65535),
+                                  (peer, 'PersistentKeepalive', 0, 65535)):
         if name in data and (not re.fullmatch('[0-9]{1,5}', data[name]) or not low <= int(data[name]) <= high):
             raise ProfileError('Unsupported numeric setting.')
     # Do not preserve comments: they may carry credentials, executable text or private operator notes.

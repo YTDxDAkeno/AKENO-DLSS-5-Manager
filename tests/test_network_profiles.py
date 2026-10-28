@@ -18,6 +18,20 @@ def profile():
             'Endpoint = vpn.example.invalid:51820\nPersistentKeepalive = 25\n')
 
 
+def test_generated_lan_profile_retains_the_firewall_protected_listen_port():
+    from akeno.network.lan import interface_profile
+    keys=[base64.b64encode(os.urandom(32)).decode() for _ in range(2)]
+    text=interface_profile(keys[0],'10.203.9.2',{'public_key':keys[1],'host':'127.0.0.1','port':3478},
+                           listen_port=49173)
+    parsed=parse_wireguard(text)
+    assert 'ListenPort = 49173' in parsed.text and parsed.routes==('10.203.0.1/32',)
+
+
+@pytest.mark.parametrize('value',['0','65536','-1','49173;evil','1\nPostUp = evil'])
+def test_unbounded_or_executable_listen_port_is_rejected(value):
+    with pytest.raises(ProfileError):parse_wireguard(profile().replace('MTU = 1420','ListenPort = '+value))
+
+
 def test_valid_profile_classifies_routes_without_claiming_connection():
     text=profile()
     p=parse_wireguard(text)
