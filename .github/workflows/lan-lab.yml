@@ -3,7 +3,7 @@ name: LAN Play NAT lab
 # AKENO coordinator and AKENO's path controller. Isolated network namespaces on a disposable runner only.
 on:
   push:
-    branches: [feature/akeno-network-modular, 'claude/**', 'codex/akeno-network-plug-and-play']
+    branches: [feature/akeno-network-modular, 'claude/**', 'codex/akeno-network-plug-and-play', 'codex/akeno-network-cloud-20261028']
     paths: ['akeno/network/**', 'server/akeno_server/network/**', 'tools/network_e2e/**', '.github/workflows/lan-lab.yml']
   workflow_dispatch:
 permissions:

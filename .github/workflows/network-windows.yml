@@ -3,7 +3,7 @@ name: WireGuard on Windows
 # disposable runner. The peer is a loopback test responder: no Internet exit, no third-party VPN server, no secrets.
 on:
   push:
-    branches: [feature/akeno-network-modular, 'claude/**', 'codex/akeno-network-plug-and-play']
+    branches: [feature/akeno-network-modular, 'claude/**', 'codex/akeno-network-plug-and-play', 'codex/akeno-network-cloud-20261028']
     paths: ['akeno/network/**', 'server/akeno_server/network/**', 'tools/network_windows_e2e.py', 'tools/lan_windows_e2e.py',
             'tools/network_e2e/**', 'tools/network_bootstrap_windows_e2e.py', 'server/akeno_server/vpn/**', '.github/workflows/network-windows.yml']
   workflow_dispatch:

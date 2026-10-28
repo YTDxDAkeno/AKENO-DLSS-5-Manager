@@ -33,6 +33,38 @@ Next: finish actual exit validation, full client regression, save tested install
 configuration, publish an honest technical handoff and production gate list. Local helper files
 are outside the checkout in `/workspace/akeno-cloud`; they do not change product configuration.
 
+### Cloud validation checkpoint
+
+Last verified remote before this update: `c5600d76c43fb5565399b193edda3689cb43f83d`.
+The managed-exit lab now passes **23 real packet/native/kernel checks**, including dual-stack
+NAT, negative private-destination drop counters, revocation, SIGSTOP, SIGKILL, independent
+kernel expiry and journal recovery. Its internal bridge/addressing and delayed-echo fixture
+defects were corrected without weakening forwarding policy. Diagnostics retain only public
+native state and artificial packet summaries. See the handoff for the exact defects.
+
+The local API was stopped/restarted and all six checks passed again. Dependency installation
+was repeated successfully; `pip check` reports no broken requirements. Scoped offscreen GUI
+smoke passes, with the local source endpoint and a separate AKENO_HOME. Network/i18n was
+rerun through the saved client test wrapper: **206 passed, 2 skipped**.
+
+The full client suite found a copied-interpreter setup failure in the performance test:
+the cloud Python lives under `/opt/codex/...`, whereas a copied binary looks under `/install`
+and exits without `encodings`. `/workspace/akeno-cloud/test-client.sh` supplies the correct
+`PYTHONHOME` only to this Python 3.12 test process; **all 12 performance tests then passed**.
+No application assertions or tests were weakened. The original full run continues; report
+its final counts separately from this targeted successful rerun.
+
+`install_script` and `start_skill` were saved as a draft with six exact custom network
+additions (`api.github.com`, `download.wireguard.com`, `www.wireguard.com`, `windscribe.com`,
+`www.oracle.com`, `gcore.com`). This did not publish or change active proxy policy.
+Official WireGuard enterprise/embedding/license text was retrieved through normal verified
+TLS from its raw GitHub repository. Provider prices and current CI runs remain unverified.
+Four network/component workflows now include the continuation branch; YAML parsing passed.
+
+The new handoff and production gate list explicitly retain native DNS observer, Windows
+discovery/driver/UAC/DPAPI, reconnect/standby, actual country exits, per-account operations
+review and two physical ISP-separated PCs as outstanding. No completed product claim.
+
 ## Resume here
 
 - Branch: `codex/akeno-network-plug-and-play`.
