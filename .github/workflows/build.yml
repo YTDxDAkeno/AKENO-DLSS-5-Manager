@@ -20,11 +20,11 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same branch supersedes the older run. Tags, pull requests and manual (publishing) runs are
-# never cancelled.
+# One run per branch at a time: a running build always finishes; a newer push only replaces a run that is still
+# waiting. Tags, pull requests and manual (publishing) runs have their own groups and are never cancelled.
 concurrency:
   group: build-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.event_name == 'push' && !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: false
 
 jobs:
   test-linux:
