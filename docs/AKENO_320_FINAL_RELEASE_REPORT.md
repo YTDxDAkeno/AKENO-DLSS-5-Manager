@@ -70,7 +70,8 @@ ausstehend — wird mit Lauf-Links für `build.yml`, `network-windows.yml`, `lan
 | Suite | Ergebnis |
 |---|---|
 | Server (`server/`, Python 3.12) | **262 passed** |
-| Client (Python 3.12, Offscreen-Qt) | ausstehend |
+| Client (Python 3.12, Offscreen-Qt, Linux), vollständig | **1536 passed, 19 skipped, 0 failed** (19:35 min). Übersprungen nur plattform-/assetgebundene Tests (Windows-PowerShell/DPAPI/DACL/Authenticode/NTFS, Original-Release-Assets) — diese laufen in den Windows- und Real-Assets-CI-Jobs |
+| Netzwerk-Testmodule nach der DNS-Änderung (`d32a0cc`) | **296 passed, 2 skipped** |
 
 ## 6. Releasebewertung
 
