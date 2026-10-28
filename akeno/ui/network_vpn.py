@@ -59,6 +59,8 @@ class AutomaticVPN(Card):
             from akeno.ui.pages.akeno_network import country_name
             for code in result['countries']:
                 self.country.addItem(country_name(code),code)
+            if self.country.count():
+                self.country.setCurrentIndex(0)
             self.connect_button.setEnabled(self.built and bool(result['countries']))
             self.summary.setText(t('{n} authorized healthy exits.').format(n=len(self.servers)) if self.servers else
                                  t('No authorized healthy country exits are currently available.'))

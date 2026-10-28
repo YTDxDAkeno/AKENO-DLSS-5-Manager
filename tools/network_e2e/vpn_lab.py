@@ -27,6 +27,7 @@ def run(args):
     network = prefix + '-net'
     client, exit_node, target = (prefix + '-' + role for role in ('client', 'exit', 'target'))
     env, checks = os.environ.copy(), []
+    local_ipv6 = {}
     for key in ('DOCKER_HOST', 'DOCKER_CONTEXT', 'DOCKER_TLS', 'DOCKER_TLS_VERIFY', 'DOCKER_CERT_PATH'):
         env.pop(key, None)
     args.evidence.mkdir(parents=True, exist_ok=False)
@@ -50,7 +51,7 @@ def run(args):
     def addresses(name):
         info = json.loads(docker('inspect', name).stdout)[0]
         address = next(iter(info['NetworkSettings']['Networks'].values()))
-        return address['IPAddress'], address['GlobalIPv6Address']
+        return address['IPAddress'], local_ipv6[name]
 
     def record(ok, name, detail=''):
         checks.append({'name': name, 'passed': bool(ok), 'detail': str(detail)[:300]})
@@ -97,13 +98,20 @@ print(json.dumps({{'ok':ok,'seen':seen}}))
 
     try:
         ula = 'fd75:' + uuid.uuid4().hex[:4] + ':204::/64'
-        docker('network', 'create', '--internal', '--ipv6', '--subnet', ula, network)
-        for name in (client, exit_node, target):
-            options = ['run', '-d', '--name', name, '--network', network, '--cap-add', 'NET_ADMIN',
-                       '--device-cgroup-rule', 'c 10:200 rwm']
+        # Docker's IPv6 network driver may require host ip6tables-legacy modules absent in managed workers.
+        # The dedicated bridge remains IPv4/internal; fixture-only IPv6 addresses/routes are set inside its
+        # three isolated container namespaces. No host IPv6 route, firewall change or external route is needed.
+        docker('network', 'create', '--internal', network)
+        for index, name in enumerate((client, exit_node, target), 2):
+            attachment = 'name=' + network + ',driver-opt=com.docker.network.endpoint.sysctls=net.ipv6.conf.IFNAME.disable_ipv6=0'
+            options = ['run', '-d', '--name', name, '--network', attachment, '--cap-add', 'NET_ADMIN',
+                       '--device-cgroup-rule', 'c 10:200 rwm', '--sysctl', 'net.ipv6.conf.all.disable_ipv6=0',
+                       '--sysctl', 'net.ipv6.conf.default.disable_ipv6=0']
             if name == exit_node:
                 options += ['--sysctl', 'net.ipv4.ip_forward=1', '--sysctl', 'net.ipv6.conf.all.forwarding=1']
             docker(*options, args.image)
+            local_ipv6[name] = ula.removesuffix('/64') + str(index)
+            sh(name, f'ip -6 address add {local_ipv6[name]}/64 dev eth0 nodad')
         exit4, exit6 = addresses(exit_node)
         target4, target6 = addresses(target)
         for name, interface, own4, own6 in ((client, 'wg0', PEER4, PEER6),
@@ -126,7 +134,9 @@ print(json.dumps({{'ok':ok,'seen':seen}}))
                       f'ip -6 route add {TARGET6}/128 via {target6} dev eth0')
         write(target, '/run/echo.py', '''import base64,json,socket,threading
 def serve(family,address):
- s=socket.socket(family,socket.SOCK_DGRAM);s.bind((address,43000))
+ s=socket.socket(family,socket.SOCK_DGRAM)
+ if family==socket.AF_INET6:s.setsockopt(socket.IPPROTO_IPV6,socket.IPV6_V6ONLY,1)
+ s.bind((address,43000))
  while True:
   payload,peer=s.recvfrom(4096)
   s.sendto(json.dumps({'payload':base64.b64encode(payload).decode(),'source':peer[0]}).encode(),peer)

@@ -41,7 +41,8 @@ def default_probe(claims, tunnel_name):
     """
     if sys.platform != 'win32' or not re.fullmatch(r'AkenoVPN[0-9a-f]{24}', tunnel_name):
         raise VerificationRequired('Native Windows VPN verification is required.')
-    if urllib.request.getproxies():
+    proxies = urllib.request.getproxies()
+    if any(proxies.get(kind) for kind in ('http','https','all')):
         raise VerificationRequired('An HTTP proxy prevents attributing egress probes to the VPN tunnel.')
     opener = urllib.request.build_opener(_NoRedirect())
     addresses = {}

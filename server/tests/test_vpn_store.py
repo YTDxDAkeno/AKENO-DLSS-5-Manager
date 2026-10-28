@@ -201,3 +201,28 @@ def test_overlapping_registered_subnets_rejected(inventory):
     with pytest.raises(VPNError, match='overlap'):
         s.register(name='Other', country='US', public_key=key(), endpoint='93.184.215.15:51820',
                    subnet4='10.204.1.0/24', subnet6='fd42:204:0:2::/64', dns=['1.1.1.1'])
+
+
+def test_operator_probe_bootstraps_only_one_bounded_reserved_peer_without_listing_country(inventory):
+    s, reg, now = inventory
+    probe_key = key()
+    p = s.provision_probe(reg['server_id'], probe_key)
+    assert p['measurement_only'] and p['addresses'] == ['10.204.1.252/32', 'fd42:204:0:1::fc/128']
+    assert s.catalog()['countries'] == []
+    manifest = s.manifest(reg['server_id'])
+    assert manifest['peers'] == [{'public_key': probe_key, 'addresses': p['addresses'], 'expires_at': p['expires_at']}]
+    s.provision_probe(reg['server_id'], key())
+    assert len(s.manifest(reg['server_id'])['peers']) == 1
+    now[0] += 46
+    assert s.manifest(reg['server_id'])['peers'] == []
+
+
+def test_disabling_exit_revokes_probe_and_customer_key_cannot_become_probe(inventory):
+    s, reg, now = inventory
+    enable(s, reg)
+    p = provision(s)
+    with pytest.raises(VPNError):
+        s.provision_probe(reg['server_id'], p['client_public_key'])
+    s.provision_probe(reg['server_id'], key())
+    s.disable(reg['server_id'])
+    assert s.manifest(reg['server_id'])['peers'] == []

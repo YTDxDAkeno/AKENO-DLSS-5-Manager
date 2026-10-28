@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import http.client
 import ipaddress
+import io
 import json
 import os
 import re
@@ -84,19 +85,20 @@ class PinnedCountryDatabase:
         self.path = Path(path)
         if not re.fullmatch('[0-9a-f]{64}', sha256 or ''):
             raise VPNError('Pin the licensed country database SHA-256 before probing.')
-        if not self.path.is_file() or not 0 < self.path.stat().st_size <= 1024 * 1024 * 1024:
-            raise VPNError('The licensed country database is unavailable.')
-        digest = hashlib.sha256()
-        with self.path.open('rb') as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b''):
-                digest.update(chunk)
-        if digest.hexdigest() != sha256:
+        fd = os.open(self.path, os.O_RDONLY | getattr(os, 'O_NOFOLLOW', 0))
+        with os.fdopen(fd, 'rb') as stream:
+            metadata = os.fstat(stream.fileno())
+            if not stat.S_ISREG(metadata.st_mode) or not 0 < metadata.st_size <= 128 * 1024 * 1024:
+                raise VPNError('The licensed country database is unavailable or too large.')
+            snapshot = stream.read(128 * 1024 * 1024 + 1)
+        if len(snapshot) > 128 * 1024 * 1024 or hashlib.sha256(snapshot).hexdigest() != sha256:
             raise VPNError('The country database checksum does not match the trusted pin.')
         try:
             import maxminddb
         except ImportError:
             raise VPNError('Install the separately pinned independent-probe reader first.') from None
-        self.reader = maxminddb.open_database(str(self.path))
+        # Reader consumes exactly the verified bytes; a concurrent pathname replacement cannot change the data.
+        self.reader = maxminddb.open_database(io.BytesIO(snapshot), mode=maxminddb.MODE_FD)
         metadata = self.reader.metadata()
         now = time.time() if now is None else now
         if metadata.database_type not in ('GeoLite2-Country', 'GeoIP2-Country') or \

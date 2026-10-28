@@ -54,3 +54,15 @@ Integrate relay-only tickets and path control, add browser/VPN routers behind op
 - Actual isolated relay lab: 27/27 checks passed, four wireguard-go clients, three communicating in one room, fourth room denied, real OpenTTD discovery query/game-info TCP, revocation/lease and four outer PCAPs. Captures show only controlled relay destinations and no application plaintext. Explicit UDP game query is not Windows broadcast forwarding, public ISP NAT or two physical PCs.
 - VPN operator/agent/device/proof control plane and automatic DPAPI client are implemented, integration tests ongoing. No authorized real country exit exists; no live country is connectable.
 - Next: privileged automatic VPN session with real handshake/egress checks, private-key-local provisioning, exact game-port firewall UI, full regression and handoff.
+
+## Checkpoint 3 — integrated client and independent exit expiry
+
+- Last verified remote before this entry: `ca938458363ffe04e0cfb5c37114fbf5b52bbe8b` (watchdog continues pushing nonempty work).
+- Browser and automatic country controls are integrated into the regular AKENO Network page. Expert imported profiles remain available. Module opt-in stays off by default; construction performs no API/tunnel operation.
+- A real Qt country-selection bug (placeholder left no country selected) was detected and fixed; new UI + existing network UI + DE placeholder coverage: 26 passed.
+- Full backend run at this stage: 248 passed, 3 third-party deprecation warnings. New operator probe bootstrap/proof collector changes are newer and need subsequent tests.
+- Managed session provisions device-bound signed configuration, uses protected local profiles, journals ownership, renews, stops on loss/revocation, and performs safe recovery. Native/API/egress stand-in coverage: 18 session cases; helper/bootstrap/tunnel/session/client focused union 114 passed. These do not establish actual Windows/UAC.
+- Windows process mutex prevents competing helpers; session nonces prevent stale stop flags from stopping a new session. Simultaneous LAN/VPN is refused until routing is proven.
+- Exit agent now has kernel nft timed address fences so a frozen/crashed control agent cannot leave indefinite forwarding. Real isolated nft expiry checks passed (3); full real VPN-exit traffic fixture is running.
+- Managed VPN must not show Connected merely on a lease/handshake. Default Windows observer currently cannot prove DNS leak protection and fails closed with verification_required; remaining native probe work is explicit, not a success placeholder.
+- Public test listeners/exits/deployments remain disabled; provider terms and real TR/US/etc exits are absent.

@@ -1,0 +1,42 @@
+name: Isolated relay and VPN exit traffic
+
+on:
+  push:
+    branches: ['codex/akeno-network-plug-and-play']
+    paths: ['akeno/network/**', 'server/akeno_server/network/**', 'server/akeno_server/vpn/**',
+            'deploy/vpn-exit/**', 'tools/network_e2e/**', '.github/workflows/network-local-e2e.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: network-local-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  encrypted-traffic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install cryptography==44.0.0 argon2-cffi
+      - name: Build disposable official-package fixture with CA trust
+        run: >-
+          docker build --secret id=ca,src=/etc/ssl/certs/ca-certificates.crt
+          -f tools/network_e2e/Dockerfile.relay -t akeno-relay-e2e:latest .
+      - name: Real relay-only WireGuard, OpenTTD and outer packet captures
+        run: python tools/network_e2e/relay_lab.py --report relay-report.json --evidence relay-pcaps
+      - name: Real managed exit, dual-stack forwarding and independent kernel lease expiry
+        run: python tools/network_e2e/vpn_lab.py --report vpn-exit-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-network-traffic-evidence
+          path: |
+            relay-report.json
+            vpn-exit-report.json
+            relay-pcaps/

@@ -175,7 +175,7 @@ def vpn(store,request):
         def stopped():
             from akeno.components.service import NetworkModules
             value=stop.load()
-            return value.get('session_id')!=session_id or bool(value.get('stop')) or \
+            return (value.get('session_id')==session_id and bool(value.get('stop'))) or \
                 not NetworkModules().enabled('vpn') or not licenses.view().unlocked
         session=ManagedVPNSession(client,profiles,manager,journal,Status(),stopped,lan_journal=lan_stores()[0])
         if action=='vpn_recover':

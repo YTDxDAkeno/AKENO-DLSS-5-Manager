@@ -197,3 +197,17 @@ def test_revoked_device_is_removed_from_next_agent_poll(vpn):
     assert c.get(PREFIX + '/agent/' + reg['server_id'] + '/peers', headers=ah).json()['peers'] == []
     assert c.post(PREFIX + '/leases/' + p['lease_id'] + '/renew', headers=bearer(t),
                   json={'device_id': d['id']}).status_code == 403
+
+
+def test_probe_registration_is_operator_only_and_does_not_publish_country(vpn):
+    c, s, op, probe = vpn
+    t, d = player(c, 'player@example.test')
+    reg, args = exit_registration(c, op)
+    path = PREFIX + '/operator/servers/' + reg['server_id'] + '/probe'
+    body = {'public_key': key()}
+    assert c.post(path, headers=bearer(t), json=body).status_code == 403
+    r = c.post(path, headers={'Authorization': 'Bearer ' + op}, json=body)
+    assert r.status_code == 200 and r.json()['measurement_only']
+    assert c.get(PREFIX + '/catalog', headers=bearer(t), params={'device_id': d['id']}).json()['countries'] == []
+    ah = {'Authorization': 'Bearer ' + reg['agent_token']}
+    assert len(c.get(PREFIX + '/agent/' + reg['server_id'] + '/peers', headers=ah).json()['peers']) == 1

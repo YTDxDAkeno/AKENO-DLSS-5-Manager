@@ -5,7 +5,7 @@ on:
   push:
     branches: [feature/akeno-network-modular, 'claude/**', 'codex/akeno-network-plug-and-play']
     paths: ['akeno/network/**', 'server/akeno_server/network/**', 'tools/network_windows_e2e.py', 'tools/lan_windows_e2e.py',
-            'tools/network_e2e/**', '.github/workflows/network-windows.yml']
+            'tools/network_e2e/**', 'tools/network_bootstrap_windows_e2e.py', 'server/akeno_server/vpn/**', '.github/workflows/network-windows.yml']
   workflow_dispatch:
 permissions:
   contents: read
