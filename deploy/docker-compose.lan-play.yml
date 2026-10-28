@@ -1,0 +1,20 @@
+# STAGING ONLY: AKENO LAN Play (rooms API + the UDP coordinator/relay) on the API service.
+# Not part of the production stack and never applied by install.sh/update.sh. Use on a test server:
+#   AKENO_LAN_HOST=<public name or IP> docker compose -f docker-compose.yml -f docker-compose.lan-play.yml up -d
+# The coordinator runs inside the API process (one uvicorn worker, as docker-entrypoint.sh starts it). Open the UDP
+# port in the host firewall; it carries end-to-end encrypted WireGuard packets of room members only.
+services:
+  akeno-api:
+    environment:
+      AKENO_NETWORK_ENABLED: "true"
+      AKENO_NETWORK_DATABASE_PATH: /data/network/network.sqlite3
+      AKENO_NETWORK_COORDINATOR_BIND: 0.0.0.0:3478
+      AKENO_NETWORK_COORDINATOR_HOST: ${AKENO_LAN_HOST:?set AKENO_LAN_HOST to the public name or address of this server}
+      AKENO_NETWORK_COORDINATOR_KEY_PATH: /data/network/coordinator.key
+    volumes:
+      - akeno-network:/data/network
+    ports:
+      - "${AKENO_LAN_PORT:-3478}:3478/udp"
+
+volumes:
+  akeno-network:
