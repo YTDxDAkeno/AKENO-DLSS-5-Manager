@@ -1,6 +1,7 @@
 # AKENO Network and modular installation — progress
 
 ## Claude continuation (newest first; supersedes the Codex status below where they differ)
+- Handoff: `AKENO_NETWORK_CLAUDE_HANDOFF.md`. Private test release: `AKENO_NETWORK_PRIVATE_TEST_RELEASE.md`. Security: `AKENO_NETWORK_SECURITY_REVIEW.md` (Claude delta at the end).
 - Branch: `claude/inspiring-gauss-i8vjdr`, started from Codex checkpoint `833fec0` (`feature/akeno-network-modular`, confirmed equal to the remote). Every push is confirmed with `git ls-remote`; resolve the newest commit with `git log -1`.
 - GitHub Actions is reachable through the GitHub MCP tools in this session (the raw `api.github.com`/artifact blob hosts stay blocked by the proxy, job logs are readable).
 - Finding: every Codex implementation push had a red Windows CI. `components-windows.yml` runs 1–8 and `build.yml` runs 221–237 failed; the baseline `5f62d6c` was green. The only Windows failures (full Windows suite: 5 failed, 1271 passed, 11 skipped) were `tests/test_component_transactions.py`: on the runner the running program is the PSF-signed `python.exe`, so the unchanged Authenticode rule demanded a signed fixture `AKENO.exe`. Fixed in the tests (same stub as the Updates-page tests) and in `tools/component_windows_e2e.py` (the rule now compares against the real installed `AKENO.exe`, as in production). The rule itself is unchanged.

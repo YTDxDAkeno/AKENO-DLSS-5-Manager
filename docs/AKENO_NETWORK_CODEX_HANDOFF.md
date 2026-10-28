@@ -1,5 +1,7 @@
 # AKENO Network / modular installer — Claude handoff
 
+> **Superseded:** the current state is in `AKENO_NETWORK_CLAUDE_HANDOFF.md` (branch `claude/inspiring-gauss-i8vjdr`). This file is the Codex state at `833fec0`.
+
 ## Current status
 
 Continue the existing `feature/akeno-network-modular` checkout. Original continuation point: `609e883`; original application base: `2069ff7`. Resolve the current exact commit with `git rev-parse HEAD` and compare `git ls-remote origin refs/heads/feature/akeno-network-modular`. Do not create a worktree, reset to `main` (README only), merge, tag, publish a release or deploy to the production VPS. Progress/checkpoint evidence: `AKENO_NETWORK_PROGRESS.md`.
