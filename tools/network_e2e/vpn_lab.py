@@ -126,7 +126,7 @@ print(json.dumps({{'ok':ok,'seen':seen}}))
         # Production rules are used verbatim; only route destinations and network namespace are fixture-local.
         write(exit_node, '/run/agent.py', (ROOT / 'server/akeno_server/vpn/agent.py').read_text())
         write(exit_node, '/run/entrypoint.py', (ROOT / 'deploy/vpn-exit/entrypoint.py').read_text())
-        py(exit_node, "from pathlib import Path;from entrypoint import rules;Path('/run/exit.nft').write_text(rules('10.204.1.0/24','fd42:204:0:1::/64'))")
+        py(exit_node, "import sys;sys.path.insert(0,'/run');from pathlib import Path;from entrypoint import rules;Path('/run/exit.nft').write_text(rules('10.204.1.0/24','fd42:204:0:1::/64'))")
         sh(exit_node, 'nft -c -f /run/exit.nft; nft -f /run/exit.nft')
         record(True, 'actual deployment nftables policy validates and installs in the dedicated exit namespace')
         sh(target, f'ip address add {TARGET4}/32 dev lo; ip -6 address add {TARGET6}/128 dev lo')

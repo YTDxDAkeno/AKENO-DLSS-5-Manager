@@ -121,6 +121,47 @@ into a public relay/exit without those decisions.
 
 ## Prove the real exit before enabling a country
 
+The initial disabled exit has no customer peers, so it cannot be verified by allocating an ordinary customer
+lease. The separate operator-only `POST /api/v1/network/vpn/operator/servers/{server_id}/probe` accepts only a
+probe's **public** WireGuard key and grants one measurement peer for at most 45 seconds. It uses reserved
+`.252/32` and `::fc/128` addresses in that exit's assigned subnets, replacing any previous measurement peer.
+It never enables a country, bypasses customer licensing, appears in the customer catalog or accepts a private
+key. Renewing the measurement window requires another explicit authenticated operator request. The same key
+cannot be an active customer peer. Disabling an exit revokes the probe as well as customer leases.
+
+Create the probe in its own expressly authorised namespace/host with a separate WireGuard identity; configure
+the returned public endpoint, DNS and addresses through its approved operator procedure. The private key stays
+on that probe. Prepare a separately generated owner-only **Ed25519 independent measurement key**, provision only
+its public half in `AKENO_VPN_PROBE_KEYS_PATH` (`{"keys":{"<sha256-first16>":"<base64url-public-key>"}}`),
+and keep that private key outside both the exit agent and control server. Operator bearer and probe signing
+credentials remain different trust roles.
+
+`python -m akeno_server.vpn.probe` is the independent measurement tool (run from `server/` in that authorised
+probe environment, never to circumvent the managed cloud executor's proxy). Its operator arguments are:
+
+```text
+--server-id REGISTERED_ID --server-public-key REGISTERED_PUBLIC_KEY --country EXPECTED_ISO
+--source-ipv4 ASSIGNED_PROBE_IPV4 --source-ipv6 ASSIGNED_PROBE_IPV6
+--key-file OWNER_ONLY_RAW_ED25519_FILE
+--country-database LICENSED_GEOLITE2_COUNTRY_FILE --database-sha256 TRUSTED_OFFLINE_SHA256
+--output NEW_OWNER_ONLY_PROOF_JSON
+```
+
+The tool changes no adapter, route or firewall. It binds each verified-TLS IPify observation to the assigned
+IPv4/IPv6 tunnel source address and rejects redirects, oversized responses, nonglobal observed IPs and wrong
+address families. Country checks use a licensed GeoLite2-Country/GeoIP2-Country database no older than 30 days;
+the reader consumes precisely the checksum-verified in-memory snapshot. The optional independent-probe dependency
+is pinned separately in `deploy/vpn-exit/probe-requirements.txt` (`maxminddb==3.2.0`, Apache-2.0). It was installed
+and imported locally; **no licensed country database or real country probe was available**. Obtain MaxMind's
+required account/licence, database and attribution under its current terms; never commit that database or keys.
+An outdated database, mismatch or missing reader blocks proof generation. A matching GeoIP result represents
+that source's current assignment, not a guarantee of physical server location.
+
+The tool writes a one-use typed proof valid for 120 seconds directly into a new mode-0600 file. Submit that JSON
+using the operator-authenticated verification endpoint below. Do not print bearer tokens, private keys or proof
+tokens into command logs. Both measured address families must match the desired country; there is no IPv4-only
+success fallback. Live IPv4/IPv6/DNS/route probes and deployment permission remain external prerequisites.
+
 1. Through the actual client tunnel, measure IPv4 and IPv6 from independent HTTPS IP observers, DNS resolver
    behavior and routing; record verified TLS sources, UTC timestamps and sanitized results. An agent's own address
    assertion is insufficient. Validate geolocation using a trustworthy maintained source and provider evidence;
