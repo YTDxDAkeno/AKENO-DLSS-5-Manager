@@ -52,7 +52,7 @@ angefasst. Der laufende Arbeitsstand steht in `docs/AKENO_320_FINAL_PROGRESS.md`
 | Prüfung | Lauf | Commit | Ergebnis |
 |---|---|---|---|
 | LAN Play auf echtem Windows (WireGuardNT, isolierter Windows-Peer) | [40762936142](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40762936142) | `482ffa4` | **44/44 grün**, inkl. verschlüsseltem Direct-Roaming-Angriff (blockiert), Crash/Recovery mit Sperre |
-| VPN/WireGuardNT inkl. DNS-Leckprüfung | ausstehend | — | ausstehend (siehe Abschnitt 6, D1) |
+| VPN/WireGuardNT inkl. produktiver DNS-Leckprüfung | [40766590526](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40766590526) | `118e7e0` | **41/41 grün**: `dns_verified`, 3 gesperrte + 3 nicht routbare Fremd-DNS-Pfade, IPv4/IPv6 nur durch den Tunnel, Routen/DNS danach identisch |
 | Komponenten-Bootstrap (Authenticode, geschützter Installer) | in jedem `network-windows`-Lauf | — | 11/11 grün (Schritt „explicit-consent official component bootstrap“) |
 | Vollständiger Build, Installer, Portable, Update-E2E, Rollback, Upgrades 3.0.0/3.1.0/3.1.1 | ausstehend | — | ausstehend |
 | Gebauter Helper über runas | ausstehend | — | ausstehend |
@@ -92,10 +92,9 @@ ausstehend — wird mit Lauf-Links für `build.yml`, `network-windows.yml`, `lan
 - **Offline-Signatur** des Release-Envelopes (Sequenz 4).
 
 ### D. Sicherheitskritische Blocker
-- **D1 DNS-Leck-Nachweis (VPN, Windows):** ausstehend bis zum grünen `wireguard`-Job. Solange er rot ist, darf das
-  verwaltete VPN nicht als „Verbunden“ freigegeben werden — die App bricht dann ehrlich mit
-  „Prüfung unvollständig“ ab (fail closed). Da ohnehin kein Ausgangsserver existiert, blockiert D1 die Auslieferung
-  von 3.2.0 an Freunde nicht, wohl aber jede spätere VPN-Aktivierung.
+- Keiner offen auf den getesteten Commits. Behoben in dieser Arbeit: **D1** DNS-Leck-Nachweis (grün auf `118e7e0`,
+  41/41) und **D2** ungeschützter Peer-Verkehr/Direct-Roaming im LAN (grün auf `482ffa4`, 44/44). Beide Prüfungen
+  müssen auf dem finalen Commit erneut grün sein (Abschnitt 4).
 
 ## 7. Installations- und Updateanleitung
 

@@ -96,6 +96,8 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
 
 | `7343d86` | both outbound tunnel queries recorded on the WireGuardNT layer-3 adapter (`query_payload: 2`), inbound reply not handed to Packet Monitor | `118e7e0`: capture control accepts the byte-identical query recorded without a link header (tunnel adapter) or the reply; a query on an Ethernet link never counts; the socket still validates every reply |
 
+| `118e7e0` | **[WireGuard on Windows 40766590526](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40766590526) `wireguard`: green, 41 real Windows WireGuard checks** — production DNS probe `dns_verified: True`, `denied_paths: 3` (explicit denials plus the silent UDP denial proven by the WFP classify-drop event), `unroutable_paths: 3`; IPv4/IPv6 Internet packets through the tunnel; foreign DNS not delivered; system DNS to the tunnel resolver; no direct Internet while up; routes/DNS restored; Internet works after disconnect | — |
+
 ## Other changes since the last table
 
 - `4f864a5` build.yml: packaged `AKENO.exe --network-helper` through the runas verb (read-only status, refusals,
