@@ -39,7 +39,8 @@ BUILT = WINDOWS and bool(getattr(sys, 'frozen', False))
 
 SESSION = {None: (msg('Not connected'), 'unknown'), 'stopped': (msg('Not connected'), 'unknown'),
            'starting': (msg('Starting…'), 'pending'), 'active': (msg('Connected'), 'ok'), 'failed': (msg('Failed'), 'fail')}
-PATH = {'direct': (msg('Direct (P2P)'), 'ok'), 'relay': (msg('Relay'), 'info'), 'direct_trying': (msg('Connecting directly…'), 'pending'),
+PATH = {'direct': (msg('Direct connections are blocked'), 'fail'), 'relay': (msg('Relay'), 'info'),
+        'direct_trying': (msg('Direct connections are blocked'), 'fail'),
         'relay_trying': (msg('Connecting via relay…'), 'pending'), None: ('—', 'unknown')}
 TUNNEL = {'disconnected': (msg('Disconnected'), 'unknown'), 'starting': (msg('Starting…'), 'pending'),
           'awaiting_handshake': (msg('Waiting for the server'), 'pending'), 'connected': (msg('Connected'), 'ok'),
@@ -222,7 +223,7 @@ class AkenoNetworkPage(QWidget):
         self.tile_room = self.lan_dash.add_fact(t('Room'))
         self.tile_members = self.lan_dash.add_fact(t('Members connected'))
         self.tile_ping = self.lan_dash.add_fact(t('Average ping'), hint=t(INFO_PING))
-        self.tile_paths = self.lan_dash.add_fact(t('Direct / relay'), hint=t(INFO_PATH))
+        self.tile_paths = self.lan_dash.add_fact(t('Relay connections'), hint=t(INFO_PATH))
         self.tile_vip = self.lan_dash.add_fact(t('Your virtual IP'), hint=t(INFO_VIP))
         row.add(self.lan_dash, 1)
         self.vpn_dash = ConnectionCard(t('VPN'), 'shield')
@@ -455,11 +456,11 @@ class AkenoNetworkPage(QWidget):
         for i, m in enumerate(rows):
             live = peers.get(m['public_key'], {})
             mode = live.get('mode')
-            if mode in ('direct', 'relay'):
+            if mode == 'relay':
                 connected += 1
                 direct += mode == 'direct'
                 relay += mode == 'relay'
-            latency = live.get('latency_ms')
+            latency = live.get('latency_ms') if mode == 'relay' else None
             if latency is not None:
                 pings.append(latency)
             path = (t('This PC'), 'ok') if m.get('self') else PATH.get(mode, PATH[None])
@@ -488,7 +489,7 @@ class AkenoNetworkPage(QWidget):
         self.table.setVisible(bool(rows))
         self.empty.setVisible(not rows)
         self.tile_members.set(str(connected) if active else '—')
-        self.tile_paths.set(f'{direct} / {relay}' if active else '—')
+        self.tile_paths.set(str(relay) if active else '—')
         self.tile_ping.set(f'{sum(pings) / len(pings):.0f} ms' if pings else '—')
 
     def work(self, fn, done):

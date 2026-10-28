@@ -2,7 +2,7 @@
 
     python tools/network_screenshots.py OUT_DIR
 
-Writes akeno-network-*-{en,de}-fixture.png: the empty page, an active LAN session with one direct and one relayed
+Writes akeno-network-*-{en,de}-fixture.png: the empty page, an active LAN session with two relayed
 member, and diagnostics. The member list, paths and pings are synthetic; real connection evidence is in the CI runs
 listed in docs/AKENO_NETWORK_PROGRESS.md.
 """
@@ -62,7 +62,7 @@ def main(out: Path):
             {'actor': 'f0e9d8c7', 'public_key': relayed, 'virtual_ip': '10.203.5.4', 'status': 'registered'}]
         now = time.time()
         page.session = {'state': 'active', 'room': room, 'virtual_ip': '10.203.5.2', 'peers': {
-            friend: {'mode': 'direct', 'latency_ms': 18.4, 'handshake': now - 12, 'rx': 2_400_000, 'tx': 1_900_000,
+            friend: {'mode': 'relay', 'latency_ms': 18.4, 'handshake': now - 12, 'rx': 2_400_000, 'tx': 1_900_000,
                      'virtual_ip': '10.203.5.3'},
             relayed: {'mode': 'relay', 'latency_ms': 41.0, 'handshake': now - 30, 'rx': 650_000, 'tx': 720_000,
                       'virtual_ip': '10.203.5.4'}}}

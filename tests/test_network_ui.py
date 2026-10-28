@@ -53,7 +53,7 @@ def in_session(page, monkeypatch):
         {'actor': 'cccccccc-2222', 'public_key': RELAYED, 'virtual_ip': '10.203.5.4', 'status': 'registered'}]
     now = time.time()
     page.session = {'state': 'active', 'room': ROOM, 'virtual_ip': '10.203.5.2', 'peers': {
-        FRIEND: {'mode': 'direct', 'latency_ms': 18.4, 'handshake': now - 12, 'rx': 2_400_000, 'tx': 1_900_000,
+        FRIEND: {'mode': 'relay', 'latency_ms': 18.4, 'handshake': now - 12, 'rx': 2_400_000, 'tx': 1_900_000,
                  'virtual_ip': '10.203.5.3'},
         RELAYED: {'mode': 'relay', 'latency_ms': 41.0, 'handshake': now - 30, 'rx': 650_000, 'tx': 720_000,
                   'virtual_ip': '10.203.5.4'}}}
@@ -74,9 +74,9 @@ def test_session_shows_each_members_real_path_ping_and_traffic(page, monkeypatch
     assert page.in_room.isVisible() and not page.no_room.isVisible()
     assert cells(page, 0)[:3] == ['You', '10.203.5.2', 'This PC']
     friend, relayed = cells(page, 1), cells(page, 2)
-    assert friend[2] == 'Direct (P2P)' and friend[3] == '18 ms' and friend[4] == '12 s ago' and '2.3 MB' in friend[5]
+    assert friend[2] == 'Relay' and friend[3] == '18 ms' and friend[4] == '12 s ago' and '2.3 MB' in friend[5]
     assert relayed[2] == 'Relay' and relayed[3] == '41 ms'
-    assert page.tile_members.value.text() == '2' and page.tile_paths.value.text() == '1 / 1'
+    assert page.tile_members.value.text() == '2' and page.tile_paths.value.text() == '2'
     assert page.tile_ping.value.text() == '30 ms' and page.lan_dash.state_label.text() == 'Connected'
     _shot(page, 'akeno-network-session-en-fixture.png')
 
@@ -112,7 +112,7 @@ def test_page_renders_in_german(qtbot, monkeypatch):
         p.show()
         assert p.session_pill.text().endswith('Kein Raum')
         in_session(p, monkeypatch)
-        assert cells(p, 1)[2] == 'Direkt (P2P)' and cells(p, 2)[2] == 'Relay' and cells(p, 0)[0] == 'Du'
+        assert cells(p, 1)[2] == 'Relay' and cells(p, 2)[2] == 'Relay' and cells(p, 0)[0] == 'Du'
         assert p.lan_dash.state_label.text() == 'Verbunden'
         _shot(p, 'akeno-network-session-de-fixture.png')
     finally:

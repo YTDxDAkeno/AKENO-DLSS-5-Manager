@@ -42,12 +42,12 @@ def sign(private, kid, typ, payload):
     return f"{head}.{body}.{enc(private.sign(f'{head}.{body}'.encode('ascii')))}"
 
 
-def credential(signer, public_key, ip, endpoint=None, room=ROOM, life=45, now=None):
+def credential(signer, public_key, ip, endpoint=None, room=ROOM, life=45, now=None, relay=None):
     key, kid, _ = signer
     now = int(now or time.time())
     payload = {'iss': 'akeno-lan', 'aud': 'akeno-lan-peer', 'sub': str(uuid.uuid4()), 'device_id': str(uuid.uuid4()),
                'room_id': room, 'public_key': public_key, 'virtual_ip': ip, 'iat': now, 'exp': now + life,
-               'nonce': secrets.token_urlsafe(16), 'transport':'relay-only','relay':None}
+               'nonce': secrets.token_urlsafe(16), 'transport':'relay-only','relay':relay}
     if endpoint is not None: payload['endpoint']=endpoint
     return {'credential': sign(key, kid, 'akeno-lan-peer', payload)}
 
@@ -75,6 +75,21 @@ def test_expired_credentials_and_duplicates_are_ignored(signer):
     dup = [credential(signer, a, '10.203.5.3'), credential(signer, a, '10.203.5.4')]
     assert verified_peers({'peers': [old]}, signer[2], ROOM, own) == []
     assert len(verified_peers({'peers': dup}, signer[2], ROOM, own)) == 1
+
+
+def test_signed_peer_cannot_be_spliced_into_another_relay_configuration(signer):
+    own,a=wg_key(),wg_key()
+    relay={'public_key':wg_key(),'host':'relay.akeno.example','port':3478}
+    result={'coordinator':relay,'peers':[credential(signer,a,'10.203.5.3',relay=relay)]}
+    assert len(verified_peers(result,signer[2],ROOM,own))==1
+    result['coordinator']={**relay,'host':'attacker.example'}
+    assert verified_peers(result,signer[2],ROOM,own)==[]
+
+
+@pytest.mark.parametrize('host',['relay.example\nPrivateKey = evil','relay.example;cmd','relay example','a..b',':bad:'])
+def test_coordinator_host_cannot_inject_wireguard_configuration(host):
+    with pytest.raises(LanError):
+        coordinator_of({'coordinator':{'public_key':wg_key(),'host':host,'port':3478}})
 
 
 def test_interface_profile_has_the_coordinator_as_its_only_static_peer():

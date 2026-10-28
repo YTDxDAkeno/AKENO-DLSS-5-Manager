@@ -243,13 +243,19 @@ class ManagedVPNSession:
             if native.get('phase') not in (None,'disconnected'):
                 if not ident or native.get('profile_id') != ident:
                     raise ProfileError('The active native tunnel is not owned by this session.')
-                self.manager.disconnect()
-            if self.manager.journal.load().get('phase') not in (None,'disconnected'):
-                raise ProfileError('The native VPN tunnel still needs recovery.')
             if ident:
                 profile = self.profiles._load(ident)
                 if hashlib.sha256(profile['text'].encode()).hexdigest() != self.state.get('profile_digest'):
                     raise ProfileError('The protected managed profile changed; recovery is required.')
+                # The shared journal may have been lost after service installation. Reconstruct only this owned
+                # profile's recovery entry; the backend still proves its public key before removing any service.
+                # Even a disconnected service may have an encrypted orphan, so keep the profile until stop agrees.
+                if native.get('phase') in (None,'disconnected'):
+                    self.manager.journal.save({'phase':'recovery_required','profile_id':ident,
+                                               'name':self.manager.name(ident)})
+                self.manager.disconnect()
+                if self.manager.journal.load().get('phase') != 'disconnected':
+                    raise ProfileError('The native VPN tunnel still needs recovery.')
                 self.profiles.remove(ident)
                 self.state.pop('profile_id',None)
                 self.state.pop('profile_digest',None)

@@ -77,7 +77,6 @@ def verify_peer(token,keys,room,now=None):
         if p.get('transport') != 'relay-only' or 'endpoint' in p:
             raise ValueError()
         validate_relay(p['relay'])
-        import base64
         if len(base64.b64decode(p['public_key'],validate=True))!=32:
             raise ValueError()
         addr=ipaddress.ip_address(p['virtual_ip'])

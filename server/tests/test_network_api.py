@@ -161,6 +161,17 @@ def test_coordinator_keeps_proven_endpoints_private_and_signs_relay_only_tickets
     for token in [body['credential'], *(p['credential'] for p in body['peers'])]:
         assert 'endpoint' not in json.loads(b64d(token.split('.')[1]))
     assert claims['device_id']==db['id'] and claims['virtual_ip'].startswith('10.203.')
+    # This actual server-issued response cannot steer the desktop tunnel by replacing unsigned relay JSON.
+    from akeno.network.client import LanClient
+    from types import SimpleNamespace
+    identity=SimpleNamespace(load=lambda:{'device_id':da['id'],'public_key':ma.key})
+    license_manager=SimpleNamespace(state={'device_id':da['id']},trusted_keys=lambda:account_keys)
+    desktop=LanClient(license_manager,identity)
+    desktop._call=lambda *args:body
+    assert desktop.heartbeat(rid)['coordinator']==body['coordinator']
+    body['coordinator']={**body['coordinator'],'host':'attacker.example'}
+    with pytest.raises(ValueError,match='relay information'):
+        desktop.heartbeat(rid)
 
 
 def test_member_removal_stops_the_data_plane_immediately(lan_play):

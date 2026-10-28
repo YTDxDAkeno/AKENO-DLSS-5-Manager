@@ -156,5 +156,8 @@ production networks/volumes. Agent normal SIGTERM also attempts managed-peer cle
   `sha256:e697c81897302a4c4333bade000d98038fbb21eb064f8ee1fd42d02ebcd9d337`, source selected at build time.
   The full nftables ruleset passed actual `nft -c` in an isolated `--network none` namespace with `NET_ADMIN`.
   Local logs: `/tmp/akeno-vpn-exit-build.log`, `/tmp/akeno-vpn-nft-syntax.log`.
+- Actual kernel checks in an isolated `--network none` Docker namespace installed IPv4/IPv6 timed elements,
+  observed both expire without any agent refresh, and cleared the sets atomically (three checks passed).
+  Log: `/tmp/akeno-vpn-nft-expiry.log`. Compose profile configuration also validated without starting an exit.
 - Container build, kernel timer tests and actual forwarding are separate evidence. Neither a successful build nor
   a syntax/timer check proves a VPN exit, country IP, Windows tunnel or DNS restoration.

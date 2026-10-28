@@ -56,6 +56,10 @@ class ProofBody(StrictBody):
     proof: str = Field(max_length=8192, repr=False)
 
 
+class ProbeLease(StrictBody):
+    public_key: str = Field(min_length=44, max_length=44)
+
+
 class AgentHeartbeat(StrictBody):
     public_key: str = Field(min_length=44, max_length=44)
     generation: int = Field(ge=0, strict=True)
@@ -166,6 +170,12 @@ def verify_exit(ident: str, body: ProofBody, request: Request):
     claims = operation(lambda: verify_proof(body.proof, get_config().vpn_probe_keys_path, ident,
                                            row['public_key'], s.clock()))
     return operation(lambda: s.accept_proof(ident, claims))
+
+
+@router.post('/operator/servers/{ident}/probe')
+def provision_probe(ident: str, body: ProbeLease, request: Request):
+    operator(request)
+    return operation(lambda: store(request).provision_probe(ident, body.public_key))
 
 
 @router.post('/operator/servers/{ident}/disable', status_code=204)

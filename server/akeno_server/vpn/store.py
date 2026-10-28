@@ -77,6 +77,9 @@ class VPNStore:
             );
             CREATE INDEX IF NOT EXISTS vpn_leases_server ON vpn_leases(server_id, revoked, expires);
             CREATE TABLE IF NOT EXISTS vpn_probe_replays (nonce TEXT PRIMARY KEY, expires REAL NOT NULL);
+            CREATE TABLE IF NOT EXISTS vpn_probe_leases (
+                server_id TEXT PRIMARY KEY, public_key TEXT NOT NULL UNIQUE, expires REAL NOT NULL
+            );
             ''')
 
     @contextmanager
@@ -147,6 +150,32 @@ class VPNStore:
             row = db.execute('SELECT token_hash FROM vpn_servers WHERE id=?', (ident,)).fetchone()
         return row is not None and hmac.compare_digest(digest, row['token_hash'])
 
+    def provision_probe(self, ident, public_key):
+        """Explicit operator-only bootstrap: one 45-second measurement peer, never a customer/country listing.
+
+        Probe private keys and the independent Ed25519 measurement key remain outside this server.
+        Address .252/::fc is reserved and is not part of the customer allocation pool .2..251.
+        """
+        wireguard_key(public_key)
+        with self._db(True) as db:
+            server = self._server(db, ident)
+            if db.execute('SELECT 1 FROM vpn_leases WHERE public_key=? AND revoked=0 AND expires>?',
+                          (public_key, self.clock())).fetchone():
+                raise VPNError('A customer VPN key cannot be reused for an independent probe.')
+            other = db.execute('SELECT server_id FROM vpn_probe_leases WHERE public_key=? AND expires>?',
+                               (public_key, self.clock())).fetchone()
+            if other is not None and other['server_id'] != ident:
+                raise VPNError('An independent probe key is already assigned to another exit.')
+            db.execute('DELETE FROM vpn_probe_leases WHERE expires<=?', (self.clock(),))
+            db.execute('INSERT OR REPLACE INTO vpn_probe_leases VALUES (?,?,?)',
+                       (ident, public_key, self.clock() + self.LEASE_SECONDS))
+            db.execute('UPDATE vpn_servers SET generation=generation+1 WHERE id=?', (ident,))
+            return {'server_id': ident, 'country': server['country'], 'server_public_key': server['public_key'],
+                    'endpoint': server['endpoint'], 'dns': json.loads(server['dns']),
+                    'addresses': [str(ipaddress.ip_network(server['subnet4']).network_address + 252) + '/32',
+                                  str(ipaddress.ip_network(server['subnet6']).network_address + 252) + '/128'],
+                    'expires_at': int(self.clock()) + self.LEASE_SECONDS, 'measurement_only': True}
+
     def verify_exit(self, ident, *, country, exit_ipv4, exit_ipv6, evidence, observed_at):
         """Operator submits measurements from an independent trusted probe, never the untrusted exit agent.
 
@@ -189,6 +218,7 @@ class VPNStore:
 
     def _revoke_server(self, db, ident):
         db.execute('UPDATE vpn_leases SET revoked=1 WHERE server_id=?', (ident,))
+        db.execute('DELETE FROM vpn_probe_leases WHERE server_id=?', (ident,))
         db.execute('UPDATE vpn_servers SET generation=generation+1 WHERE id=?', (ident,))
 
     def _server(self, db, ident):
@@ -238,6 +268,9 @@ class VPNStore:
             if db.execute('SELECT 1 FROM vpn_leases WHERE public_key=? AND revoked=0 AND expires>?',
                           (public_key, self.clock())).fetchone():
                 raise VPNError('A VPN key is already assigned to an active device.')
+            if db.execute('SELECT 1 FROM vpn_probe_leases WHERE public_key=? AND expires>?',
+                          (public_key, self.clock())).fetchone():
+                raise VPNError('An independent probe key cannot be reused by a customer.')
             choices = [(self._in_use(db, s['id']), s) for s in db.execute('SELECT * FROM vpn_servers WHERE country=?', (country,))
                        if self._healthy(s)]
             choices = [(used, s) for used, s in choices if used < s['capacity']]
@@ -302,6 +335,8 @@ class VPNStore:
             server = self._server(db, ident)
             expired = db.execute('UPDATE vpn_leases SET revoked=1 WHERE server_id=? AND revoked=0 AND expires<=?',
                                  (ident, self.clock())).rowcount
+            expired += db.execute('DELETE FROM vpn_probe_leases WHERE server_id=? AND expires<=?',
+                                  (ident, self.clock())).rowcount
             if expired:
                 db.execute('UPDATE vpn_servers SET generation=generation+1 WHERE id=?', (ident,))
                 server = self._server(db, ident)
@@ -312,6 +347,11 @@ class VPNStore:
                       'expires_at': int(row['expires'])}
                      for row in db.execute('SELECT * FROM vpn_leases WHERE server_id=? AND revoked=0 AND expires>?',
                                            (ident, self.clock()))] if usable else []
+            for probe in db.execute('SELECT * FROM vpn_probe_leases WHERE server_id=? AND expires>?', (ident, self.clock())):
+                peers.append({'public_key': probe['public_key'],
+                              'addresses': [str(ipaddress.ip_network(server['subnet4']).network_address + 252) + '/32',
+                                            str(ipaddress.ip_network(server['subnet6']).network_address + 252) + '/128'],
+                              'expires_at': int(probe['expires'])})
             return {'generation': server['generation'], 'expires_at': int(self.clock()) + self.HEALTH_TTL,
                     'server_public_key': server['public_key'], 'peers': peers}
 
