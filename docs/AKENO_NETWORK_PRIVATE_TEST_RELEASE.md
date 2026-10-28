@@ -18,6 +18,7 @@ production change exists. Every step is a manual decision.
 1. Look at the newest runs on the branch: `components-windows.yml`, `network-windows.yml` (jobs `wireguard` and
    `lan-play`), `lan-lab.yml`, `build.yml`. Use a commit where all four are green on that exact SHA.
 2. Read `docs/AKENO_NETWORK_PROGRESS.md` (evidence) and `docs/AKENO_NETWORK_SECURITY_REVIEW.md` (open risks).
+3. Last fully green build when this guide was written: `build.yml` run 280 (https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40615138129, commit `588b21c`), installer `AKENO-Gaming-Suite-3.1.1-Setup-x64.exe`, SHA-256 `82bb9784389643285c54620ac761384943c86e63d7f062637fbc2caa51d7a0d6`. A later commit needs its own green run before testers get it.
 
 ## 2. Build the test package (private, not published)
 
