@@ -13,21 +13,32 @@ Final report: `docs/AKENO_NETWORK_RELEASE_READINESS.md` (written at the end; may
   (templates, public staging keys, loopback smoke report). Imported as commit `40f243d`; no app code taken.
 - `main` holds only the initial README. No merge/tag/release/deployment was made.
 
-## Done
+## Done (commit)
 
 1. Imported Codex staging templates and smoke report (`40f243d`).
+2. "Not Found" fixed + regression tests (`fab1e1a`).
+3. Server: heartbeat room name/owner, member display names (`a8615f1`); status route (`fab1e1a`).
+4. VPN provider architecture + target-country catalog without servers (`4e57ca5`).
+5. Network widgets + redesigned page + DE translations + tests (`7a20254` … `f7528a6`).
+6. LAN Play / VPN modules, off by default, Settings → Components (`c851f14`).
+7. Provider overview doc (`0092e9f`), version 3.2.0 + release notes (`e054c71`).
+8. Discovery forwarding core (not released) + compatibility doc (`f2f5d84`); screenshots (`1e8780d`).
+9. `docs/AKENO_NETWORK_RELEASE_READINESS.md` written.
 
-## In progress
+## Tests
 
-2. "Not Found" bottom-left: root cause found (see below), fix + regression tests.
+- Server (local): 175 passed.
+- Client network/UI/providers/modules/discovery: all passed locally. Full client suite: see "CI" below / next entry.
+
+## CI
+
+- `build.yml` runs on every push; earlier runs were cancelled by newer pushes. Waiting for a full run on the final
+  commit.
 
 ## Next
 
-3. Server capability endpoint `GET /api/v1/network/lan/status` + client feature flags.
-4. Network page premium redesign (dashboard, tooltips/details instead of long texts).
-5. VPN provider architecture (only verified locations are connectable).
-6. Diagnostics (more checks, redacted export).
-7. Component manager / installer review (Secure Center optional), version decision, release-readiness report.
+- Record the full client regression and the final `build.yml` result here and in the readiness report.
+- Possible follow-ups: Windows capture for discovery, AKENO exit servers (owner approval), two-PC test.
 
 ## "Not Found" — root cause
 
