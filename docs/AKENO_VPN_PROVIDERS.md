@@ -26,6 +26,23 @@ Gcore, is*hosting and Windscribe. No price or current server stock was verified.
 rough prices and provider-rights assertions are intentionally removed. Git HTTPS and
 raw GitHub documentation were accessible over normal verified TLS.
 
+## Country coverage matrix (web search 2026-10-28, Claude continuation)
+
+Search results only; the official pages themselves could not be fetched from this environment (host not in the
+session's network allowlist). Nothing here is a quote, stock check, legal clearance or approval.
+
+| Country | Candidate locations found | Evidence quality |
+|---|---|---|
+| Germany | Hetzner Falkenstein / Nuremberg ([Hetzner docs](https://docs.hetzner.com/cloud/general/locations/)); Vultr Frankfurt | official docs (search snippet) |
+| USA | Hetzner Ashburn (us-east) and Hillsboro (us-west) ([Hetzner docs](https://docs.hetzner.com/cloud/general/locations/)); Vultr US regions | official docs (search snippet); a Feb 2026 review states 1 TB included traffic outside Europe — verify before use |
+| Canada | Vultr Toronto ([Vultr regions](https://www.vultr.com/features/datacenter-regions/), [Vultr blog](https://blogs.vultr.com/Deploy-Cloud-Servers-in-Toronto-Canada)) | official pages (search snippet) |
+| Japan | Vultr Tokyo ([Vultr regions](https://www.vultr.com/features/datacenter-regions/)) | official page (search snippet) |
+| Netherlands, United Kingdom, France | Vultr Amsterdam / London / Paris (listed on the Vultr regions page per earlier SDK review) | SDK + search; re-check on the official page |
+| Turkey | No major cloud found with Istanbul in these results (Vultr: none). Smaller Istanbul VPS hosts advertise IPv4+IPv6 (e.g. [WORLDBUS](https://worldbus.ge/cloud/), [OperaVPS](https://operavps.com/?p=20351), [Colonel Server](https://colonelserver.com/nl/vps-turkey)); earlier candidates Gcore Istanbul and is*hosting | vendor marketing only; VPN-exit rights, real location, IPv6, abuse handling and contract must be verified |
+
+Hetzner's docs list four network zones / six locations (fsn1, nbg1, hel1, ash, hil, sin); product availability
+differs per location. A shared VPN exit for other users needs the host's explicit permission in its terms.
+
 ## Reviewed official implementation sources
 
 Sources were fetched from these exact upstream commits; local copies/checksums are in
