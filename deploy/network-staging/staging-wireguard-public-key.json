@@ -1,0 +1,7 @@
+{
+  "algorithm": "X25519/WireGuard",
+  "public_key": "QuQjiPbDjClUbzw1ejLyNX1RvMR5MRb8ZiKYQ8ObhRg=",
+  "local_host": "127.0.0.1",
+  "port": 3478,
+  "private_key_exported": false
+}

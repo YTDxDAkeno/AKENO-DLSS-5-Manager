@@ -1,0 +1,10 @@
+{
+  "server_url": "https://lan-staging-api.akeno.online",
+  "website_url": "https://lan-staging.akeno.online",
+  "keys": [
+    {
+      "kid": "92c8ea977d38cd6c",
+      "public_key": "Ihst-Wo-X1v6FaLYGOQ6jLawv6Bkv4Xq1bu06dOMCV4"
+    }
+  ]
+}

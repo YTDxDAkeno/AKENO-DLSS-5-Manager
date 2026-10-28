@@ -1,0 +1,55 @@
+# PREPARED ONLY. Not imported into /etc/caddy/Caddyfile.
+# Replace documentation-only tester IPs after approval; default is inaccessible to actual testers.
+# No admin hostname or admin upstream is made public.
+lan-staging-api.akeno.online {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Cache-Control no-store
+		-Server
+	}
+	request_body {
+		max_size 256KB
+	}
+	@admin path /admin /admin/* /api/v1/admin /api/v1/admin/*
+	handle @admin {
+		respond "Not available." 404
+	}
+	@testers remote_ip 192.0.2.1/32 198.51.100.1/32
+	handle @testers {
+		reverse_proxy 127.0.0.1:18510 {
+			transport http {
+				dial_timeout 3s
+				response_header_timeout 15s
+			}
+		}
+	}
+	handle {
+		respond "Private staging." 403
+	}
+}
+
+lan-staging.akeno.online {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Cache-Control no-store
+		-Server
+	}
+	request_body {
+		max_size 256KB
+	}
+	@admin path /admin /admin/* /api/v1/admin /api/v1/admin/*
+	handle @admin {
+		respond "Not available." 404
+	}
+	@testers remote_ip 192.0.2.1/32 198.51.100.1/32
+	handle @testers {
+		reverse_proxy 127.0.0.1:18511
+	}
+	handle {
+		respond "Private staging." 403
+	}
+}

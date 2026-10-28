@@ -1,0 +1,23 @@
+{
+  "checked_at_berlin": "2026-10-28T03:52:16.143884+01:00",
+  "all_checks_passed": true,
+  "preexisting_containers_unchanged": 7,
+  "production_tables_unchanged": 19,
+  "staging_services_healthy": 4,
+  "synthetic_accounts_only": true,
+  "active_smoke_devices": 0,
+  "active_smoke_sessions": 0,
+  "remaining_smoke_rooms": 0,
+  "staging_key_distinct_from_production": true,
+  "production_release_key_unchanged": true,
+  "firewall_preservation": {
+    "ufw_unchanged": true,
+    "docker_user_unchanged": true,
+    "iptables_all_prior_rules_retained_in_same_order": true,
+    "ip6tables_all_prior_rules_retained_in_same_order": true
+  },
+  "only_loopback_ports": true,
+  "dns_caddy_or_public_acl_changes": false,
+  "host_available_memory_mib": 6007,
+  "docker_owned_private_network_rules_added": true
+}

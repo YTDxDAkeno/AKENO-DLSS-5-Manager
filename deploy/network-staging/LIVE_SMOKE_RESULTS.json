@@ -1,0 +1,208 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "check": "health_18510",
+      "passed": true
+    },
+    {
+      "check": "health_18511",
+      "passed": true
+    },
+    {
+      "check": "health_18512",
+      "passed": true
+    },
+    {
+      "check": "api_database_and_signer_ready",
+      "passed": true
+    },
+    {
+      "check": "unauthenticated_room_creation_401",
+      "passed": true
+    },
+    {
+      "check": "bad_password_login_401",
+      "passed": true
+    },
+    {
+      "check": "current_client_login_and_lease_a",
+      "passed": true
+    },
+    {
+      "check": "ordinary_verified_account_a",
+      "passed": true
+    },
+    {
+      "check": "active_limited_test_license_a",
+      "passed": true
+    },
+    {
+      "check": "client_only_trusts_staging_key_a",
+      "passed": true
+    },
+    {
+      "check": "current_client_login_and_lease_b",
+      "passed": true
+    },
+    {
+      "check": "ordinary_verified_account_b",
+      "passed": true
+    },
+    {
+      "check": "active_limited_test_license_b",
+      "passed": true
+    },
+    {
+      "check": "client_only_trusts_staging_key_b",
+      "passed": true
+    },
+    {
+      "check": "different_bound_devices",
+      "passed": true
+    },
+    {
+      "check": "other_users_device_rejected_403",
+      "passed": true
+    },
+    {
+      "check": "body_actor_spoof_rejected_422",
+      "passed": true
+    },
+    {
+      "check": "lan_client_create_room",
+      "passed": true
+    },
+    {
+      "check": "lan_client_join_same_room",
+      "passed": true
+    },
+    {
+      "check": "two_members_visible",
+      "passed": true
+    },
+    {
+      "check": "loopback_wireguard_coordinator_advertised",
+      "passed": true
+    },
+    {
+      "check": "coordinator_public_key_valid",
+      "passed": true
+    },
+    {
+      "check": "forged_peer_credential_rejected",
+      "passed": true
+    },
+    {
+      "check": "unregistered_wireguard_key_no_response",
+      "passed": true
+    },
+    {
+      "check": "real_wireguard_endpoint_proof_a",
+      "passed": true
+    },
+    {
+      "check": "real_wireguard_endpoint_proof_b",
+      "passed": true
+    },
+    {
+      "check": "signed_endpoints_after_proof",
+      "passed": true
+    },
+    {
+      "check": "signed_peer_device_key_and_lease",
+      "passed": true
+    },
+    {
+      "check": "handshake_replay_no_response",
+      "passed": true
+    },
+    {
+      "check": "replay_cannot_move_endpoint",
+      "passed": true
+    },
+    {
+      "check": "relay_initiation_bytes_unchanged",
+      "passed": true
+    },
+    {
+      "check": "relay_response_bytes_unchanged",
+      "passed": true
+    },
+    {
+      "check": "64_real_encrypted_1200_byte_roundtrips",
+      "passed": true
+    },
+    {
+      "check": "invalid_udp_datagram_no_response",
+      "passed": true
+    },
+    {
+      "check": "non_owner_cannot_rotate_invite",
+      "passed": true
+    },
+    {
+      "check": "owner_rotates_invite",
+      "passed": true
+    },
+    {
+      "check": "old_invite_rejected",
+      "passed": true
+    },
+    {
+      "check": "removed_member_heartbeat_rejected",
+      "passed": true
+    },
+    {
+      "check": "removed_member_relay_stops",
+      "passed": true
+    },
+    {
+      "check": "removed_member_cannot_reprove",
+      "passed": true
+    },
+    {
+      "check": "banned_member_cannot_rejoin",
+      "passed": true
+    },
+    {
+      "check": "deleted_room_unavailable",
+      "passed": true
+    },
+    {
+      "check": "deleted_room_coordinator_denies_proof",
+      "passed": true
+    },
+    {
+      "check": "prior_smoke_sessions_revoked_pc-a",
+      "passed": true
+    },
+    {
+      "check": "smoke_device_removed_pc-a",
+      "passed": true
+    },
+    {
+      "check": "prior_smoke_sessions_revoked_pc-b",
+      "passed": true
+    },
+    {
+      "check": "smoke_device_removed_pc-b",
+      "passed": true
+    },
+    {
+      "check": "client_signouts_complete",
+      "passed": true
+    }
+  ],
+  "count": 48,
+  "at_berlin": "2026-10-28T03:50:06.942101+01:00",
+  "encrypted_roundtrips": 64,
+  "payload_bytes_each": 1200,
+  "actual_claude_client_source": "588b21ca64a78f13d937a89abb58d5289b34f7c5",
+  "memory_only_client_states": true,
+  "private_wireguard_member_keys_saved": false,
+  "production_requests_performed": false,
+  "staging_test_rooms_deleted": true,
+  "synthetic_smoke_devices_revoked": true,
+  "real_windows_or_isp_nat_test": false
+}

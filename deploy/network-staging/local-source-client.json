@@ -1,0 +1,19 @@
+{
+  "server_url": "http://127.0.0.1:18510",
+  "website_url": "http://127.0.0.1:18511",
+  "keys": [
+    {
+      "kid": "92c8ea977d38cd6c",
+      "public_key": "Ihst-Wo-X1v6FaLYGOQ6jLawv6Bkv4Xq1bu06dOMCV4"
+    }
+  ],
+  "use": "source-development-only; frozen client refuses plain HTTP",
+  "wireguard_coordinator": {
+    "algorithm": "X25519/WireGuard",
+    "public_key": "QuQjiPbDjClUbzw1ejLyNX1RvMR5MRb8ZiKYQ8ObhRg=",
+    "local_host": "127.0.0.1",
+    "port": 3478,
+    "private_key_exported": false
+  },
+  "public_https_endpoints_activated": false
+}
