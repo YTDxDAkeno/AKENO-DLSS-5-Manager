@@ -12,4 +12,7 @@ CI links in `docs/AKENO_NETWORK_PROGRESS.md`.
 |---|---|
 | `akeno-network-empty-{en,de}-fixture.png` | No room yet: create or join |
 | `akeno-network-session-{en,de}-fixture.png` | Active LAN session: one direct (P2P) and one relayed member |
+| `akeno-network-vpn-{en,de}-fixture.png` | VPN tab: one fixture own profile; the 8 target countries without AKENO servers (real state) |
 | `akeno-network-diagnostics-{en,de}-fixture.png` | Diagnostics results (fixture rows) |
+
+Regenerated for 3.2.0 (redesign): dashboard, tabs, steps, owner view.

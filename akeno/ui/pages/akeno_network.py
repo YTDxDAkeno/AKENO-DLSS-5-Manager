@@ -457,7 +457,7 @@ class AkenoNetworkPage(QWidget):
                 item = QTableWidgetItem(v)
                 if c == 0:
                     item.setData(256, m['actor'])
-                    item.setIcon(QIcon(avatar_pixmap(m['actor'], m.get('name') or ('You' if m.get('self') else 'M'))))
+                    item.setIcon(QIcon(avatar_pixmap(m['actor'], m.get('name') or (t('You') if m.get('self') else 'M'))))
                     if m.get('owner'):
                         item.setToolTip(t('Room owner'))
                 elif c == 2:
