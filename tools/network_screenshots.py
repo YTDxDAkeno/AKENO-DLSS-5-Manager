@@ -31,6 +31,9 @@ def main(out: Path):
     from akeno.ui.pages import akeno_network
     # fixture run: no request to the real AKENO server; show the state of a server that offers LAN Play
     akeno_network.AkenoNetworkPage.probe_service = lambda self: None
+    from akeno.components.service import NetworkModules
+    for module in ('lan_play', 'vpn'):               # the fixture home has both switched on
+        NetworkModules().set_enabled(module, True)
     out.mkdir(parents=True, exist_ok=True)
     app = QApplication(sys.argv[:1])
     theme.apply(app, None)
