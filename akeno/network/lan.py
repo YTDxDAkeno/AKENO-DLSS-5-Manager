@@ -97,6 +97,7 @@ class PathController:
     DIRECT_GRACE = 12        # WireGuard retries a handshake every 5 s: two attempts plus slack
     RELAY_GRACE = 15
     STALE = 185              # no handshake for longer than a session lives: connection lost
+    SILENT = 2 * KEEPALIVE + 10   # a working path delivers the peer's keepalive every 25 s
 
     def __init__(self, backend, relay_endpoint: tuple[str, int], subnet: str, clock=time.time):
         self.backend, self.relay, self.clock = backend, (str(ipaddress.ip_address(relay_endpoint[0])),
@@ -123,7 +124,7 @@ class PathController:
                 if known is not None:
                     self.backend.remove_peer(key)
                 self.state[key] = {'virtual_ip': p['virtual_ip'], 'endpoint': p['endpoint'], 'expires': p['expires'],
-                                   'mode': None, 'since': now, 'handshake': None, 'rx': 0, 'tx': 0}
+                                   'mode': None, 'since': now, 'handshake': None, 'rx': 0, 'tx': 0, 'rx_at': now}
                 self._attempt(key, now)
             else:
                 known['expires'] = p['expires']
@@ -147,7 +148,7 @@ class PathController:
         relay = relay or s['endpoint'] is None
         self.backend.remove_peer(key)
         self.backend.set_peer(key, self.relay if relay else s['endpoint'], s['virtual_ip'])
-        s['mode'], s['since'] = ('relay_trying' if relay else 'direct_trying'), now
+        s['mode'], s['since'], s['rx_at'] = ('relay_trying' if relay else 'direct_trying'), now, now
 
     def tick(self) -> dict[str, dict]:
         self.expire()
@@ -156,16 +157,18 @@ class PathController:
         for key, s in self.state.items():
             seen = actual.get(key, {})
             handshake = seen.get('latest_handshake') or None
+            if seen.get('rx', 0) != s['rx']:
+                s['rx_at'] = now
             s['handshake'], s['rx'], s['tx'] = handshake, seen.get('rx', 0), seen.get('tx', 0)
             fresh = handshake is not None and now - handshake < self.STALE
             via_relay = seen.get('endpoint') == self.relay
-            if fresh and handshake >= s['since'] - 1:
+            if fresh and handshake >= s['since'] - 1 and now - s['rx_at'] <= self.SILENT:
                 s['mode'] = 'relay' if via_relay else 'direct'
             elif s['mode'] == 'direct_trying' and now - s['since'] > self.DIRECT_GRACE:
                 self._attempt(key, now, relay=True)
-            elif s['mode'] in ('direct', 'relay') and not fresh:
+            elif s['mode'] in ('direct', 'relay') and (not fresh or now - s['rx_at'] > self.SILENT):
                 self._attempt(key, now)                     # connection lost: start over, direct first
             elif s['mode'] == 'relay_trying' and now - s['since'] > self.RELAY_GRACE and s['endpoint'] is not None \
                     and not fresh:
                 self._attempt(key, now)
-        return {k: {kk: v for kk, v in s.items() if kk != 'since'} for k, s in self.state.items()}
+        return {k: {kk: v for kk, v in s.items() if kk not in ('since', 'rx_at')} for k, s in self.state.items()}

@@ -333,7 +333,8 @@ def run_lab(symmetric_b, record):
             # coordinator proved no longer works for B, so AKENO must fall back to the relay on its own.
             lab.masquerade('a', ports='45000-45100')
             sh('conntrack', '-F', check=False, ns=lab.ns['nata'])
-            wait(lambda: (lab.proven('a') or old)[1] >= 45000, 60, 1)
+            remapped = wait(lambda: (lab.proven('a') or (None, 0))[1] in range(45000, 45101) and lab.proven('a'), 60, 1)
+            record(bool(remapped), f'[{label}] router remapped A and the coordinator re-proved it', remapped)
             expected = ('relay', 'relay')
             path_check('router became endpoint-dependent')
 

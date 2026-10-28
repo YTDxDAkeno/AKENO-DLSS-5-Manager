@@ -174,6 +174,19 @@ def test_lost_connection_is_retried_direct_first():
     assert c.tick()[a]['mode'] == 'direct_trying' and wg.peers_[a]['endpoint'] == ('45.1.2.3', 51820)
 
 
+def test_a_silent_path_is_detected_before_the_handshake_goes_stale():
+    c, wg, clock = controller()
+    a = wg_key()
+    c.apply([peer(a, clock=clock, expires=clock[0] + 10_000)])
+    clock[0] += 1
+    wg.handshake(a)
+    wg.peers_[a]['rx'] = 148
+    assert c.tick()[a]['mode'] == 'direct'
+    clock[0] += PathController.SILENT + 1                 # handshake still "fresh", but nothing arrived
+    c.apply([peer(a, clock=clock, expires=clock[0] + 10_000)])
+    assert c.tick()[a]['mode'] == 'direct_trying' and a in wg.removed
+
+
 def test_lease_expiry_removal_and_subnet_enforcement():
     c, wg, clock = controller()
     a, b, outsider = wg_key(), wg_key(), wg_key()
