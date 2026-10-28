@@ -25,7 +25,7 @@ from akeno.system.model import human_bytes
 from akeno.ui import theme
 from akeno.ui.stack_panel import error_text
 from akeno.ui.system_ui import FindingList, TaskBar, fill_table, make_table, open_link, selected_data
-from akeno.ui.widgets import (Card, EmptyState, FlowLayout, KeyValueGrid, PageHeader, ResponsiveRow, StatusPill,
+from akeno.ui.widgets import (Card, ElidedLabel, EmptyState, FlowLayout, KeyValueGrid, PageHeader, ResponsiveRow, StatusPill,
                               button, clear_layout, confirm, game_cover, info, label)
 
 FILTERS = (("all", "All games"), ("warnings", "With warnings"), ("akeno", "Managed by AKENO"),
@@ -43,6 +43,12 @@ KIND_TEXT = {"minecraft_mod": "Minecraft mod", "asi_plugin": "ASI plugin", "resh
              "akeno_marker": "AKENO marker", "optiscaler_nr_forwarder": "OptiScaler NR forwarder",
              "dlssg_to_fsr3": "DLSSG to FSR3"}
 COVER = QSize(112, 63)
+
+
+def _folder_value(path):
+    value = ElidedLabel(path, 'value', Qt.TextElideMode.ElideMiddle)
+    value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+    return value
 
 
 class InstalledPage(QWidget):
@@ -185,7 +191,7 @@ class InstalledPage(QWidget):
             grid.set_rows([(t("Method"), title),
                            (t("Components"), "\n".join(x for x in versions if x) or "—"),
                            (t("Preset"), t(configs.PRESET_LABELS.get(p.get("preset"), "—"))),
-                           (t("Folder"), tx["target_dir"]),
+                           (t("Folder"), _folder_value(tx["target_dir"])),
                            (t("Installed"), (tx.get("finished_at") or tx.get("created_at") or "")[:16].replace("T", " "))])
             card.body.addWidget(grid)
             row = QHBoxLayout()
@@ -351,7 +357,7 @@ class InstalledPage(QWidget):
             rows.append((t("Game version"), g.game_version))
         if g.loader:
             rows.append((t("Mod loader"), g.loader + (f" {g.loader_version}" if g.loader_version else "")))
-        rows += [(t("Folder"), g.root),
+        rows += [(t("Folder"), _folder_value(g.root)),
                  (t("Last scan"), time.strftime("%Y-%m-%d %H:%M", time.localtime(g.scanned_at))),
                  (t("Scan"), t({"ok": "Complete", "partial": "Some files could not be read",
                                 "error": "Failed"}.get(g.status, g.status)))]
