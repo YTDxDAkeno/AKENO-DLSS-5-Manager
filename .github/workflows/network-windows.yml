@@ -53,7 +53,16 @@ jobs:
           python-version: '3.12'
       - run: pip install -r requirements.txt argon2-cffi
       - name: Build isolated Windows peer (private switch, no published ports)
-        run: docker build -f tools/network_e2e/Dockerfile.windows-peer -t akeno-windows-peer:e2e .
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          docker build -f tools/network_e2e/Dockerfile.windows-peer -t akeno-windows-peer:e2e . 2>&1 | Tee-Object "$env:RUNNER_TEMP/akeno-peer-build.log"
+          if ($LASTEXITCODE -ne 0) {
+            Get-Content "$env:RUNNER_TEMP/akeno-peer-build.log" -Tail 12 | ForEach-Object {
+              Write-Output ("::error title=Isolated Windows peer build::" + $_.ToString().Replace('%','%25'))
+            }
+            exit 1
+          }
       - name: Test explicit-consent official component bootstrap (online signature and protected installer)
         run: python tools/network_bootstrap_windows_e2e.py --consent-install --report network-bootstrap-windows-report.json
       - name: AKENO LAN Play on WireGuardNT (coordinator proof, relay-only, firewall policy, revocation, crash recovery)

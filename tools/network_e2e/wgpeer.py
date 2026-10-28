@@ -262,6 +262,18 @@ class Responder:
         self._send(session, packet)
         return True
 
+    def send_direct(self, packet: bytes, destination: tuple) -> bool:
+        """Adversarial fixture: pin this datagram's actual destination despite concurrent roaming.
+
+        Mutating session.addr before send is racy: a legitimate relay keepalive
+        changes it back, accidentally sending the attack payload via the relay.
+        """
+        session = self._member_session()
+        if session is None:
+            return False
+        self._send(session, packet, destination=destination)
+        return True
+
     @staticmethod
     def ipv4(src: str, dst: str, proto: int, payload: bytes) -> bytes:
         header = bytearray(struct.pack('!BBHHHBBH4s4s', 0x45, 0, 20 + len(payload), int.from_bytes(os.urandom(2), 'big'),
@@ -305,11 +317,12 @@ class Responder:
             if reply:
                 self._send(session, reply)
 
-    def _send(self, session: _Session, packet: bytes):
+    def _send(self, session: _Session, packet: bytes, *, destination=None):
         padded = packet + b'\0' * (-len(packet) % 16)
         counter, session.counter = session.counter, session.counter + 1
         body = session.send.encrypt(_nonce(counter), padded, None)
-        self.sock.sendto(bytes([4, 0, 0, 0]) + session.remote + struct.pack('<Q', counter) + body, session.addr)
+        self.sock.sendto(bytes([4, 0, 0, 0]) + session.remote + struct.pack('<Q', counter) + body,
+                         session.addr if destination is None else destination)
 
     def _record(self, version, proto, dst, port):
         with self._lock:

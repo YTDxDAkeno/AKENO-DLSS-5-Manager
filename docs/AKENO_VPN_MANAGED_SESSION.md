@@ -24,24 +24,40 @@ at least sixty seconds may be forgotten locally without an online server. This d
 server's behavior; the server reconciler independently enforces its own lease expiration.
 
 States exposed to the GUI: `provisioning`, `awaiting_exit`, `connecting`, `awaiting_handshake`, `verifying`,
-`connected`, `stopped`, `failed`, `verification_required`, `recovery_required`. Status contains a wall-clock
+`connected`, `reconnecting`, `stopped`, `failed`, `verification_required`, `recovery_required`. Status contains a wall-clock
 `updated`, optional country and signed `lease_expires_at`; only a verified connected result contains observed
 `exit_ipv4`, `exit_ipv6`, `routing_verified`, `dns_verified`. The GUI must treat stale/expired status as unavailable,
 never continue showing Connected after its helper disappears. Error codes are fixed and never include HTTP,
 native command, token or profile text.
 
-## Explicit unfinished default verification gate
+## Measured default verification gate (native validation still required)
 
-The default observer uses verified HTTPS to fixed `api4.ipify.org` and `api6.ipify.org`, rejects redirects, bounds
-responses and requires global addresses of the matching family. It preserves configured proxy/CA settings. An
-active HTTP proxy makes attributing the response to the tunnel impossible, so verification fails instead of
-bypassing the proxy. Fixed Windows PowerShell commands inspect IPv4/IPv6 routes and the tunnel DNS configuration.
+The default observer checks native full-tunnel routes, exact DNS settings and assigned
+source addresses. The new HTTPS transport binds both the socket source and Windows
+IP_UNICAST_IF/IPV6_UNICAST_IF to the signed tunnel assignment. It uses normal system TLS
+trust and fixed `api.ipify.org` / `api6.ipify.org` hosts, validates bounded direct HTTP 200
+JSON, and rejects redirects/private or wrong-family results. An active system HTTP proxy
+still makes verification unavailable; no proxy bypass is attempted.
 
-DNS configuration alone cannot prove that DNS traffic never escapes. Accordingly the default observer returns
-`dns_verified=False`. The session then returns **`verification_required` and disconnects**. No public country VPN
-is advertised as connected merely because a profile or handshake exists. A tested native DNS leak observer and
-real Windows route/leak/restore tests remain required before this gate can be completed. Replacing the flag with
-a constant success is not an implementation of that requirement.
+DNS configuration alone is insufficient. The observer requires actual nonce/question-bound
+UDP DNS replies, then probes UDP/TCP 53 and TCP 853 on each eligible non-tunnel interface.
+Only explicit Windows access denial or a captured matching kernel-drop record is counted
+as blocking. A missing route must be independently established and is counted separately.
+Accepted sends/timeouts without evidence fail. Packet Monitor uses a bounded capture in
+an Administrators/SYSTEM-only high-integrity directory. It refuses existing collectors or
+filters; stopping requires ownership of the exact private capture path. Raw captures never
+leave that directory and are removed on normal cleanup. Inventory changes during the
+measurement and unimplemented scoped link-local DNS paths fail closed.
+
+Native CI is still validating this observer. Neither successful unit tests nor a signed
+lease means a real country exit works. `dns_verified` becomes true only after the complete
+measurement path succeeds; missing evidence returns `verification_required` and cleanup.
+
+After an established tunnel loses its handshake or returns from standby with an expired
+lease, at most three reconnects are attempted (2/4/8 second stop-responsive backoff).
+Each cleans the owned tunnel and revokes the prior lease before fresh provisioning and
+all verification. Changed signed configuration, authorization failure or incomplete cleanup
+is terminal. This state-machine coverage does not prove actual Wi-Fi/standby behavior.
 
 An explicit trusted `probe(claims, tunnel_name)` implementation must return actual `ipv4`, `ipv6`, boolean
 `routing_verified=True` and `dns_verified=True` only after those checks really succeed. The session compares both

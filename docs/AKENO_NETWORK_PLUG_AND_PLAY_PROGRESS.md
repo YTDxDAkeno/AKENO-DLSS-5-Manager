@@ -31,6 +31,23 @@ Bounded managed-session reconnect is implemented with cleanup, fresh signed conf
 reverification, cancellation during backoff and expired-lease handling after resume.
 Focused reconnect/session/DNS/firewall tests: 37 passed with labelled native stand-ins.
 
+### Verification continuation after `6f852fb`
+
+- HTTPS exit measurements now explicitly bind to the signed VPN source address and
+  native interface in both families, with default TLS trust and no redirects.
+- Native Packet Monitor memory mode omits its filename from status, making ownership
+  unprovable. A bounded circular file in the protected directory preserves that gate.
+- The LAN attack fixture also had a race: legitimate relay packets overwrite
+  session.addr while the attack loop runs, causing some test attack payloads to be
+  sent through the permitted relay. Each adversarial datagram now pins its actual
+  destination independently. No production firewall rule or assertion is relaxed.
+- Remote isolated traffic run 40746348448 and NAT run 40746349019 succeeded on
+  `5d1203022ccef8cb49f0bb2018cf969c88611a67` (public job pages verified).
+- Local reruns on that source: 27 actual relay checks and 23 actual exit checks pass.
+  They do not prove public country exits, Windows or provider usage rights.
+- Corrected-environment full client run is being evaluated; the final run after all
+  source changes must remain separately identified. Native Windows work continues.
+
 ### Technical continuation checkpoint after `4530381`
 
 - `::/0` rejection is corrected with the exact same IPv6 set in two /1 rules.

@@ -213,16 +213,12 @@ def _run(args):
         # must drop them before WireGuard can authenticate/roam to the peer's source endpoint.
         direct_session = member._member_session()
         check(direct_session is not None, 'test responder has a confirmed encrypted peer session')
-        prior_endpoint = direct_session.addr
         token = b'AKLP' + os.urandom(12)
         before_direct = len(member.inbox_snapshot())
-        try:
-            direct_session.addr = coordinator.endpoint(a_pub)
-            for _ in range(8):
-                member.send_ip(member.udp_packet(B_IP, A_IP, 41998, 51999, token))
-                time.sleep(.03)
-        finally:
-            direct_session.addr = prior_endpoint
+        for _ in range(8):
+            check(member.send_direct(member.udp_packet(B_IP, A_IP, 41998, 51999, token),
+                                     coordinator.endpoint(a_pub)), 'authenticated attack pinned to the direct destination')
+            time.sleep(.03)
         time.sleep(.3)
         direct_replies = [item for item in member.inbox_snapshot()[before_direct:]
                           if item['protocol'] == 17 and item['sport'] == 51999

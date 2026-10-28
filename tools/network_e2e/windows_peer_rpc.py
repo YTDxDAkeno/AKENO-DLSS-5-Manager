@@ -46,6 +46,8 @@ def dispatch(peer, request):
         return peer.keepalive()
     if method == 'send_ip':
         return peer.send_ip(args[0])
+    if method == 'send_direct':
+        return peer.send_direct(args[0], tuple(args[1]))
     if method == 'inbox':
         return peer.inbox_snapshot()
     if method == 'session':

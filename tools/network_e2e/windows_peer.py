@@ -93,6 +93,9 @@ class ContainerPeer:
     def send_ip(self, packet):
         return self._rpc('send_ip', packet)
 
+    def send_direct(self, packet, destination):
+        return self._rpc('send_direct', packet, destination)
+
     @property
     def accept_from(self):
         raise AttributeError('Write-only fixture property.')

@@ -30,11 +30,6 @@ class _ReconnectRequired(ProfileError):
     pass
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, request, fp, code, message, headers, url):
-        raise VerificationRequired('VPN egress verification must not redirect.')
-
-
 def default_probe(claims, tunnel_name):
     """Actual, fixed HTTPS IPv4/IPv6 observations and native route/DNS configuration evidence.
 
@@ -47,23 +42,6 @@ def default_probe(claims, tunnel_name):
     proxies = urllib.request.getproxies()
     if any(proxies.get(kind) for kind in ('http','https','all')):
         raise VerificationRequired('An HTTP proxy prevents attributing egress probes to the VPN tunnel.')
-    opener = urllib.request.build_opener(_NoRedirect())
-    addresses = {}
-    for version, hostname in ((4, 'api4.ipify.org'), (6, 'api6.ipify.org')):
-        with opener.open('https://' + hostname + '?format=json', timeout=5) as response:
-            if response.status != 200 or response.url != 'https://' + hostname + '?format=json':
-                raise VerificationRequired('VPN egress verification did not return a direct HTTPS result.')
-            raw = response.read(4097)
-        if len(raw) > 4096:
-            raise VerificationRequired('VPN egress verification returned an oversized response.')
-        try:
-            data = json.loads(raw)
-            address = ipaddress.ip_address(data['ip'])
-            if set(data) != {'ip'} or address.version != version or not address.is_global or address.is_multicast:
-                raise ValueError()
-        except (ValueError, TypeError, KeyError):
-            raise VerificationRequired('VPN egress verification returned an invalid address.') from None
-        addresses['ipv' + str(version)] = str(address)
     # The executable and script implementation are fixed and trusted; only validated tunnel names/IPs enter it.
     from akeno.network.lan_windows import powershell
     dns = [str(ipaddress.ip_address(value)) for value in claims['dns']]
@@ -71,12 +49,17 @@ def default_probe(claims, tunnel_name):
     for target in ('1.1.1.1', '2606:4700:4700::1111', *dns):
         script += f"$r += @(Find-NetRoute -RemoteIPAddress '{target}' -ErrorAction Stop | Select-Object -ExpandProperty InterfaceAlias); "
     script += "$d=@(Get-DnsClientServerAddress -InterfaceAlias $n -ErrorAction Stop | ForEach-Object {$_.ServerAddresses}); "
-    script += "@{routes=$r;dns=$d} | ConvertTo-Json -Compress"
+    script += "$a=@(Get-NetIPAddress -InterfaceAlias $n -AddressState Preferred -ErrorAction Stop | ForEach-Object {$_.IPAddress}); "
+    script += "@{routes=$r;dns=$d;index=[int](Get-NetAdapter -Name $n -ErrorAction Stop).ifIndex;addresses=$a} | ConvertTo-Json -Compress"
     try:
         native = json.loads(powershell(script, timeout=10))
         routes = native['routes']
         configured = {str(ipaddress.ip_address(value)) for value in native['dns']}
         routing_verified = bool(routes) and all(value == tunnel_name for value in routes)
+        assigned = {ipaddress.ip_interface(value).version: str(ipaddress.ip_interface(value).ip) for value in claims['addresses']}
+        if set(assigned)!={4,6} or not set(assigned.values()).issubset(set(native['addresses'])) or \
+                type(native['index']) is not int or native['index']<=0:
+            raise ValueError()
     except (ValueError, TypeError, KeyError):
         raise VerificationRequired('The VPN route and DNS configuration could not be inspected.') from None
     if not routing_verified or configured!=set(dns):
@@ -86,6 +69,11 @@ def default_probe(claims, tunnel_name):
         evidence=verify_dns(tunnel_name,dns)
     except (OSError,DNSVerificationError) as exc:
         raise VerificationRequired('Native DNS leak measurements did not pass.') from exc
+    from akeno.network.egress_probe import observe, EgressError
+    try:
+        addresses={'ipv'+str(version): observe(assigned[version],native['index']) for version in (4,6)}
+    except (OSError,ValueError,EgressError) as exc:
+        raise VerificationRequired('Source-bound HTTPS exit measurements did not pass.') from exc
     return {**addresses, 'routing_verified': routing_verified, 'dns_configuration_matches': configured == set(dns),
             **evidence}
 
