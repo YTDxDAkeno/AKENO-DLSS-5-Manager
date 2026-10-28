@@ -25,9 +25,13 @@ def test_index_chooses_native_architecture_and_numeric_version_without_external_
     assert b._select_msi(index, 'arm64') == ('wireguard-arm64-8.0.0.msi', '8.0.0')
 
 
+# Explicit ids: pytest exports the test id in PYTEST_CURRENT_TEST, and Windows rejects environment variables
+# longer than 32767 characters, so the oversized index must not become part of the id.
 @pytest.mark.parametrize('index,architecture', [(b'no MSI', 'amd64'), (INDEX, 'x86'),
     (INDEX, 'amd64/../../evil'), (b'\xff' + INDEX, 'amd64'), (b'x' * (b.MAX_INDEX + 1), 'amd64'),
-    (b'<a href="wireguard-amd64-9999999.0.msi">bad</a>', 'amd64')])
+    (b'<a href="wireguard-amd64-9999999.0.msi">bad</a>', 'amd64')],
+    ids=['no-msi', 'unsupported-architecture', 'architecture-traversal', 'invalid-utf8', 'oversized-index',
+         'version-out-of-range'])
 def test_unusable_index_never_becomes_an_installer(index, architecture):
     with pytest.raises(NativeUnavailable):
         b._select_msi(index, architecture)
@@ -144,7 +148,8 @@ def test_installer_verifies_before_fixed_argv_execution_and_cleans_private_downl
     names = [call[0] for call in calls]
     assert names.index('signature') < names.index('execute')
     execute = next(call for call in calls if call[0] == 'execute')
-    assert execute[1][0] == 'C:/Windows/System32/msiexec.exe'
+    # Exactly the System32 path returned by _system_executable (native separators), never a PATH lookup.
+    assert execute[1][0] == str(Path('C:/Windows/System32') / 'msiexec.exe')
     assert execute[1][1:] == ['/i', str(next(call[1] for call in calls if call[0] == 'signature')),
                              '/qn', '/norestart', 'DO_NOT_LAUNCH=1']
     assert execute[2]['timeout'] == 180 and 'shell' not in execute[2]
