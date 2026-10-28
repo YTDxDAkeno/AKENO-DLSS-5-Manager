@@ -1,7 +1,7 @@
 name: Optional components on Windows
 on:
   push:
-    branches: [feature/akeno-network-modular, 'claude/**']
+    branches: [feature/akeno-network-modular, 'claude/**', 'codex/akeno-network-plug-and-play']
     paths: ['akeno/components/**', 'akeno/updater/**', 'akeno/network/**', 'tests/test_network_windows.py', 'tests/test_components.py', 'tests/test_component_transactions.py', 'tests/test_updater_v2.py', 'akeno/ui/components.py', 'packaging/**', 'tools/component_windows_e2e.py', '.github/workflows/components-windows.yml']
   workflow_dispatch:
 permissions:

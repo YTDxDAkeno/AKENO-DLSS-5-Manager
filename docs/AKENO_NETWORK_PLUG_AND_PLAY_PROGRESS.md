@@ -34,3 +34,12 @@ Root owns final integration, user interface, config/main, workflows, checkpoint 
 ## Next concrete step
 
 Integrate relay-only tickets and path control, add browser/VPN routers behind opt-in settings, then execute authenticated API and actual encrypted relay checks. Update this file after each verified milestone, preserving failures and unrun checks.
+
+## Checkpoint 1 — implementation in progress
+
+- First checkpoint pushed and verified: `d65def9f039f032acb0589a0c4fa86b18b6dc64e`.
+- Relay-only controller/tickets and separate network signer are now being integrated; focused controller tests: 11 passed (native WireGuard stand-in).
+- Public room browser/store/client and explicit per-game port profiles are implemented; API tests pending.
+- Opt-in VPN settings and browser/VPN router registration added; VPN package under development.
+- Windows/component/NAT workflows now include this feature branch. Windows execution of this checkpoint is not verified.
+- This WIP checkpoint may contain cross-file integration still under test; continue integration before a release claim.

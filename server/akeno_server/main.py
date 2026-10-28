@@ -113,6 +113,13 @@ def create_app() -> FastAPI:
             from akeno_server.network.service import build as build_coordinator
             app.state.lan_coordinator = build_coordinator(cfg, app.state.lan_rooms)
             app.include_router(network_router)
+            from akeno_server.network.browser import router as browser_router
+            app.include_router(browser_router)
+        if cfg.vpn_enabled:
+            from akeno_server.vpn.store import VPNStore
+            from akeno_server.vpn.api import router as vpn_router
+            app.state.vpn_store = VPNStore(cfg.vpn_database_path)
+            app.include_router(vpn_router)
     else:
         app.include_router(system.router, prefix=f"/api/{API_VERSION}")     # health checks on every service
     from akeno_server.web import mount

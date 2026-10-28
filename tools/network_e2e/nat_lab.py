@@ -1,4 +1,4 @@
-"""Real NAT traversal lab for AKENO LAN Play on one Linux machine (root, iproute2, iptables, conntrack, WireGuard).
+"""Real relay-only NAT lab for AKENO LAN Play on one Linux machine (root, iproute2, iptables, conntrack, WireGuard).
 
 Five network namespaces, each with its own IP stack: an "Internet" with the AKENO coordinator (unchanged server
 code), two NAT routers (Linux netfilter MASQUERADE = endpoint-independent mapping, or --random-fully = endpoint-
@@ -8,7 +8,7 @@ are not touched; everything is deleted afterwards. The "public" addresses are in
 only inside the lab namespaces.
 
 The control plane (accounts, signed credentials) is not part of this lab: its tests are in server/tests and
-tests/test_network_lan.py. Here the coordinator's real endpoint proofs feed the controller directly.
+tests/test_network_lan.py. Here the coordinator keeps endpoint proofs internally; controllers receive public keys and virtual IPs only.
 """
 from __future__ import annotations
 
@@ -247,12 +247,12 @@ class Lab:
         return self.coordinator.endpoint(self.keys[side]['public'])
 
     def peers_for(self, side, expires=None):
-        """What a verified heartbeat would give this member: every other live member and its proven endpoint."""
+        """A verified relay-only heartbeat: virtual identities only, never another member's NAT endpoint."""
         out = []
         for other, k in self.keys.items():
             if other == side or k['public'] not in self.grants:
                 continue
-            out.append({'public_key': k['public'], 'virtual_ip': k['ip'], 'endpoint': self.proven(other),
+            out.append({'public_key': k['public'], 'virtual_ip': k['ip'],
                         'expires': expires or time.time() + 45})
         return out
 
@@ -332,8 +332,8 @@ def run_lab(symmetric_b, record):
             if b_pub not in sa or a_pub not in sb:
                 return None
             ma, mb = sa[b_pub]['mode'], sb[a_pub]['mode']
-            return (ma, mb) if ma in ('direct', 'relay') and mb in ('direct', 'relay') else None
-        expected = ('relay', 'relay') if symmetric_b else ('direct', 'direct')
+            return (ma, mb) if ma == 'relay' and mb == 'relay' else None
+        expected = ('relay', 'relay')
 
         def path_check(name):
             via_relay = expected == ('relay', 'relay')
@@ -363,10 +363,10 @@ def run_lab(symmetric_b, record):
             result = wait(answered, 45, 1)
             ok = bool(result and result[0] and 'AKENO LAN test' in result[1])
             record(ok, f'[{label}] real game: an OpenTTD dedicated server on the other member answers LAN discovery '
-                       f'and game info over AKENO LAN (direct IP, {"relay" if symmetric_b else "P2P"})',
+                       'and game info over AKENO LAN (virtual IP, relay-only)',
                    result[1] if result else 'no answer')
         else:
-            record(True, f'[{label}] real game check skipped: OpenTTD is not installed')
+            record(None, f'[{label}] real game check skipped: OpenTTD is not installed')
 
         # Network outage at A's router (WAN link down 20 s), then recovery without any user action.
         sh('ip', 'link', 'set', 'wan', 'down', ns=lab.ns['nata'])
@@ -385,8 +385,7 @@ def run_lab(symmetric_b, record):
         path_check('after the network change')
 
         if not symmetric_b:
-            # A's router starts allocating a random port per destination (endpoint-dependent mapping): the endpoint
-            # the coordinator proved no longer works for B, so AKENO must fall back to the relay on its own.
+            # NAT remapping must recover over the relay without publishing the changed endpoint to B.
             lab.masquerade('a', ports='45000-45100', symmetric=True)
             sh('conntrack', '-F', check=False, ns=lab.ns['nata'])
             remapped = wait(lambda: (lab.proven('a') or (None, 0))[1] in range(45000, 45101) and lab.proven('a'), 60, 1)
@@ -397,10 +396,9 @@ def run_lab(symmetric_b, record):
         # Revocation while traffic flows: B is removed from the room.
         lab.grants.pop(b_pub)
         lab.coordinator.revoke(b_pub)
-        if symmetric_b:
-            # The relay is the only path: it must stop at once, before any client reacts.
-            record(lab.echo('a', 'b', count=5, timeout=0.5) == 0,
-                   f'[{label}] revocation: the relay stops forwarding immediately')
+        # The relay is the only path: it must stop at once, before any client reacts.
+        record(lab.echo('a', 'b', count=5, timeout=0.5) == 0,
+               f'[{label}] revocation: the relay stops forwarding immediately')
         refresh()
         ca.tick()
         record(b_pub not in ca.state and b_pub not in NsWireGuard(lab.ns['pca'], lab.wg['a']).peers(),
@@ -429,8 +427,8 @@ def main():
     checks = []
 
     def record(ok, name, detail=''):
-        checks.append({'name': name, 'passed': bool(ok), 'detail': str(detail)[:300]})
-        print(f"[{'OK' if ok else 'FAIL'}] {name}" + (f': {detail}' if detail != '' else ''), flush=True)
+        checks.append({'name': name, 'passed': None if ok is None else bool(ok), 'detail': str(detail)[:300]})
+        print(f"[{'SKIP' if ok is None else 'OK' if ok else 'FAIL'}] {name}" + (f': {detail}' if detail != '' else ''), flush=True)
     try:
         for symmetric in (False, True):
             if args.only and args.only != ('symmetric' if symmetric else 'cone'):
@@ -438,7 +436,7 @@ def main():
             run_lab(symmetric, record)
     finally:
         args.report.write_text(json.dumps({'checks': checks}, indent=2), encoding='utf-8')
-    failed = [c for c in checks if not c['passed']]
+    failed = [c for c in checks if c['passed'] is False]
     print(f'{len(checks) - len(failed)} of {len(checks)} NAT lab checks passed', flush=True)
     raise SystemExit(1 if failed else 0)
 

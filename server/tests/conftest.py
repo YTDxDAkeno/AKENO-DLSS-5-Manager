@@ -76,6 +76,7 @@ def _wipe() -> None:
 @pytest.fixture(autouse=True)
 def clean(tmp_path, monkeypatch):
     monkeypatch.setenv("AKENO_KEYS_DIR", str(tmp_path / "keys"))
+    monkeypatch.setenv("AKENO_NETWORK_SIGNING_KEY_PATH", str(tmp_path / "network-signing.key"))
     monkeypatch.setenv("AKENO_ROLE", "api")
     reset_config()
     passwords.reset_cache()

@@ -1,14 +1,7 @@
-"""LAN Play data plane: which WireGuard peers exist, and whether each one runs direct or through the relay.
+"""Relay-only LAN data plane. Signed room leases control the peer set; peer home endpoints are never accepted.
 
-Only members the server vouches for become peers: every peer needs its own fresh, signed, room-bound credential
-(akeno.network.credentials), its AllowedIPs are exactly its own /32 inside 10.203.0.0/16, and it disappears when
-its credential is not renewed (lease) or the server stops listing it (removal, ban, expiry). The coordinator is the
-interface's only static peer; its handshakes prove this PC's endpoint and its relay is the fallback path.
-
-The path is decided from what WireGuard itself reports, never assumed: a peer is "direct" when its last handshake
-is fresh and its current endpoint is not the relay, "relay" when it is fresh through the relay. Direct is tried
-first with the endpoint the coordinator proved for that member; after DIRECT_GRACE without a handshake the peer is
-moved to the relay. A stale handshake (network loss, standby, new NAT mapping) starts the attempt again.
+Every member uses the controlled coordinator/relay. A missing relay is a connection failure, never a reason to
+fall back to direct traffic. WireGuard authenticated endpoint roaming is detected and reset to the relay.
 """
 from __future__ import annotations
 
@@ -16,7 +9,7 @@ import base64
 import ipaddress
 import time
 
-from akeno.network.credentials import verify_peer
+from akeno.network.credentials import verify_peer, verify_network_keys
 
 LAN_NETWORK = ipaddress.ip_network('10.203.0.0/16')
 COORDINATOR_ADDRESS = '10.203.0.1'
@@ -25,18 +18,6 @@ KEEPALIVE = 25
 
 class LanError(ValueError):
     pass
-
-
-def _endpoint(value):
-    """(host, port) from a credential; only literal public IP addresses, never names or private ranges."""
-    if value is None:
-        return None
-    if not isinstance(value, (list, tuple)) or len(value) != 2 or type(value[1]) is not int or not 1 <= value[1] <= 65535:
-        raise LanError('Invalid peer endpoint.')
-    address = ipaddress.ip_address(value[0])
-    if not address.is_global:
-        raise LanError('Peer endpoints must be public addresses.')
-    return str(address), value[1]
 
 
 def format_endpoint(endpoint):
@@ -50,7 +31,6 @@ def verified_peers(result: dict, keys: dict, room: str, own_public: str, now=Non
     for item in result.get('peers', [])[:64]:
         try:
             claims = verify_peer(item.get('credential'), keys, room, now)
-            endpoint = _endpoint(claims.get('endpoint'))
         except (ValueError, AttributeError):
             continue
         if claims['public_key'] == own_public or claims['public_key'] in seen_keys or claims['virtual_ip'] in seen_ips:
@@ -59,7 +39,7 @@ def verified_peers(result: dict, keys: dict, room: str, own_public: str, now=Non
             continue
         seen_keys.add(claims['public_key'])
         seen_ips.add(claims['virtual_ip'])
-        peers.append({'public_key': claims['public_key'], 'virtual_ip': claims['virtual_ip'], 'endpoint': endpoint,
+        peers.append({'public_key': claims['public_key'], 'virtual_ip': claims['virtual_ip'],
                       'expires': claims['exp'], 'member': claims['sub'], 'device_id': claims['device_id']})
     return peers
 
@@ -94,7 +74,6 @@ def interface_profile(private_key: str, virtual_ip: str, coordinator: dict, mtu=
 
 
 class PathController:
-    DIRECT_GRACE = 12        # WireGuard retries a handshake every 5 s: two attempts plus slack
     RELAY_GRACE = 15
     STALE = 185              # no handshake for longer than a session lives: connection lost
     SILENT = 2 * KEEPALIVE + 10   # a working path delivers the peer's keepalive every 25 s
@@ -123,15 +102,11 @@ class PathController:
             if known is None or known['virtual_ip'] != p['virtual_ip']:
                 if known is not None:
                     self.backend.remove_peer(key)
-                self.state[key] = {'virtual_ip': p['virtual_ip'], 'endpoint': p['endpoint'], 'expires': p['expires'],
+                self.state[key] = {'virtual_ip': p['virtual_ip'], 'expires': p['expires'],
                                    'mode': None, 'since': now, 'handshake': None, 'rx': 0, 'tx': 0, 'rx_at': now}
                 self._attempt(key, now)
             else:
                 known['expires'] = p['expires']
-                if p['endpoint'] != known['endpoint']:
-                    known['endpoint'] = p['endpoint']
-                    if known['mode'] in ('direct_trying', 'direct') or known['mode'] is None:
-                        self._attempt(key, now)     # the member roamed: follow its newly proven endpoint
 
     def expire(self):
         """Lease enforcement without the server: a member whose credential was not renewed is removed."""
@@ -140,15 +115,14 @@ class PathController:
             self.backend.remove_peer(key)
             del self.state[key]
 
-    def _attempt(self, key, now, relay=False):
+    def _attempt(self, key, now):
         # Re-adding the peer discards its current session, so WireGuard must complete a new handshake over exactly
         # this path. Only that handshake counts as success: an old session would keep "working" on stale state
         # (WireGuard rekeys only every 120 s), which made a moved member look unreachable.
         s = self.state[key]
-        relay = relay or s['endpoint'] is None
         self.backend.remove_peer(key)
-        self.backend.set_peer(key, self.relay if relay else s['endpoint'], s['virtual_ip'])
-        s['mode'], s['since'], s['rx_at'] = ('relay_trying' if relay else 'direct_trying'), now, now
+        self.backend.set_peer(key, self.relay, s['virtual_ip'])
+        s['mode'], s['since'], s['rx_at'] = 'relay_trying', now, now
 
     def tick(self) -> dict[str, dict]:
         self.expire()
@@ -162,15 +136,16 @@ class PathController:
             s['handshake'], s['rx'], s['tx'] = handshake, seen.get('rx', 0), seen.get('tx', 0)
             fresh = handshake is not None and now - handshake < self.STALE
             via_relay = seen.get('endpoint') == self.relay
-            if fresh and handshake >= s['since'] - 1 and now - s['rx_at'] <= self.SILENT:
-                s['mode'] = 'relay' if via_relay else 'direct'
-            elif s['mode'] == 'direct_trying' and now - s['since'] > self.DIRECT_GRACE:
-                self._attempt(key, now, relay=True)
-            elif s['mode'] in ('direct', 'relay') and (not fresh or now - s['rx_at'] > self.SILENT):
-                self._attempt(key, now)                     # connection lost: start over, direct first
-            elif s['mode'] == 'relay_trying' and now - s['since'] > self.RELAY_GRACE and s['endpoint'] is not None \
-                    and not fresh:
+            if seen.get('endpoint') is not None and not via_relay:
+                # WireGuard can roam after an authenticated packet. Refuse to treat an unapproved path as active.
                 self._attempt(key, now)
+            elif fresh and handshake >= s['since'] - 1 and now - s['rx_at'] <= self.SILENT:
+                s['mode'] = 'relay'
+            elif s['mode'] == 'relay' and (not fresh or now - s['rx_at'] > self.SILENT):
+                self._attempt(key, now)
+            elif s['mode'] == 'relay_trying' and now - s['since'] > self.RELAY_GRACE and not fresh:
+                self._attempt(key, now)
+
         return {k: {kk: v for kk, v in s.items() if kk not in ('since', 'rx_at')} for k, s in self.state.items()}
 
 
@@ -184,7 +159,7 @@ class LanControl:
     def refresh(self) -> dict:
         result = self.client.heartbeat(self.room)              # verifies this PC's own credential
         identity = self.client._identity()
-        keys = self.client.license.trusted_keys()
+        keys = verify_network_keys(result.get('network_keys'), self.client.license.trusted_keys())
         own = verify_peer(result['credential'], keys, self.room)
         return {'self': {'public_key': identity['public_key'], 'private_key': identity['private_key'],
                          'virtual_ip': own['virtual_ip']},

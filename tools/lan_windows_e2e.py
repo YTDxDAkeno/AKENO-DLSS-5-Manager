@@ -46,7 +46,6 @@ class FileControl:
         data = json.loads(self.path.read_text(encoding='utf-8'))
         now = time.time()
         for p in data['peers']:
-            p['endpoint'] = tuple(p['endpoint']) if p['endpoint'] else None
             p['expires'] = now + 45
         return data
 
@@ -57,7 +56,7 @@ def session_parts(work: Path):
     from akeno.network.lan_windows import LanSession
     from akeno.network.windows import WindowsWireGuard
     # Shorter timers than production so the scenario fits a CI job; the logic is unchanged.
-    PathController.DIRECT_GRACE, PathController.SILENT = 6, 20
+    PathController.SILENT = 20
     LanSession.HEARTBEAT, LanSession.TICK = 3, 1
     native = WindowsWireGuard()
     journal, status = SecureStore(work / 'lan-journal'), SecureStore(work / 'lan-status')
@@ -124,7 +123,7 @@ def run(args):
         control_file.write_text(json.dumps({
             'self': {'public_key': a_pub, 'private_key': a_priv, 'virtual_ip': A_IP},
             'coordinator': {'public_key': coordinator.public_key, 'host': '127.0.0.1', 'port': coordinator.address[1]},
-            'peers': [{'public_key': b_pub, 'virtual_ip': B_IP, 'endpoint': coordinator.endpoint(b_pub)}] if peers
+            'peers': [{'public_key': b_pub, 'virtual_ip': B_IP}] if peers
             else []}), encoding='utf-8')
     publish()
     routes_before = ps('Get-NetRoute | Select-Object -ExpandProperty DestinationPrefix | Sort-Object | Out-String')
@@ -172,7 +171,9 @@ def run(args):
 
         def mode():
             return (status.load().get('peers', {}).get(b_pub) or {}).get('mode')
-        check(wait(lambda: mode() == 'direct', 40), 'path to member B chosen from real handshakes: direct', mode())
+        check(wait(lambda: mode() == 'relay', 40), 'path to member B chosen from real handshakes: relay-only', mode())
+        check('endpoint' not in (status.load().get('peers', {}).get(b_pub) or {}),
+              'session status contains no peer NAT endpoint')
         echoed = wgpeer.udp_echo(B_IP, count=64, size=1000)
         check(echoed == 64, 'encrypted UDP echo to the room member (64 x 1000 bytes)', f'{echoed}/64')
         latency = wait(lambda: (status.load().get('peers', {}).get(b_pub) or {}).get('latency_ms'), 15)
@@ -225,10 +226,10 @@ def run(args):
         serving.set()
         game.close()
 
-        # -- relay fallback: B stops accepting direct packets (as behind a symmetric NAT) -------------------------
+        # -- B refuses any non-relay source; relay-only must continue without exposing a direct endpoint ----------
         member.accept_from = {coordinator.address}
         relayed = coordinator.stats['relayed']
-        check(wait(lambda: mode() == 'relay', 90, 1), 'automatic relay fallback after the direct path fails', mode())
+        check(wait(lambda: mode() == 'relay', 90, 1), 'relay-only path remains active when direct packets are refused', mode())
         echoed = wgpeer.udp_echo(B_IP, count=32, size=800)
         check(echoed == 32 and coordinator.stats['relayed'] - relayed >= 64,
               'encrypted UDP echo through the AKENO relay', f'{echoed}/32, {coordinator.stats["relayed"] - relayed} relayed')

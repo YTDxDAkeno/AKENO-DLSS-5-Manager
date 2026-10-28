@@ -3,7 +3,7 @@ import base64
 import uuid
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from cryptography.hazmat.primitives import serialization
-from akeno.network.credentials import verify_peer
+from akeno.network.credentials import verify_peer, verify_network_keys
 
 
 class LanUnavailable(Exception):
@@ -81,7 +81,7 @@ class LanClient:
     def heartbeat(self,room):
         i=self._identity();room=self._room(room)
         result=self._call('POST','rooms/'+room+'/heartbeat',{'device_id':i['device_id']})
-        keys=self.license.trusted_keys()
+        keys=verify_network_keys(result.get('network_keys'),self.license.trusted_keys())
         claims=verify_peer(result['credential'],keys,room)
         if claims['device_id']!=i['device_id'] or claims['public_key']!=i['public_key']:
             raise ValueError('Peer credential does not match this PC.')

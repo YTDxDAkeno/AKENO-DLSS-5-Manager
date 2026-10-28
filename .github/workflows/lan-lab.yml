@@ -3,7 +3,7 @@ name: LAN Play NAT lab
 # AKENO coordinator and AKENO's path controller. Isolated network namespaces on a disposable runner only.
 on:
   push:
-    branches: [feature/akeno-network-modular, 'claude/**']
+    branches: [feature/akeno-network-modular, 'claude/**', 'codex/akeno-network-plug-and-play']
     paths: ['akeno/network/**', 'server/akeno_server/network/**', 'tools/network_e2e/**', '.github/workflows/lan-lab.yml']
   workflow_dispatch:
 permissions:
@@ -22,7 +22,7 @@ jobs:
           python-version: '3.12'
       - run: sudo apt-get update && sudo apt-get install -y wireguard-tools conntrack iptables iproute2 openttd openttd-opengfx
       - run: pip install cryptography==44.0.0 argon2-cffi
-      - name: NAT traversal, relay fallback, outage, network change, revocation, lease expiry
+      - name: Relay-only privacy, outage, network change, revocation, lease expiry
         run: sudo -E env "PATH=$PATH" python tools/network_e2e/nat_lab.py --report nat-lab-report.json
       - uses: actions/upload-artifact@v4
         if: always()

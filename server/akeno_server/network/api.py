@@ -11,7 +11,8 @@ from akeno_server.clock import utcnow
 from akeno_server.config import get_config
 from akeno_server.db import get_db
 from akeno_server.errors import ApiError, forbidden, unavailable
-from akeno_server.licensing import service as licenses, signing
+from akeno_server.licensing import service as licenses
+from akeno_server.network import signing
 from akeno_server.models import Device, User
 from akeno_server.network.rooms import RoomError
 
@@ -86,7 +87,7 @@ def status(request:Request):
     limit(request,'lan_ip')
     c=coordinator(request)
     wireguard=c is not None and bool(get_config().network_coordinator_host)
-    return {'enabled':True,'api':1,'transport':'wireguard' if wireguard else 'not_implemented','relay':wireguard}
+    return {'enabled':True,'api':1,'transport':'wireguard' if wireguard else 'not_implemented','relay':wireguard,'relay_only':True}
 
 
 @router.post('/rooms',status_code=201)
@@ -122,15 +123,13 @@ def revoke(request,keys):
 
 def credential(room,peer,lease,c):
     """A short-lived signed binding of one member: room, account, device, WireGuard key, virtual address and the
-    endpoint the coordinator proved for that key (or None). Clients configure peers only from these."""
+    relay-only policy. Proven home endpoints stay inside the coordinator and never enter client-visible tickets."""
     now=int(utcnow().timestamp())
-    endpoint=c.endpoint(peer['public_key']) if c is not None else None
     payload={'iss':'akeno-lan','aud':'akeno-lan-peer','sub':peer['actor'],'device_id':peer['device_id'],'room_id':room,
              'public_key':peer['public_key'],'virtual_ip':peer['virtual_ip'],'iat':now,'exp':now+lease,
-             'nonce':secrets.token_urlsafe(16),'endpoint':list(endpoint) if endpoint else None}
+             'nonce':secrets.token_urlsafe(16),'transport':'relay-only'}
     try:
-        kid,key=signing.store().active()
-        return signing.sign(key,kid,'akeno-lan-peer',payload),payload
+        return signing.sign_token('akeno-lan-peer',payload),payload
     except signing.SigningUnavailable:
         raise unavailable('peer_signing_unavailable','Peer credentials cannot be issued.') from None
 
@@ -145,9 +144,9 @@ def heartbeat(room:str,body:DeviceBody,request:Request,caller:Caller=Depends(cur
     valid=members(actor,room,s,db)
     host=get_config().network_coordinator_host
     info={'public_key':c.public_key,'host':host,'port':c.address[1]} if c is not None and host else None
-    return {'credential':ticket,'expires_at':payload['exp'],'members':valid,'room':operation(lambda:s.info(actor,room)),
+    return {'credential':ticket,'network_keys':signing.delegation(),'expires_at':payload['exp'],'members':valid,'room':operation(lambda:s.info(actor,room)),
             'peers':[{'credential':credential(room,p,s.PEER_LEASE,c)[0]} for p in valid if p['actor']!=actor],
-            'coordinator':info,'transport':'wireguard' if info else 'not_implemented'}
+            'coordinator':info,'transport':'wireguard' if info else 'not_implemented','relay_only':True}
 
 
 @router.post('/rooms/{room}/invite')

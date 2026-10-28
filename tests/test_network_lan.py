@@ -47,7 +47,8 @@ def credential(signer, public_key, ip, endpoint=None, room=ROOM, life=45, now=No
     now = int(now or time.time())
     payload = {'iss': 'akeno-lan', 'aud': 'akeno-lan-peer', 'sub': str(uuid.uuid4()), 'device_id': str(uuid.uuid4()),
                'room_id': room, 'public_key': public_key, 'virtual_ip': ip, 'iat': now, 'exp': now + life,
-               'nonce': secrets.token_urlsafe(16), 'endpoint': endpoint}
+               'nonce': secrets.token_urlsafe(16), 'transport':'relay-only'}
+    if endpoint is not None: payload['endpoint']=endpoint
     return {'credential': sign(key, kid, 'akeno-lan-peer', payload)}
 
 
@@ -55,7 +56,7 @@ def test_only_individually_signed_room_members_become_peers(signer):
     own, a, b = wg_key(), wg_key(), wg_key()
     forger = (Ed25519PrivateKey.generate(), signer[1], None)
     result = {'peers': [
-        credential(signer, a, '10.203.5.3', ['45.1.2.3', 51820]),
+        credential(signer, a, '10.203.5.3'),
         credential(signer, own, '10.203.5.2'),                         # this PC itself
         credential(forger, b, '10.203.5.4'),                           # not signed by a trusted key
         credential(signer, b, '10.203.5.5', room='b' * 32),            # another room
@@ -64,7 +65,8 @@ def test_only_individually_signed_room_members_become_peers(signer):
         credential(signer, b, '10.203.0.1'),                           # the coordinator's address
         {'credential': 'garbage'}, {}]}
     peers = verified_peers(result, signer[2], ROOM, own)
-    assert [(p['public_key'], p['virtual_ip'], p['endpoint']) for p in peers] == [(a, '10.203.5.3', ('45.1.2.3', 51820))]
+    assert [(p['public_key'], p['virtual_ip']) for p in peers] == [(a, '10.203.5.3')]
+    assert all('endpoint' not in p for p in peers)
 
 
 def test_expired_credentials_and_duplicates_are_ignored(signer):
@@ -122,69 +124,65 @@ def peer(key, ip='10.203.5.3', endpoint=('45.1.2.3', 51820), expires=None, clock
     return {'public_key': key, 'virtual_ip': ip, 'endpoint': endpoint, 'expires': expires or clock[0] + 45}
 
 
-def test_direct_first_then_relay_after_the_grace_period():
+def test_only_relay_is_tried_even_when_a_caller_supplies_an_endpoint():
     c, wg, clock = controller()
     a = wg_key()
     c.apply([peer(a, clock=clock)])
-    assert wg.peers_[a]['endpoint'] == ('45.1.2.3', 51820) and c.tick()[a]['mode'] == 'direct_trying'
-    clock[0] += PathController.DIRECT_GRACE + 1
-    c.apply([peer(a, clock=clock)])
-    assert c.tick()[a]['mode'] == 'relay_trying' and wg.peers_[a]['endpoint'] == RELAY
+    assert wg.peers_[a]['endpoint'] == RELAY and c.tick()[a]['mode'] == 'relay_trying'
     clock[0] += 1
     wg.handshake(a)
     assert c.tick()[a]['mode'] == 'relay'
+    clock[0] += PathController.STALE + 1
+    c.apply([peer(a, clock=clock)])
+    assert c.tick()[a]['mode'] == 'relay_trying' and wg.peers_[a]['endpoint'] == RELAY
 
 
-def test_mode_is_what_wireguard_reports():
+def test_wireguard_roaming_to_a_direct_endpoint_is_refused_and_reset():
     c, wg, clock = controller()
-    a, b = wg_key(), wg_key()
-    c.apply([peer(a, clock=clock), peer(b, '10.203.5.4', clock=clock)])
+    a = wg_key()
+    c.apply([peer(a, clock=clock)])
     clock[0] += 1
-    wg.handshake(a)
-    wg.handshake(b, via=RELAY)          # B reached us through the relay: WireGuard roamed to it
+    wg.handshake(a, via=('45.1.2.3', 51820))
     state = c.tick()
-    assert state[a]['mode'] == 'direct' and state[b]['mode'] == 'relay'
+    assert state[a]['mode'] == 'relay_trying' and wg.peers_[a]['endpoint'] == RELAY
+    assert 'endpoint' not in state[a]
 
 
-def test_a_moved_member_gets_a_new_handshake_on_its_new_endpoint():
+def test_peer_endpoint_changes_are_never_followed():
     c, wg, clock = controller()
     a = wg_key()
     c.apply([peer(a, clock=clock)])
     clock[0] += 1
     wg.handshake(a)
-    assert c.tick()[a]['mode'] == 'direct'
+    assert c.tick()[a]['mode'] == 'relay'
     clock[0] += 30
     c.apply([peer(a, endpoint=('45.1.2.3', 51821), clock=clock)])
-    # The old session would still look fresh: the peer is re-added so only a new handshake counts.
-    assert a in wg.removed and wg.peers_[a]['latest_handshake'] is None
-    assert c.tick()[a]['mode'] == 'direct_trying' and wg.peers_[a]['endpoint'] == ('45.1.2.3', 51821)
-    clock[0] += 1
-    wg.handshake(a)
-    assert c.tick()[a]['mode'] == 'direct'
+    assert wg.peers_[a]['endpoint'] == RELAY and c.tick()[a]['mode'] == 'relay'
 
 
-def test_lost_connection_is_retried_direct_first():
+def test_lost_relay_connection_never_falls_back_to_a_direct_path():
     c, wg, clock = controller()
     a = wg_key()
     c.apply([peer(a, clock=clock, expires=clock[0] + 10_000)])
     clock[0] += 1
-    wg.handshake(a, via=RELAY)
+    wg.handshake(a)
     assert c.tick()[a]['mode'] == 'relay'
     clock[0] += PathController.STALE + 1
-    assert c.tick()[a]['mode'] == 'direct_trying' and wg.peers_[a]['endpoint'] == ('45.1.2.3', 51820)
+    assert c.tick()[a]['mode'] == 'relay_trying' and wg.peers_[a]['endpoint'] == RELAY
 
 
-def test_a_silent_path_is_detected_before_the_handshake_goes_stale():
+def test_a_silent_relay_path_is_retried_without_exposing_a_peer_endpoint():
     c, wg, clock = controller()
     a = wg_key()
     c.apply([peer(a, clock=clock, expires=clock[0] + 10_000)])
     clock[0] += 1
     wg.handshake(a)
     wg.peers_[a]['rx'] = 148
-    assert c.tick()[a]['mode'] == 'direct'
-    clock[0] += PathController.SILENT + 1                 # handshake still "fresh", but nothing arrived
+    assert c.tick()[a]['mode'] == 'relay'
+    clock[0] += PathController.SILENT + 1
     c.apply([peer(a, clock=clock, expires=clock[0] + 10_000)])
-    assert c.tick()[a]['mode'] == 'direct_trying' and a in wg.removed
+    assert c.tick()[a]['mode'] == 'relay_trying' and a in wg.removed
+    assert wg.peers_[a]['endpoint'] == RELAY
 
 
 def test_lease_expiry_removal_and_subnet_enforcement():

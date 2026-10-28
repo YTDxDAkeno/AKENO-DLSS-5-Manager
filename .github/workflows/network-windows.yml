@@ -3,7 +3,7 @@ name: WireGuard on Windows
 # disposable runner. The peer is a loopback test responder: no Internet exit, no third-party VPN server, no secrets.
 on:
   push:
-    branches: [feature/akeno-network-modular, 'claude/**']
+    branches: [feature/akeno-network-modular, 'claude/**', 'codex/akeno-network-plug-and-play']
     paths: ['akeno/network/**', 'server/akeno_server/network/**', 'tools/network_windows_e2e.py', 'tools/lan_windows_e2e.py',
             'tools/network_e2e/**', '.github/workflows/network-windows.yml']
   workflow_dispatch:
@@ -96,7 +96,7 @@ jobs:
           if (-not (Test-Path $store)) { throw 'The WireGuard manager service did not create its configuration store' }
           Get-Service WireGuardManager | Format-List Name, Status, StartType
           (Get-Item "$env:ProgramFiles\WireGuard\wireguard.exe").VersionInfo | Format-List ProductVersion, FileVersion
-      - name: AKENO LAN Play on WireGuardNT (coordinator proof, direct, relay, firewall policy, revocation, crash recovery)
+      - name: AKENO LAN Play on WireGuardNT (coordinator proof, relay-only, firewall policy, revocation, crash recovery)
         run: python tools/lan_windows_e2e.py --work "$env:RUNNER_TEMP/lan-e2e" --report lan-windows-report.json
       - name: WireGuard log on failure
         if: failure()
