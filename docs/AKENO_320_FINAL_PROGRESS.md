@@ -115,6 +115,18 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
   (seq 1) and 3.1.0 (seq 2) unchanged. => 3.2.0 is unpublished and must be signed as **sequence 4**. The build's
   upgrade-path step now also installs the real 3.1.1 installer (SHA checked) and updates it to this build.
 
+## Final verification commit
+
+Code freeze candidate: **`eaef058ec4bd08d487a9e44e24e2c1dc924bd8d0`** (later commits are documentation only; verify with
+`git diff --stat eaef058 HEAD -- . ':!docs'`). Runs on exactly this commit:
+
+- build.yml [40767392705](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40767392705) — running
+- network-windows.yml (dispatched), lan-lab.yml [40767470403](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40767470403),
+  network-local-e2e.yml [40767474222](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40767474222),
+  components-windows.yml (dispatched) — running/queued
+- Earlier build on `acacccc` (cancelled to free the runner) already passed: Linux tests, server (SQLite/PostgreSQL/
+  Docker), real upstream assets, **Windows unit/integration/UI tests**, 150 % UI, smoke from source, system tools.
+
 ## Next concrete step
 
 Read `network-windows.yml` for `7343d86` (wireguard: DNS gate), the production read-only check, and the full
