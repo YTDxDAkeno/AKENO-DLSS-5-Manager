@@ -173,9 +173,9 @@ class AkenoNetworkPage(QWidget):
                                                               'joining; refresh to update.'))
         room.addWidget(self.empty)
         actions = FlowLayout(spacing=8)
-        for text, icon, kind, action in (('Remove member', 'x', None, self.remove_member),
-                                         ('Leave room', 'external', 'ghost', self.leave),
-                                         ('Delete room', 'trash', 'danger', self.delete_room)):
+        for text, icon, kind, action in ((msg('Remove member'), 'x', None, self.remove_member),
+                                         (msg('Leave room'), 'external', 'ghost', self.leave),
+                                         (msg('Delete room'), 'trash', 'danger', self.delete_room)):
             actions.addWidget(button(t(text), icon, kind, on_click=action))
         room.addLayout(actions)
         room.addWidget(label(t('Only the room owner can remove members, create invitations and delete the room. '
@@ -398,17 +398,17 @@ class AkenoNetworkPage(QWidget):
         self.profiles = QComboBox()
         card.body.addWidget(self.profiles)
         actions = FlowLayout(spacing=8)
-        for text, icon, action in (('Import profile…', 'file', self.import_profile), ('Rename', 'edit', self.rename_profile),
-                                   ('Remove', 'trash', self.remove_profile)):
-            b = button(t(text), icon, 'ghost' if text != 'Import profile…' else None, on_click=action)
+        for text, icon, action in ((msg('Import profile…'), 'file', self.import_profile),
+                                   (msg('Rename'), 'edit', self.rename_profile), (msg('Remove'), 'trash', self.remove_profile)):
+            b = button(t(text), icon, 'ghost' if action != self.import_profile else None, on_click=action)
             b.setEnabled(WINDOWS)
             actions.addWidget(b)
         card.body.addLayout(actions)
         actions = FlowLayout(spacing=8)
-        for text, icon, kind, action in (('Connect', 'power', 'primary', 'connect'),
-                                         ('Disconnect', 'stop', None, 'disconnect'),
-                                         ('Status', 'activity', 'ghost', 'status'),
-                                         ('Check exit IP', 'globe', 'ghost', 'exit_ip')):
+        for text, icon, kind, action in ((msg('Connect'), 'power', 'primary', 'connect'),
+                                         (msg('Disconnect'), 'stop', None, 'disconnect'),
+                                         (msg('Status'), 'activity', 'ghost', 'status'),
+                                         (msg('Check exit IP'), 'globe', 'ghost', 'exit_ip')):
             b = button(t(text), icon, kind, on_click=lambda _=False, a=action: self.vpn(a))
             b.setEnabled(BUILT)
             actions.addWidget(b)

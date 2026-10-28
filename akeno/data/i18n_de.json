@@ -4576,5 +4576,8 @@
  "{name} will be reachable for room members.": "{name} wird für Raummitglieder erreichbar.",
  "{n} min ago": "vor {n} Min.",
  "{n} s ago": "vor {n} s",
- "{n} servers in the catalog": "{n} Server im Katalog"
+ "{n} servers in the catalog": "{n} Server im Katalog",
+ "Connect": "Verbinden",
+ "Disconnect": "Trennen",
+ "Import profile…": "Profil importieren…"
 }
