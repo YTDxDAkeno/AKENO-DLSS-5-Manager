@@ -188,6 +188,9 @@ def _verify(tunnel_name,dns,*,run,resolve,deny,capture=None):
                 else:probes+=1
     if pending and capture is None:raise DNSVerificationError('DNS kernel drop evidence is missing.')
     if capture is not None:
+        # A second positive control while the capture has certainly been recording during the denial probes.
+        if not all(resolve(address) is True for address in before['dns']):
+            raise DNSVerificationError('The configured tunnel DNS did not return a valid measured response.')
         measured=capture.finish()
         if measured!=pending:raise DNSVerificationError('DNS drop evidence does not match its probes.')
         probes+=measured

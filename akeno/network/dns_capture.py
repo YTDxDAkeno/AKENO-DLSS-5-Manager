@@ -15,6 +15,7 @@ import re
 import shutil
 import struct
 import subprocess
+import time
 import uuid
 
 
@@ -126,6 +127,12 @@ class DNSCapture:
         self._call('start','--capture','--comp','all','--pkt-size','0','--file-name',self.etl,
                    '--file-size','4','--log-mode','circular')
         self.started=True
+        # 'pktmon start' returns before the collector records packets; a probe sent at once can be missed.
+        deadline=time.monotonic()+10
+        while str(self.etl).casefold() not in self._call('status').casefold():
+            if time.monotonic()>deadline:raise CaptureError('Packet Monitor did not start recording.')
+            time.sleep(0.25)
+        time.sleep(0.5)
 
     def expect_reply(self,query,source,target):
         self.positive.append((query,source,target))
@@ -145,14 +152,22 @@ class DNSCapture:
         dropped_flows=[flow for flow,_ in packets(drops_file.read_bytes(),drop_stats)];dropped=set(dropped_flows)
         if not self.positive:raise CaptureError('DNS capture lacks a positive control.')
         from akeno.network.dns_probe import valid_reply
+        # Each resolver is asked at least twice (before and after the denial probes); one captured reply per
+        # resolver proves that the capture recorded the tunnel while the probes ran.
+        resolvers={}
         for query,source,target in self.positive:
+            resolvers.setdefault(target,[]).append((query,source))
+        for target,probes in resolvers.items():
             # A connected UDP socket may report an unspecified local address on Windows; the reply is then bound
             # by the resolver address, both ports and the random transaction id/question it must echo.
-            any_local=ipaddress.ip_address(source[0]).is_unspecified
-            def matches(item):
+            def matches(item,source):
+                any_local=ipaddress.ip_address(source[0]).is_unspecified
                 return (item[0],item[1],item[3],item[4])==(target[0],target[1],source[1],17) and \
                     (any_local or item[2]==source[0])
-            if not any(matches(item) and valid_reply(query,payload) for item,payload in observed):
+            if not any(matches(item,source) and valid_reply(query,payload)
+                       for query,source in probes for item,payload in observed):
+                query,source=probes[-1]
+                any_local=ipaddress.ip_address(source[0]).is_unspecified
                 # Structural metadata only: no addresses, names or payload bytes leave this function.
                 shape={'from_resolver':sum(1 for item,_ in observed if item[:2]==(target[0],target[1])),
                        'to_probe_port':sum(1 for item,_ in observed if item[3]==source[1]),
