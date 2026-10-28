@@ -1,31 +1,40 @@
 # AKENO Gaming Suite 3.2.0 — AKENO Network (release candidate, not published)
 
 **New: AKENO Network** (ONLINE → AKENO Network), two modules that are **off until you turn them on**; updates
-never switch them on, and each works without the other.
+never switch them on, never install a network adapter or WireGuard, and each module works without the other.
 
-- **LAN Play**: create a private room or join with an invitation code, see members with their connection path
-  (direct P2P or relay), measured ping and link quality, copy your virtual IP, allow one game program, owner tools
-  (new invitation, remove member, delete room). Uses the official WireGuard for Windows; firewall rules keep file
-  sharing, Remote Desktop and NetBIOS closed for members. **Needs the AKENO LAN service on the server, which is not
-  switched on yet**: until then the page says so and creates nothing.
-- **VPN**: import your own WireGuard profiles (encrypted with Windows DPAPI), tag their country, favourites,
-  search, connect/disconnect with UAC, exit-IP check, a short connection history (time and location only). The 8
-  target countries are listed with the real reason they cannot be connected yet: **no AKENO VPN server runs**.
-  VPN Gate stays disabled.
-- **Diagnostics**: DNS, AKENO server, LAN service, coordinator/relay, sign-in, license, WireGuard, firewall,
-  sessions and VPN routing; export as a text file without passwords, tokens or keys.
-- New premium layout: connection dashboard, tabs, (i) buttons and "How it works" sections instead of long texts.
+- **LAN Play — private rooms**: create a room (optional password), invite with a 10-minute code, see members,
+  remove members, leave or delete the room, copy your virtual IP, measured ping per member, pick your game from
+  your AKENO library (nested paths such as `bin/x64/factorio.exe` are found; manual file choice only as fallback);
+  only the reviewed ports of that game are opened, and only for room members.
+- **LAN Play — public server browser**: search, filter by game and region, minimum players, password-protected
+  rooms, join, publish your room, make it private, lock it, report a room. Listings never contain IP addresses.
+- **IP privacy (relay-only)**: every room — private and public — runs through the encrypted AKENO relay. Other
+  players see only virtual LAN addresses, never your home IP. On Windows an **AKENO-owned Windows Filtering Platform
+  lock** lets the LAN tunnel talk only to the relay; it is checked before the room shows "Connected", re-checked while
+  it runs, survives a crash until recovery, and is removed only after the tunnel is gone. The relay operator still
+  sees transport addresses; this is not anonymity.
+- **AKENO VPN — one click**: choose a country tile, click Connect, Windows asks once. AKENO creates the keys and the
+  tunnel itself and shows Connected only after the observed IPv4/IPv6 exit, routes and DNS were verified. **No
+  AKENO exit server is running yet**, so Turkey, USA, Germany, Netherlands, United Kingdom, France, Japan and Canada
+  are shown with that reason and cannot be selected. Your own WireGuard profiles remain under "Expert".
+- **Diagnostics**: DNS, AKENO server, LAN service, relay, sign-in, license, WireGuard, firewall, sessions and VPN
+  routing; export without passwords, tokens or keys.
+- **Network components**: missing WireGuard components are only installed after you agree; the official installer
+  is verified (Authenticode with revocation check) before Windows asks for administrator rights.
+- Not yet: automatic LAN game discovery (broadcast) is not forwarded on Windows — connect by the host's virtual IP.
+  LAN Play and the VPN cannot run at the same time.
 
 **Fixed**
-- "Not Found" at the bottom left: the shipped client called LAN API routes the production server does not offer.
-  Server answers are now translated into sentences everywhere (status bar included), and the page asks the server
-  once whether LAN Play is offered (`GET /api/v1/network/lan/status`, new, read-only).
+- "Not Found" at the bottom left: server answers are translated into sentences everywhere.
+- A rare crash when a System page was closed while it was still measuring (progress reported to a closed page).
 
 **Components**: Settings → Components lists Core, Security Center (optional, removable — e.g. when Norton blocks
-it), LAN Play and VPN (on/off). Security Center can still be left out in the installer.
+it), LAN Play and VPN (on/off). Security Center can still be left out in the installer. LAN Play and VPN are parts of
+Core that you switch on; they are not separate downloads.
 
 **Updating**: from 3.0.0, 3.1.0 and 3.1.1 via ACCOUNT → Updates or the installer; license, account, settings,
-desktop, components and data stay. No network adapter, WireGuard service or route is installed by the update.
+desktop, components and data stay.
 
 ---
 

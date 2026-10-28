@@ -1,0 +1,29 @@
+AKENO Gaming Suite 3.2.0 – AKENO Network
+
+Neu: AKENO Network (ONLINE → AKENO Network). LAN Play und VPN sind aus, bis du sie einschaltest; Updates schalten nichts ein und installieren keinen Netzwerkadapter.
+- LAN Play: private Räume mit Einladungscode und optionalem Passwort, Mitglieder, Ping, Spiel direkt aus deiner Bibliothek freigeben (nur die geprüften Ports dieses Spiels, nur für Raummitglieder).
+- Öffentlicher Serverbrowser: suchen, nach Spiel und Region filtern, beitreten, eigenen Raum veröffentlichen, privat schalten, sperren, melden. Keine IP-Adressen in der Liste.
+- IP-Schutz: Alle Räume laufen ausschließlich über das verschlüsselte AKENO-Relay. Mitspieler sehen nur virtuelle Adressen, nie deine Heim-IP. Eine eigene Windows-Filtersperre lässt den LAN-Tunnel nur mit dem Relay sprechen; ohne sie wird nie „Verbunden“ angezeigt.
+- AKENO VPN mit einem Klick: Land wählen, Verbinden. „Verbunden“ erst nach geprüfter IPv4/IPv6-Ausgangsadresse, Routen und DNS. Hinweis: Noch läuft kein AKENO-Ausgangsserver; alle Länder sind daher mit Begründung deaktiviert.
+- Diagnose mit Export ohne Passwörter, Tokens oder Schlüssel.
+Noch nicht: automatische LAN-Spielsuche (Broadcast) unter Windows – verbinde dich über die virtuelle IP des Hosts. LAN Play und VPN laufen nicht gleichzeitig.
+
+Behoben
+- „Not Found“ unten links; seltener Absturz beim Schließen einer System-Seite während einer Messung.
+
+Update von 3.0.0, 3.1.0 und 3.1.1 über KONTO → Updates oder den Installer. Lizenz, Konto, Einstellungen, Desktop, Komponenten und Daten bleiben erhalten.
+
+AKENO Gaming Suite 3.2.0 – AKENO Network
+
+New: AKENO Network (ONLINE → AKENO Network). LAN Play and VPN stay off until you turn them on; updates switch nothing on and install no network adapter.
+- LAN Play: private rooms with an invitation code and optional password, members, ping, allow a game straight from your library (only that game's reviewed ports, only for room members).
+- Public server browser: search, filter by game and region, join, publish your room, make it private, lock it, report. No IP addresses in the list.
+- IP privacy: all rooms run only through the encrypted AKENO relay. Other players see virtual addresses, never your home IP. A dedicated Windows filter lock lets the LAN tunnel talk only to the relay; without it AKENO never shows "Connected".
+- One-click AKENO VPN: choose a country, Connect. "Connected" only after the IPv4/IPv6 exit, routes and DNS were verified. Note: no AKENO exit server runs yet, so every country is disabled with that reason.
+- Diagnostics with an export without passwords, tokens or keys.
+Not yet: automatic LAN game discovery (broadcast) on Windows – connect by the host's virtual IP. LAN Play and the VPN do not run at the same time.
+
+Fixed
+- "Not Found" at the bottom left; a rare crash when a System page was closed during a measurement.
+
+Update from 3.0.0, 3.1.0 and 3.1.1 via ACCOUNT → Updates or the installer. License, account, settings, desktop, components and data stay.
