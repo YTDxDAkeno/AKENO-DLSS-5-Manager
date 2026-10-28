@@ -1,5 +1,6 @@
 # Claude: Windows-Konfiguration für den privaten LAN-Stagingtest
 
+> Historischer Vorbereitungsstand. Nachfolgend wurde ausschließlich der lokale Smoke-Test freigegeben und ausgeführt. Aktueller Betriebs-/Schlüsselstand: `AKENO_NETWORK_LOCAL_SMOKE_REPORT.md`, `CLAUDE_LOCAL_STAGING_HANDOFF.md`. Öffentliche Aktivierung bleibt gesperrt.
 Geprüfter Code: `588b21ca64a78f13d937a89abb58d5289b34f7c5` auf `claude/inspiring-gauss-i8vjdr`. Der Code meldet Version **3.1.1**. Eine vollständige aktuelle Windows-CI-Freigabe wurde in dieser VPS-Vorbereitung nicht behauptet; die Übergabe nennt bei Lauf 255 noch fehlgeschlagene Update-E2E-Erwartungen und den anschließenden Testfix. Vor Auswahl eines Testbuilds alle benötigten Workflows auf demselben SHA prüfen.
 
 | Einstellung | Vorgesehener Wert / Vertrag |

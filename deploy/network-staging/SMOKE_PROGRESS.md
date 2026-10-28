@@ -27,3 +27,7 @@ Docker verwaltet später ausschließlich eigene Staging-Bridge-/Loopback-NAT-Reg
 ## Live-Smoke bestanden
 
 48/48 Prüfungen erfolgreich, inklusive 64 echten Ende-zu-Ende-verschlüsselten 1.200-Byte-Roundtrips über den laufenden lokalen Koordinator/Relay. Sicherheitsprüfungen unverändert; Signaturmanipulation verfälscht jetzt tatsächlich ein Signaturbyte. Testräume gelöscht, Testgeräte widerrufen, alle Testsessions beendet. Vier Staging-Container gesund; sieben vorhandene Container und alle 19 Produktionstabellen unverändert. UFW/DOCKER-USER und alle bisherigen Filterregeln erhalten; Docker ergänzte nur eigene private Staging-Netzregeln. Öffentliche Portverbindungen auf die TCP-Testports scheitern. Kein externer Scan oder echter Windows-/ISP-NAT-Test behauptet.
+
+## Abschlusskontrolle
+
+Alle Prüfungen bestanden: vier Staging-Dienste gesund, sieben vorhandene Container und 19 Produktionstabellen unverändert; Produktionskonfigurationshashes identisch. UFW/DOCKER-USER unverändert, vorherige IPv4-/IPv6-Regeln in gleicher Reihenfolge erhalten. Nur Docker-eigene private Staging-Regeln hinzugekommen. Keine öffentlichen DNS-/Proxy-/UDP-Freigaben. Öffentliche Clientpins und Grenzen dokumentiert; historische Vorbereitungsdokumente mit aktuellem Status versehen. Letzter bestätigter Checkpoint vor diesem Update: `999067b39ba45d400f35869a2189a3bab3add799`.

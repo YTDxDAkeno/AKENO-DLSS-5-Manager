@@ -1,0 +1,24 @@
+{
+  "base_commit": "588b21ca64a78f13d937a89abb58d5289b34f7c5",
+  "additional_actual_client_modules": [
+    {
+      "path": "akeno/licensing/device.py",
+      "git_blob_sha": "e814a11e9854ad5cd9471340849094642e690449",
+      "exact": true,
+      "sha256": "22a2e8251c8791fa195bc36e346ab1a8eb0152ecab33cb4770067af509eb2c1d"
+    },
+    {
+      "path": "akeno/licensing/clock.py",
+      "git_blob_sha": "e4829ef3b71fafc63e086e34b543f6df7c4a1aa5",
+      "exact": true,
+      "sha256": "52f24050069f9202ae5ee2cfdd6585c470786d56eef9a5da4963cfe3155ef9e1"
+    },
+    {
+      "path": "akeno/licensing/storage.py",
+      "git_blob_sha": "6169f9d9d22528814f3f2cd081ba14a4cb31f913",
+      "exact": true,
+      "sha256": "5a30235133df0b3d8095cc4123c5acd898a851d4f3b782b212257b17481b4357"
+    }
+  ],
+  "application_logic_changed": false
+}

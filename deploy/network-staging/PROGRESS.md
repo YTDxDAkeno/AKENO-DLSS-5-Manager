@@ -38,3 +38,7 @@ The coordinator uses UDP 3478; it is not an anonymous STUN/TURN or Internet exit
 - Pinned PostgreSQL to the locally verified official digest; app image build/boot remains approval-gated.
 - All 7 existing workflows reviewed; branch pushes run CI, no VPS deployment path was invoked.
 - Last confirmed remote checkpoint before this final update: `71a69ded0cd2049cc2ffcd91b10efcb90bade358`.
+
+## Nachfolgende lokale Freigabe umgesetzt
+
+Staging läuft ausschließlich auf Loopback. 48/48 Live-Prüfungen bestanden, vier eigene Container gesund; keine öffentliche Freigabe. Aktuelle öffentlichen Testkeys, Betrieb und Windows-Anforderungen: `AKENO_NETWORK_LOCAL_SMOKE_REPORT.md` / `CLAUDE_LOCAL_STAGING_HANDOFF.md`. Historische Angaben über noch nicht erzeugte Staging-Keys sind damit überholt.

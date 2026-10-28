@@ -1,5 +1,6 @@
 # AKENO Network – geprüfte VPS-Staging-Vorbereitung
 
+> Historischer Vorbereitungsstand. Nachfolgend wurde ausschließlich der lokale Smoke-Test freigegeben und ausgeführt. Aktueller Betriebs-/Schlüsselstand: `AKENO_NETWORK_LOCAL_SMOKE_REPORT.md`, `CLAUDE_LOCAL_STAGING_HANDOFF.md`. Öffentliche Aktivierung bleibt gesperrt.
 Stand: **28.10.2026, Europe/Berlin**. Ergebnis: **Vorbereitung fertig; kein Staging deployed und keine öffentliche Freigabe.** Es wurden keine Produktionscontainer ersetzt/neu gestartet, keine Firewall-/DNS-/Caddy-Regeln geändert, keine produktiven Benutzer/Lizenzen/Datenbanken geschrieben und keine Produktionsschlüssel kopiert. Nur isolierte kurzlebige Testcontainer ohne Netzwerk/Hostports und mit temporärer SQLite wurden ausgeführt.
 
 ## 1. Quellen und Branch

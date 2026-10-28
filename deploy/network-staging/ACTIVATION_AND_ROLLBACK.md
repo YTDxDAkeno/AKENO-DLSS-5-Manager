@@ -1,6 +1,6 @@
 # Spätere Aktivierung und Rollback — Eigentümerfreigabe erforderlich
 
-**Diese Anleitung wurde nicht ausgeführt.** Aktuell existieren keine Staging-Container, Volumes, Konten, Datenbanken, Secrets oder DNS-/Firewall-Freigaben. Es ist nur ein prüfbares Vorbereitungspaket. Auch die öffentliche Compose-Erweiterung ist keine Freigabe.
+**Aktualisierter Stand nach gesonderter lokaler Freigabe:** Abschnitte B/C wurden für den lokalen Smoke-Test umgesetzt; Staging läuft ausschließlich auf Loopback. Initialisierung nicht erneut ausführen. Schlüssel, Datenbanken und zwei normale Testkonten existieren ausschließlich in Staging. Öffentliche Schritte D bleiben ausdrücklich nicht freigegeben. Aktueller Nachweis: `AKENO_NETWORK_LOCAL_SMOKE_REPORT.md` und `CLAUDE_LOCAL_STAGING_HANDOFF.md`.
 
 ## A. Vorbedingungen und Abbruchkriterien
 
@@ -107,4 +107,4 @@ Dieser Befehl löscht keine Volumes und setzt keine Produktionscontainer zurück
 
 Falls später öffentlich aktiviert: exakten Staging-DOCKER-USER-Sprung und nur die zwei eigenen ACL-Chains entfernen; nur Staging-Caddy-Import rückgängig machen und Proxykonfiguration erneut prüfen; nur die drei Staging-DNS-Einträge entfernen. Keine alte globale Caddy-/Firewall-Konfiguration über zwischenzeitliche Änderungen anderer Arbeiten schreiben. Danach Produktions-HTTPS, API-Health/Ready, Containeridentitäten, Datenbankzustand und letzten Backup-Erfolg kontrollieren.
 
-**Aktueller Rollbackbedarf: keiner.** Die jetzige Vorbereitung änderte lediglich Arbeits-/Dokumentationsdateien und den eigenen GitHub-Entwicklungsbranch; ein laufendes Staging gibt es nicht.
+**Aktueller Betrieb:** Das gesondert freigegebene lokale Staging läuft. Bei Bedarf ausschließlich dieses Projekt wie oben beschrieben stoppen; Daten/Schlüssel nicht löschen. Öffentliche Freigaben bestehen weiterhin nicht.
