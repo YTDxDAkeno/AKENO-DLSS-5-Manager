@@ -78,6 +78,16 @@ def members(actor,room,s,db):
     return valid
 
 
+@router.get('/status')
+def status(request:Request):
+    """Capability probe for clients. The whole router exists only when the operator enabled LAN Play, so an older or
+    disabled server answers 404 here and clients show "not available" instead of failing on their first action."""
+    limit(request,'lan_ip')
+    c=coordinator(request)
+    wireguard=c is not None and bool(get_config().network_coordinator_host)
+    return {'enabled':True,'api':1,'transport':'wireguard' if wireguard else 'not_implemented','relay':wireguard}
+
+
 @router.post('/rooms',status_code=201)
 def create(body:CreateRoom,request:Request,caller:Caller=Depends(current),db:Session=Depends(get_db)):
     actor,device,s=authorised(request,body.device_id,caller,db)

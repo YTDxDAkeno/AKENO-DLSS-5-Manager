@@ -40,6 +40,13 @@ def create(c,t,d):
 
 def test_routes_absent_by_default(client):
     assert client.post('/api/v1/network/lan/rooms',json={}).status_code==404
+    assert client.get('/api/v1/network/lan/status').status_code==404
+
+
+def test_status_probe_when_enabled(network):
+    r=network.get('/api/v1/network/lan/status')
+    assert r.status_code==200 and r.json()['enabled'] is True and r.json()['api']==1
+    assert r.json()['transport'] in ('wireguard','not_implemented')
 
 
 def test_auth_license_device_membership_and_short_lived_credential(network):

@@ -13,6 +13,21 @@ from akeno.ui import workers
 log = logging.getLogger(__name__)
 
 
+def status_text(exc: BaseException) -> str:
+    """Status-bar text for a failed background task. Answers from the AKENO server are never shown raw (an HTTP
+    reason such as "Not Found" means nothing to a player); everything else keeps its own message."""
+    from akeno.licensing.api import ApiError, ServerUnavailable
+    if isinstance(exc, (ApiError, ServerUnavailable)):
+        from akeno.ui.account_ui import error_text
+        return error_text(exc)
+    from akeno.network.client import LanUnavailable
+    if isinstance(exc, LanUnavailable):
+        from akeno.i18n import t
+        from akeno.network.messages import text
+        return t(text(exc))
+    return f"{exc}"
+
+
 class Controller(QObject):
     hardware_changed = Signal()
     games_changed = Signal()
@@ -56,7 +71,7 @@ class Controller(QObject):
 
         def err(exc):
             self._end(key, silent)
-            if not silent: self.status.emit(f"{exc}")
+            if not silent: self.status.emit(status_text(exc))
             if on_error:
                 _safe_call(on_error, exc)
 

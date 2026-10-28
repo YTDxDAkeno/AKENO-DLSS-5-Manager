@@ -6,6 +6,19 @@ from cryptography.hazmat.primitives import serialization
 from akeno.network.credentials import verify_peer
 
 
+class LanUnavailable(Exception):
+    """The AKENO server this build talks to does not offer LAN Play (an older server, or the operator has not enabled
+    it yet). Raised instead of the server's bare 404 so the UI can say so instead of showing "Not Found"."""
+
+    def __init__(self):
+        super().__init__('LAN Play is not available on the AKENO server yet. Nothing was changed on this PC.')
+
+
+def _missing_route(exc):
+    from akeno.licensing.api import ApiError
+    return isinstance(exc,ApiError) and exc.status in (404,405) and exc.code in ('not_found','method_not_allowed')
+
+
 class LanClient:
     def __init__(self,license_manager,identity_store):
         from akeno.licensing.storage import SecureStore
@@ -28,8 +41,24 @@ class LanClient:
         return state
 
     def _call(self,method,path,body=None):
-        with self.license._lock:
-            return self.license._authed(self.license._api(),method,'/network/lan/'+path,body)
+        try:
+            with self.license._lock:
+                return self.license._authed(self.license._api(),method,'/network/lan/'+path,body)
+        except Exception as exc:
+            # The LAN router never answers 404/405 itself (room problems are 403), so these mean "no such API here".
+            if _missing_route(exc):raise LanUnavailable() from exc
+            raise
+
+    def status(self):
+        """Unauthenticated capability probe: {'enabled': bool, 'transport': ..., 'relay': bool}. Never raises for a
+        server without LAN Play; raises the licensing errors (offline, certificate, ...) unchanged."""
+        try:
+            result=self.license._api().call('GET','/network/lan/status')
+        except Exception as exc:
+            if _missing_route(exc):return {'enabled':False,'transport':'not_implemented','relay':False}
+            raise
+        return {'enabled':result.get('enabled') is True,'transport':result.get('transport','not_implemented'),
+                'relay':result.get('relay') is True}
 
     def create(self,name,password=''):
         i=self._identity()

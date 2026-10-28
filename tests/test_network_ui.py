@@ -127,3 +127,33 @@ def _shot(widget, name):
     if folder:
         os.makedirs(folder, exist_ok=True)
         widget.grab().save(os.path.join(folder, name))
+
+
+# -- regression: the "Not Found" bottom-left (production server without the LAN API) ------------------------------------
+
+def test_server_without_lan_api_never_shows_not_found(page):
+    from akeno.licensing.api import ApiError
+    from akeno.network.client import LanUnavailable
+
+    def bare_404():
+        raise ApiError(404, 'not_found', 'Not Found')
+    for failure in (bare_404, lambda: (_ for _ in ()).throw(LanUnavailable())):
+        page.work(failure, lambda _: None)
+        shown = page.work_status.text()
+        assert 'Not Found' not in shown and 'not available on the AKENO server' in shown
+
+
+def test_controller_status_bar_translates_server_answers(qtbot):
+    from akeno.licensing.api import ApiError
+    from akeno.ui.controller import status_text
+    assert 'Not Found' not in status_text(ApiError(404, 'not_found', 'Not Found'))
+    assert status_text(RuntimeError('disk full')) == 'disk full'
+
+
+def test_room_errors_become_sentences(page):
+    from akeno.licensing.api import ApiError
+
+    def denied():
+        raise ApiError(403, 'room_access_denied', 'Invalid or expired invitation.')
+    page.work(denied, lambda _: None)
+    assert 'Ask the room owner for a new one' in page.work_status.text()

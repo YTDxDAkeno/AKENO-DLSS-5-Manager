@@ -52,3 +52,31 @@ def test_two_desktop_clients_share_authenticated_device_bound_room(tmp_path,monk
         assert all('private_key' not in member for member in result['members'])
     finally:
         server.should_exit=True;thread.join(5)
+
+
+def test_client_against_server_without_lan_api_reports_unavailable_not_404(tmp_path,monkeypatch,keys):
+    """Regression for the "Not Found" text: the production server runs without AKENO_NETWORK_ENABLED."""
+    monkeypatch.delenv('AKENO_NETWORK_ENABLED',raising=False)
+    reset_config()
+    from akeno_server.main import create_app
+    from akeno.network.client import LanUnavailable
+    with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
+    server=uvicorn.Server(uvicorn.Config(create_app(),host='127.0.0.1',port=port,log_level='warning'))
+    thread=threading.Thread(target=server.run,daemon=True);thread.start()
+    try:
+        for _ in range(200):
+            if server.started:break
+            time.sleep(.01)
+        assert server.started
+        with dbmod.session() as session:public={row.kid:row.public_key for row in signing.public_keys(session)}
+        monkeypatch.setenv('AKENO_DEVICE_ID','network-client-off')
+        m=LicenseManager(LicensingConfig(f'http://127.0.0.1:{port}',public),SecureStore(tmp_path/'user'))
+        email='network-off@example.test';m.create_account(email,PASSWORD)
+        with dbmod.transaction() as session:auth.user_by_email(session,email).email_verified_at=clock.utcnow()
+        m.redeem(make_codes('monthly')[0])
+        client=LanClient(m,MemoryIdentity())
+        assert client.status()=={'enabled':False,'transport':'not_implemented','relay':False}
+        for action in (lambda:client.create('Room'),lambda:client.join('x'*20),lambda:client.heartbeat('ab'*16)):
+            with pytest.raises(LanUnavailable):action()
+    finally:
+        server.should_exit=True;thread.join(5)

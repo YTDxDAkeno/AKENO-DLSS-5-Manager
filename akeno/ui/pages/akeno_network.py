@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QFileDialog, QHBoxL
 
 from akeno.i18n import msg, t
 from akeno.licensing.storage import SecureStore
+from akeno.network import messages
 from akeno.network.client import LanClient
 from akeno.network.profiles import ProfileStore
 from akeno.paths import sub
@@ -262,8 +263,9 @@ class AkenoNetworkPage(QWidget):
             done(value)
 
         def failed(exc):
-            self.work_status.setText(t(str(exc)))
-        if not self.ctl.run('akeno-network', fn, complete, failed):
+            self.work_status.setText(t(messages.text(exc)))
+        # silent: the page shows its own translated message; the status bar must not repeat a raw server answer
+        if not self.ctl.run('akeno-network', fn, complete, failed, silent=True):
             self.work_status.setText(t('A network operation is already running.'))
 
     def create(self):
