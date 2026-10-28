@@ -257,6 +257,46 @@ class Lab:
         return out
 
 
+OPENTTD = shutil.which('openttd') or ('/usr/games/openttd' if os.path.exists('/usr/games/openttd') else None)
+
+
+def game_server(lab, side):
+    """A real OpenTTD dedicated server listening on this member's virtual LAN address only (direct-IP LAN play)."""
+    home = Path(tempfile.mkdtemp(prefix='akeno-openttd-'))
+    (home / 'openttd.cfg').write_text('[network]\nserver_name = AKENO LAN test\n', encoding='utf-8')
+    log = open(home / 'server.log', 'w')
+    lab.procs.append(subprocess.Popen(['ip', 'netns', 'exec', lab.ns['pc' + side], 'env', f'HOME={home}',
+                                       f'XDG_DATA_HOME={home}', f'XDG_CONFIG_HOME={home}', OPENTTD, '-D',
+                                       f"{lab.keys[side]['ip']}:3979", '-c', str(home / 'openttd.cfg')],
+                                      stdout=log, stderr=subprocess.STDOUT))
+
+
+def game_query(lab, side, target):
+    """OpenTTD's own protocol from the other member, through AKENO LAN: the UDP LAN discovery answer
+    (PACKET_UDP_SERVER_RESPONSE) and the TCP game information (PACKET_SERVER_GAME_INFO: name and version)."""
+    ip = lab.keys[target]['ip']
+    with inside(lab.ns['pc' + side]):
+        udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    with udp:
+        udp.settimeout(3)
+        udp.sendto(b'\x03\x00\x00', (ip, 3979))
+        found = udp.recvfrom(64)[0]
+    with inside(lab.ns['pc' + side]):
+        tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    with tcp:
+        tcp.settimeout(5)
+        tcp.connect((ip, 3979))
+        tcp.sendall(b'\x03\x00\x07')
+        info = b''
+        while len(info) < 2 or len(info) < int.from_bytes(info[:2], 'little'):
+            chunk = tcp.recv(4096)
+            if not chunk:
+                break
+            info += chunk
+    fields = [x for x in info.split(b'\0') if len(x) > 3]
+    return found[2:3] == b'\x01' and info[2:3] == b'\x06', [f.decode('latin-1').strip('\x19') for f in fields[1:3]]
+
+
 def wait(predicate, limit, step=0.5):
     deadline = time.monotonic() + limit
     while time.monotonic() < deadline:
@@ -311,6 +351,22 @@ def run_lab(symmetric_b, record):
 
         refresh()
         path_check('first connection')
+
+        if OPENTTD:
+            game_server(lab, 'b')
+
+            def answered():
+                try:
+                    return game_query(lab, 'a', 'b')
+                except OSError:
+                    return None
+            result = wait(answered, 45, 1)
+            ok = bool(result and result[0] and 'AKENO LAN test' in result[1])
+            record(ok, f'[{label}] real game: an OpenTTD dedicated server on the other member answers LAN discovery '
+                       f'and game info over AKENO LAN (direct IP, {"relay" if symmetric_b else "P2P"})',
+                   result[1] if result else 'no answer')
+        else:
+            record(True, f'[{label}] real game check skipped: OpenTTD is not installed')
 
         # Network outage at A's router (WAN link down 20 s), then recovery without any user action.
         sh('ip', 'link', 'set', 'wan', 'down', ns=lab.ns['nata'])
