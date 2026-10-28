@@ -15,8 +15,7 @@ def test_relay_boundary_blocks_every_other_v4_v6_address_and_remote_port():
     commands=[]
     f=LanFirewall(NAME,'10.203.5.0/24',run=lambda script:commands.append(script))
     f.relay_only(49173,('45.11.12.13',3478))
-    script=commands[0]
-    rules=script.split('; ')
+    rules=commands
     assert len(rules)==5
     for direction in ('Inbound','Outbound'):
         [address_rule]=[line for line in rules if f'relay {direction} addresses' in line]

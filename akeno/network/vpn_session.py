@@ -1,8 +1,8 @@
 """Privileged, journaled AKENO VPN sessions. The normal GUI never handles an unencrypted managed profile.
 
 Provisioning, a native handshake and an observed country IP are separate states. DNS/route verification is a
-mandatory gate, not a success assumption: the default observer reports DNS leak verification as unavailable
-until an independently tested Windows implementation supplies that evidence. Tests inject explicit stand-ins.
+mandatory gate, not a success assumption: the default observer requires actual Windows DNS responses and
+explicit native blocked-path measurements. Tests inject explicit stand-ins, never production success flags.
 """
 from __future__ import annotations
 
@@ -26,6 +26,10 @@ class _StopRequested(Exception):
     pass
 
 
+class _ReconnectRequired(ProfileError):
+    pass
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, request, fp, code, message, headers, url):
         raise VerificationRequired('VPN egress verification must not redirect.')
@@ -35,9 +39,8 @@ def default_probe(claims, tunnel_name):
     """Actual, fixed HTTPS IPv4/IPv6 observations and native route/DNS configuration evidence.
 
     Normal proxy/TLS settings are preserved. An active HTTP proxy prevents attributing an HTTPS result to this
-    tunnel, so it fails closed. DNS settings alone cannot prove absence of DNS leaks, therefore this observer
-    deliberately returns ``dns_verified=False``. This is an unfinished Windows verification gate, not a fake
-    connected state. Operators must never replace it with a constant True to activate country VPNs.
+    tunnel, so it fails closed. DNS settings alone are insufficient: the native DNS observer must measure a
+    valid tunnel resolver reply and explicit denied foreign paths before it can report verified.
     """
     if sys.platform != 'win32' or not re.fullmatch(r'AkenoVPN[0-9a-f]{24}', tunnel_name):
         raise VerificationRequired('Native Windows VPN verification is required.')
@@ -93,6 +96,7 @@ class ManagedVPNSession:
     HANDSHAKE_SECONDS = 30
     EXIT_ACK_SECONDS = 25
     OBSERVE_SECONDS = 25
+    MAX_RECONNECTS = 3
     STABLE_FIELDS = ('lease_id','server_id','country','device_id','client_public_key','server_public_key','endpoint',
                      'addresses','dns','routes','expected_exit_ipv4','expected_exit_ipv6')
 
@@ -170,7 +174,26 @@ class ManagedVPNSession:
         self.client.verify_observed_exit(claims, observation.get('ipv4'), observation.get('ipv6'))
         return observation
 
-    def run(self, country):
+    def run(self,country):
+        """Bounded reconnect after an established tunnel is lost or its lease expires on resume.
+
+        Every attempt cleans up owned native state and revokes the old lease before obtaining
+        a newly signed configuration. Authorization/verification failures are terminal. Never
+        continue displaying Connected during backoff or reuse an expired configuration.
+        """
+        for attempt in range(self.MAX_RECONNECTS+1):
+            result=self._run_once(country)
+            if result['state']!='reconnecting':return result
+            if attempt==self.MAX_RECONNECTS:
+                return self._status('failed',error='vpn_reconnect_exhausted')
+            deadline=self.clock()+min(2**(attempt+1),16)
+            self._status('reconnecting',error='vpn_network_lost')
+            while self.clock()<deadline:
+                if self.stop_requested():return self._status('stopped')
+                self.sleep(min(.5,max(0,deadline-self.clock())))
+        raise AssertionError('Unreachable reconnect state')
+
+    def _run_once(self, country):
         """Run until stop/revocation/expiry or verification failure. Always attempt owned local cleanup first."""
         if not isinstance(country,str) or not re.fullmatch('[A-Z]{2}',country):
             raise ProfileError('Select an available country.')
@@ -178,6 +201,7 @@ class ManagedVPNSession:
         self.state = {'country':country,'session_id':uuid.uuid4().hex,'created':self.clock()}
         self._write('provisioning')
         final,error = 'stopped',None
+        had_connected=False
         try:
             self._stop()
             self._status('provisioning')
@@ -217,13 +241,16 @@ class ManagedVPNSession:
             observation = self._observe(claims,self.manager.name(ident))
             self._write('running')
             self._status('connected',claims=claims,observation=observation)
+            had_connected=True
             renewed,observed = self.clock(),self.clock()
             while True:
-                self._fresh(claims)
                 self.sleep(self.POLL_SECONDS)
+                self._stop()
+                if claims['exp']<=self.clock():
+                    raise _ReconnectRequired('Permission expired during a network interruption or resume.')
                 self._fresh(claims)
                 if self.manager.status().get('state') != 'connected':
-                    raise ProfileError('The native VPN tunnel is no longer connected.')
+                    raise _ReconnectRequired('The native VPN tunnel is no longer connected.')
                 if self.clock() - renewed >= self.RENEW_SECONDS:
                     claims = self._renew(initial)
                     renewed = self.clock()
@@ -233,8 +260,13 @@ class ManagedVPNSession:
                 self._status('connected',claims=claims,observation=observation)
         except _StopRequested:
             pass
+        except _ReconnectRequired:
+            final,error = 'reconnecting','vpn_network_lost'
         except VerificationRequired:
-            final,error = 'verification_required','vpn_verification_incomplete'
+            final,error = ('reconnecting','vpn_network_changed') if had_connected else \
+                          ('verification_required','vpn_verification_incomplete')
+        except OSError:
+            final,error = ('reconnecting','vpn_network_lost') if had_connected else ('failed','vpn_session_failed')
         except Exception:
             final,error = 'failed','vpn_session_failed'
         cleanup = self._cleanup()

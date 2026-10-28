@@ -71,8 +71,12 @@ def blocked(address, *, source=None, interface=None, tcp=False, port=53):
             if tcp:s.connect((address,port))
             else:s.sendto(question(),(address,port))
         except OSError as exc:
-            return getattr(exc,'winerror',None)==10013
-        return False
+            code=getattr(exc,'winerror',None)
+            if code==10013:return True
+            raise DNSVerificationError(f'Native DNS probe has no explicit block: IPv{ipaddress.ip_address(address).version}, '
+                f'{"TCP" if tcp else "UDP"}, port={port}, bound={interface is not None}, winerror={code}.') from None
+        raise DNSVerificationError(f'Native DNS send accepted: IPv{ipaddress.ip_address(address).version}, '
+            f'{"TCP" if tcp else "UDP"}, port={port}, bound={interface is not None}.')
 
 
 def inventory(tunnel_name, dns, run):

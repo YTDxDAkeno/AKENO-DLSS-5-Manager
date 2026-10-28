@@ -180,7 +180,10 @@ class LanFirewall:
         lines.append(f"New-NetFirewallRule -DisplayName '{GROUP} {self.name} relay receive' -Group '{GROUP}' "
                      f"-Direction Inbound -Action Allow -Protocol UDP -LocalPort {listen_port} "
                      f"-RemoteAddress '{address}' -RemotePort {relay[1]} -Profile Any | Out-Null")
-        self.run('; '.join(lines))
+        for index,line in enumerate(lines):
+            try:self.run(line)
+            except NativeUnavailable as exc:
+                raise NativeUnavailable(f'LAN relay firewall rule {index+1}: {exc}') from exc
 
     def apply(self):
         n, s, g = self.name, self.subnet, GROUP

@@ -155,6 +155,17 @@ def _run(args):
             from akeno.network.windows import NativeUnavailable
             if isinstance(exc,(NativeUnavailable,LanError)):
                 print('::error title=LAN session native failure::'+str(exc),flush=True)
+                # Diagnose rejected RemoteAddress CIDRs independently without weakening
+                # the production rules or opening a tunnel. Temporary rules only block.
+                if 'relay firewall rule' in str(exc):
+                    import ipaddress
+                    for net in [*ipaddress.ip_network('0.0.0.0/0').address_exclude(
+                            ipaddress.ip_network('127.0.0.1/32')),'::/0']:
+                        try:
+                            ps(f"New-NetFirewallRule -DisplayName 'AKENO diagnostic CIDR' -Direction Outbound "
+                               f"-Action Block -Protocol UDP -LocalPort 49999 -RemoteAddress '{net}' | Remove-NetFirewallRule")
+                        except RuntimeError:
+                            print(f'::error title=Rejected firewall CIDR::Windows rejected {net}',flush=True)
     worker = threading.Thread(target=runner, daemon=True)
     try:
         worker.start()

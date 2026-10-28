@@ -50,7 +50,9 @@ def test_only_explicit_send_access_denial_counts(monkeypatch,winerror):
         def sendto(self,*args):
             error=OSError('native text');error.winerror=winerror;raise error
     monkeypatch.setattr(probe,'_socket',lambda *a,**kw:Socket())
-    assert probe.blocked('8.8.8.8') is (winerror==10013)
+    if winerror==10013:assert probe.blocked('8.8.8.8') is True
+    else:
+        with pytest.raises(probe.DNSVerificationError):probe.blocked('8.8.8.8')
 
 
 def test_reply_is_bound_to_nonce_question_and_response_flags():
