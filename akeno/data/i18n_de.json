@@ -4579,5 +4579,17 @@
  "{n} servers in the catalog": "{n} Server im Katalog",
  "Connect": "Verbinden",
  "Disconnect": "Trennen",
- "Import profile…": "Profil importieren…"
+ "Import profile…": "Profil importieren…",
+ "Permissions": "Berechtigungen",
+ "Installed · always active": "Installiert · immer aktiv",
+ "not detected": "nicht gefunden",
+ "Part of Core · no separate installation": "Teil von Core · keine separate Installation",
+ "Administrator rights once per LAN session or VPN action (Windows asks)": "Administratorrechte einmal pro LAN-Sitzung oder VPN-Aktion (Windows fragt nach)",
+ "Microsoft Defender and Windows Security Center (part of Windows)": "Microsoft Defender und Windows-Sicherheitscenter (Teil von Windows)",
+ "Official WireGuard for Windows (not installed by AKENO)": "Offizielles WireGuard für Windows (wird nicht von AKENO installiert)",
+ "Requires": "Benötigt",
+ "Windows only": "nur Windows",
+ "Your user rights; scans are run by Microsoft Defender itself": "Deine Benutzerrechte; Scans führt Microsoft Defender selbst aus",
+ "detected": "gefunden",
+ "AKENO Core": "AKENO Core"
 }
