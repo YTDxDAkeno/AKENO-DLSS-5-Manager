@@ -47,7 +47,11 @@ angefasst. Der laufende Arbeitsstand steht in `docs/AKENO_320_FINAL_PROGRESS.md`
    Serverbrowser mit „Alle Spiele/Regionen“, Spiel-/Regionsnamen, übersetztem Status und Meldegründen.
 8. **CI:** Netzwerklabore auch auf `claude/**`; gebautes `AKENO.exe --network-helper` wird über das runas-Verb
    geprüft; Upgrade-Pfad von der Live-Version **3.1.1** ergänzt.
-9. **Doku:** Release-Notes 3.2.0 (EN in `docs/RELEASE_NOTES.md`, DE/EN in `docs/release/3.2.0/release-notes.txt`),
+9. **Netzwerk-Helfer (gefunden durch den neuen Paket-Test):** `AKENO.exe --network-helper` mit einer ungültigen
+   Anfrage-ID hing unsichtbar und erhöht für immer (die Ausnahme erreichte den Start-Fehlerdialog, den im versteckten
+   Prozess niemand schließen kann). Jetzt: sofortige Ablehnung mit Exit-Code 2, ohne etwas zu lesen oder zu schreiben;
+   der Helfer wirft nie eine Ausnahme nach außen.
+10. **Doku:** Release-Notes 3.2.0 (EN in `docs/RELEASE_NOTES.md`, DE/EN in `docs/release/3.2.0/release-notes.txt`),
    Fixture-Screenshots neu (inkl. Fixture-VPN-Verbindung mit Dokumentations-IPs).
 
 ## 3. Echte Windows-Testergebnisse
@@ -62,16 +66,17 @@ angefasst. Der laufende Arbeitsstand steht in `docs/AKENO_320_FINAL_PROGRESS.md`
 
 ## 4. CI auf dem finalen Commit
 
-Code-Stand: **`d32a0ccee995a911fef1f9e9f64e879e6552c3f7`**. Spätere Commits ändern nur `docs/`
-(prüfbar mit `git diff --stat d32a0cc HEAD -- . ':!docs'` → leer).
+Code-Stand: **`5cc77fd9eb12ed78a6d0c0ad6aacd9e34713fb71`**. Spätere Commits ändern nur `docs/`
+(prüfbar mit `git diff --stat 5cc77fd HEAD -- . ':!docs'` → leer). Vorgänger `d32a0cc`: vier Workflows grün,
+`build.yml` rot im neuen Paket-Helfer-Test (Ursache und Fix: Abschnitt 2, Punkt 9).
 
 | Workflow | Lauf | Ergebnis |
 |---|---|---|
-| `build.yml` (Linux, Server SQLite/PostgreSQL/Docker, Original-Assets, Windows-Tests, Build, Installer, Portable, Helper über runas, Update-E2E inkl. Upgrades 3.0.0/3.1.0/3.1.1, Rollback, Reparatur) | [40768763138](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768763138) | ausstehend (bisher grün: Linux-Tests, Lizenzserver, Original-Assets) |
-| `network-windows.yml` (`wireguard` 41 Checks, `lan-play` 44 Checks, Komponenten-Bootstrap 11 Checks je Job) | [40768762884](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768762884) | **grün** |
-| `lan-lab.yml` (NAT-Labor: Relay-only-Privatsphäre, Ausfall, Netzwechsel, Widerruf, Lease-Ablauf) | [40768763301](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768763301) | **grün** |
-| `network-local-e2e.yml` (echtes Relay-only-WireGuard mit OpenTTD und äußeren Mitschnitten; verwalteter Exit, Dual-Stack, Kernel-Lease-Ablauf) | [40768762916](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768762916) | **grün** |
-| `components-windows.yml` (echtes Inno-Setup, Full/Core-Installation, signierte Modul-Installation/-Entfernung/-Reparatur, Rollback bei fehlgeschlagener Health-Prüfung, Deinstallation) | [40768763287](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768763287) | **grün** |
+| `build.yml` (Linux, Server SQLite/PostgreSQL/Docker, Original-Assets, Windows-Tests, Build, Installer, Portable, Helper über runas, Update-E2E inkl. Upgrades 3.0.0/3.1.0/3.1.1, Rollback, Reparatur) | [40775941347](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941347) | ausstehend |
+| `network-windows.yml` (`wireguard` 41 Checks, `lan-play` 44 Checks, Komponenten-Bootstrap 11 Checks je Job) | [40775941177](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941177) | ausstehend |
+| `lan-lab.yml` (NAT-Labor: Relay-only-Privatsphäre, Ausfall, Netzwechsel, Widerruf, Lease-Ablauf) | [40775941320](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941320) | ausstehend |
+| `network-local-e2e.yml` (echtes Relay-only-WireGuard mit OpenTTD und äußeren Mitschnitten; verwalteter Exit, Dual-Stack, Kernel-Lease-Ablauf) | [40775941215](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941215) | ausstehend |
+| `components-windows.yml` (echtes Inno-Setup, Full/Core-Installation, signierte Modul-Installation/-Entfernung/-Reparatur, Rollback bei fehlgeschlagener Health-Prüfung, Deinstallation) | [40775941112](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941112) | ausstehend |
 
 ## 5. Lokale Regression
 
