@@ -86,7 +86,25 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
   stale status => Needs recovery; error codes => DE/EN sentences. Own WireGuard profiles + VPN Gate review moved to a
   closed expert section. 35 new German strings.
 
+## DNS observer iterations (wireguard job)
+
+| Commit | Finding | Change |
+|---|---|---|
+| `482ffa4` | positive reply captured; one UDP denial probe without drop record | structural diagnostics (`2f14877`) |
+| `2f14877` | `drop_records: 0`, probe `seen_in_capture: 0` (no leak observed) — Packet Monitor does not record WFP ALE classify drops | `3eb3d19`: read the BFE classify-drop event log (`akeno/network/wfp_events.py`, `FwpmNetEventEnum0`, read-only) for the exact probe tuple; a probe seen on a link = leak, never "denied"; event collection off = fail closed (setting never changed) |
+| `3eb3d19` | positive reply not captured this time (4 unrelated records): `pktmon start` returns before recording | `7343d86`: wait until pktmon reports the private ETL, settle 0.5 s, second positive control after the denial probes, one captured reply per resolver required |
+
+## Other changes since the last table
+
+- `4f864a5` build.yml: packaged `AKENO.exe --network-helper` through the runas verb (read-only status, refusals,
+  no tunnel service/adapter afterwards); report uploaded with the Windows evidence.
+- `a8ca408` merged `codex/akeno-network-staging-20261028` @ `325d35c` (history only: the files were already identical).
+- `23d79e5` LAN privacy row + "IP protection missing" instead of Connected without the lock; browser polish.
+- `92ccc2b` regenerated fixture screenshots incl. a fixture connected-VPN view (documentation IPs).
+- Production read-only check dispatched (run 40765356305) to read the published stable version (proxy blocks it here).
+
 ## Next concrete step
 
-Read `network-windows.yml` run for `acacccc` (lan-play: WFP lock vs. direct attack; wireguard: DNS positive
-control). Full local client run with the drain fixture (Python 3.12 venv at `/opt/akeno-env`, offscreen Qt).
+Read `network-windows.yml` for `7343d86` (wireguard: DNS gate), the production read-only check, and the full
+build.yml on the newest commit; finish the local full client run (`/tmp/claude-0/linux-full2.log`) and the server
+suite; then write `docs/AKENO_320_FINAL_RELEASE_REPORT.md`.
