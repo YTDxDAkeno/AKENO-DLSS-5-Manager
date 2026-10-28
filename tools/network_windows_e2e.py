@@ -353,8 +353,15 @@ if __name__ == '__main__':
         run(p.parse_args())
     except Exception as exc:
         from akeno.network.dns_probe import DNSVerificationError
+        from akeno.network.dns_capture import CaptureError
         from akeno.network.windows import NativeUnavailable
-        detail=str(exc) if isinstance(exc,(DNSVerificationError,NativeUnavailable,AssertionError)) else \
+        detail=str(exc) if isinstance(exc,(DNSVerificationError,CaptureError,NativeUnavailable,AssertionError)) else \
                f'{type(exc).__name__}; winerror={getattr(exc,"winerror",None)}'
         print('::error title=Native VPN test failure::'+detail,flush=True)
+        if isinstance(exc,CaptureError):
+            from akeno.network.lan_windows import _system_tool
+            for command in (['status'],['filter','list']):
+                out=subprocess.run([_system_tool('pktmon.exe'),*command],capture_output=True,text=True,timeout=10)
+                # Disposable CI runner state only; never used in the production observer.
+                print('::notice title=CI Packet Monitor state::'+out.stdout.replace('\n',' ')[:800],flush=True)
         raise

@@ -55,15 +55,17 @@ def _socket(address, source=None, interface=None, tcp=False):
         raise
 
 
-def resolver_responds(address):
+def resolver_responds(address,capture=None):
     packet=question()
     with _socket(address) as s:
         s.connect((address,53))
         s.send(packet)
-        return valid_reply(packet,s.recv(4096))
+        reply=s.recv(4096)
+        if capture is not None:capture.expect_reply(packet,s.getsockname(),(address,53))
+        return valid_reply(packet,reply)
 
 
-def blocked(address, *, source=None, interface=None, tcp=False, port=53, route_check=None):
+def blocked(address, *, source=None, interface=None, tcp=False, port=53, route_check=None,capture=None):
     # Bind/configuration errors happen outside the measured send/connect. Only
     # Windows' explicit network access denial is positive block evidence.
     with _socket(address,source,interface,tcp) as s:
@@ -78,8 +80,11 @@ def blocked(address, *, source=None, interface=None, tcp=False, port=53, route_c
             # describe WSAENETUNREACH alone as a firewall denial.
             if code==10051 and route_check is not None and route_check(address,interface) is False:
                 return 'unroutable'
+            if (code==10060 or isinstance(exc,TimeoutError)) and capture is not None:
+                return capture.defer(s.getsockname(),(address,port),tcp)
             raise DNSVerificationError(f'Native DNS probe has no explicit block: IPv{ipaddress.ip_address(address).version}, '
                 f'{"TCP" if tcp else "UDP"}, port={port}, bound={interface is not None}, winerror={code}.') from None
+        if capture is not None:return capture.defer(s.getsockname(),(address,port),tcp)
         raise DNSVerificationError(f'Native DNS send accepted: IPv{ipaddress.ip_address(address).version}, '
             f'{"TCP" if tcp else "UDP"}, port={port}, bound={interface is not None}.')
 
@@ -131,6 +136,22 @@ def inventory(tunnel_name, dns, run):
 
 
 def verify(tunnel_name,dns,*,run=None,resolve=resolver_responds,deny=None):
+    if sys.platform!='win32':raise DNSVerificationError('DNS leak verification requires native Windows.')
+    if deny is not None or resolve is not resolver_responds:
+        return _verify(tunnel_name,dns,run=run,resolve=resolve,deny=deny)
+    from akeno.network.dns_capture import DNSCapture,CaptureError
+    capture=DNSCapture()
+    try:
+        capture.start()
+        return _verify(tunnel_name,dns,run=run,resolve=lambda address:resolver_responds(address,capture),
+                       deny=None,capture=capture)
+    except CaptureError as exc:
+        raise DNSVerificationError(str(exc)) from exc
+    finally:
+        capture.close()
+
+
+def _verify(tunnel_name,dns,*,run,resolve,deny,capture=None):
     if sys.platform!='win32':
         raise DNSVerificationError('DNS leak verification requires native Windows.')
     if run is None:
@@ -141,12 +162,12 @@ def verify(tunnel_name,dns,*,run=None,resolve=resolver_responds,deny=None):
         def has_route(address,index):
             target=ipaddress.ip_address(address)
             return any(target in ipaddress.ip_network(prefix) for iface,prefix in before['native_routes'] if iface==index)
-        def deny(address,**values):return blocked(address,route_check=has_route,**values)
+        def deny(address,**values):return blocked(address,route_check=has_route,capture=capture,**values)
     if not all(resolve(address) is True for address in before['dns']):
         raise DNSVerificationError('The configured tunnel DNS did not return a valid measured response.')
     candidates={4:('1.1.1.1','8.8.8.8','9.9.9.9'),
                 6:('2606:4700:4700::1111','2001:4860:4860::8888','2620:fe::fe')}
-    probes,unroutable=0,0
+    probes,unroutable,pending=0,0,0
     for family,choices in candidates.items():
         foreign=next(value for value in choices if value not in before['dns'])
         # A DNS send accepted on the full tunnel is not an outside-tunnel leak:
@@ -160,9 +181,15 @@ def verify(tunnel_name,dns,*,run=None,resolve=resolver_responds,deny=None):
             for tcp,port in ((False,53),(True,53),(True,853)):
                 measured=deny(foreign,source=address,interface=index,tcp=tcp,port=port)
                 if measured=='unroutable':unroutable+=1
+                elif measured=='pending':pending+=1
                 elif measured is not True:
                     raise DNSVerificationError('Windows did not explicitly deny a foreign DNS path.')
                 else:probes+=1
+    if pending and capture is None:raise DNSVerificationError('DNS kernel drop evidence is missing.')
+    if capture is not None:
+        measured=capture.finish()
+        if measured!=pending:raise DNSVerificationError('DNS drop evidence does not match its probes.')
+        probes+=measured
     if inventory(tunnel_name,dns,run)!=before:
         raise DNSVerificationError('Network configuration changed during DNS verification.')
     return {'dns_verified':True,'resolver_responses':len(before['dns']),'denied_paths':probes,

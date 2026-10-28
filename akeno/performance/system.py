@@ -11,6 +11,8 @@ import logging
 import os
 import re
 import subprocess
+import sys
+import time
 from dataclasses import dataclass
 
 log = logging.getLogger(__name__)
@@ -185,7 +187,17 @@ def set_priority(pid: int, name: str) -> bool:
 def suspend(pid: int) -> bool:
     import psutil
     try:
-        psutil.Process(pid).suspend()
+        process=psutil.Process(pid)
+        process.suspend()
+        if sys.platform!='win32':
+            # SIGSTOP delivery is asynchronous. Report success only after the
+            # kernel confirms the state, including under a loaded test runner.
+            deadline=time.monotonic()+1
+            while process.status()!=psutil.STATUS_STOPPED:
+                if time.monotonic()>=deadline:
+                    process.resume()
+                    return False
+                time.sleep(.002)
         return True
     except (psutil.Error, OSError):
         return False
