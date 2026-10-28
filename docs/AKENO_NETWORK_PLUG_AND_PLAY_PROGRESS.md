@@ -2,6 +2,19 @@
 
 This is unfinished development. No production deployment, public listener, purchase, merge, tag or release is authorized.
 
+## Technical completion continuation
+
+Remote tip rechecked before work: `d926ac0a78d14642fd3051639eb3b4c3f8736be3`.
+The requested Windows run 40724746824 actually tested `4190496`, not the current cloud tip.
+Its public job pages confirm the LAN failure; GitHub API requests (including existing GH_TOKEN
+authentication) are still proxy-denied. Public detail-log links return 404. No credential values
+were printed. The public job/annotation pages are usable for subsequent CI diagnosis.
+
+First change: purpose-neutral native Windows diagnostics preserve cmdlet, typed error ID and
+HRESULT, never raw native output or script arguments. The old catch-all message concealed the
+failing operation, including possible cleanup failures. Firewall policy is unchanged at this
+checkpoint. Windows reexecution must identify the actual failing cmdlet before a root-cause claim.
+
 ## Cloud continuation — 2026-10-28
 
 Active continuation branch: `codex/akeno-network-cloud-20261028`, based on the existing

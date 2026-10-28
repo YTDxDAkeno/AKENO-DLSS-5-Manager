@@ -322,6 +322,13 @@ def run(args):
     try:
         ps('Set-NetFirewallProfile -Profile Domain,Private,Public -Enabled True')
         _run(args)
+    except Exception as exc:
+        # The production wrapper emits only safe cmdlet/error-code metadata. Keep it visible
+        # as an annotation even when GitHub's detailed logs require additional access.
+        from akeno.network.windows import NativeUnavailable
+        if isinstance(exc,NativeUnavailable):
+            print('::error title=Windows network operation::'+str(exc),flush=True)
+        raise
     finally:
         try:
             if args.work and args.work.exists():

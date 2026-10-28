@@ -16,6 +16,7 @@ from __future__ import annotations
 import base64
 import ctypes
 import ipaddress
+import json
 import os
 import re
 import socket
@@ -97,11 +98,31 @@ def _system_tool(*parts):
 def powershell(script: str, timeout=60) -> str:
     """Runs a fixed script built only from validated values, read from stdin. Deliberately no -EncodedCommand or
     execution-policy override: those are what malware uses, and security products rightly flag them."""
+    # Never return native exception text or script lines: callers can handle keys/profile data elsewhere.
+    # Cmdlet, typed error ID and HRESULT identify a failing Windows operation without its arguments.
+    wrapped = ("$ErrorActionPreference = 'Stop'\ntry { & {\n" + script + "\n} } catch {\n"
+               "$d=@{command=$_.InvocationInfo.MyCommand.Name;id=$_.FullyQualifiedErrorId;"
+               "hresult=$_.Exception.HResult}; "
+               "[Console]::Error.WriteLine('AKENO_NATIVE_ERROR:'+($d|ConvertTo-Json -Compress)); exit 1\n}\n\n")
     p = subprocess.run([_system_tool('WindowsPowerShell', 'v1.0', 'powershell.exe'), '-NoProfile', '-NonInteractive',
-                        '-Command', '-'], input="$ErrorActionPreference = 'Stop'\n" + script + '\n', capture_output=True, text=True, timeout=timeout,
+                        '-Command', '-'], input=wrapped, capture_output=True, text=True, timeout=timeout,
                        creationflags=0x08000000)
     if p.returncode:
-        raise NativeUnavailable('Windows refused the firewall configuration for LAN Play.')
+        detail = f'exit={p.returncode}'
+        for line in (p.stderr or '').splitlines():
+            if line.startswith('AKENO_NATIVE_ERROR:'):
+                try:
+                    fields=json.loads(line.partition(':')[2])
+                    command,ident=fields['command'],fields['id']
+                    if not re.fullmatch(r'[A-Za-z]+-[A-Za-z]+',command or '') or \
+                            not re.fullmatch(r'[A-Za-z0-9_,. :+-]{1,256}',ident or '') or \
+                            type(fields['hresult']) is not int:
+                        break
+                    detail=f"cmdlet={command}; id={ident}; hresult={fields['hresult']}"
+                except (ValueError,KeyError,TypeError):
+                    pass
+                break
+        raise NativeUnavailable(f'Windows network operation failed ({detail}).')
     return p.stdout
 
 
