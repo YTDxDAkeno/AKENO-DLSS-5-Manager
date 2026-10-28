@@ -167,10 +167,14 @@ def _run(args):
                                f"-Action Block -Protocol UDP -LocalPort 49999 -RemoteAddress '{net}' | Remove-NetFirewallRule")
                         except RuntimeError:
                             print(f'::error title=Rejected firewall CIDR::Windows rejected {net}',flush=True)
+            else:
+                print('::error title=LAN session exception type::'+type(exc).__name__,flush=True)
     worker = threading.Thread(target=runner, daemon=True)
     try:
         worker.start()
-        active = wait(lambda: status.load().get('state') == 'active', 60)
+        active = wait(lambda: status.load().get('state') == 'active', 120)
+        if not active:
+            print('::error title=LAN startup stage::'+str(status.load().get('phase','no phase')),flush=True)
         check(active and not errors, 'LAN session active on the official WireGuard tunnel service', errors[:1])
         check(wait(lambda: coordinator.endpoint(a_pub), 20), 'Windows endpoint proven by a real WireGuardNT handshake',
               coordinator.endpoint(a_pub))

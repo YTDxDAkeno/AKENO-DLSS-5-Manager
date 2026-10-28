@@ -331,19 +331,25 @@ class LanSession:
             listen_port = reservation.getsockname()[1]
         self.journal.save({'phase': 'lan_starting', 'room': self.room, 'name': self.name, 'public_key': own['public_key']})
         probe = None
+        def phase(value):
+            self.status.save({'state':'starting','phase':value,'room':self.room,'updated':self.clock()})
         try:
+            phase('relay_firewall')
             firewall.relay_only(listen_port, (relay_ip, coord['port']))
+            phase('native_tunnel')
             self.native.start(self.name, interface_profile(own['private_key'], own['virtual_ip'],
                                                            dict(coord, host=relay_ip), listen_port=listen_port))
             actual_port = self.native._call('wg.exe', 'show', self.name, 'listen-port').stdout.strip()
             if actual_port != str(listen_port):
                 raise LanError('WireGuard did not retain the protected LAN listen port.')
+            phase('game_firewall')
             firewall.apply()
             self.journal.save({'phase': 'lan_active', 'room': self.room, 'name': self.name,
                                'public_key': own['public_key']})
             controller = PathController(WindowsLanBackend(self.native, self.name), (relay_ip, coord['port']), subnet,
                                         clock=self.clock)
             controller.apply(state['peers'])
+            phase('latency_probe')
             probe = LatencyProbe(own['virtual_ip'])
             last_refresh, error = self.clock(), None
             handled, allowed = set(), []
