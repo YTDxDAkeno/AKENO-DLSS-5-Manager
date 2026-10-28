@@ -386,7 +386,10 @@ def udp_echo(address: str, count=64, size=1000, timeout=3.0) -> int:
         ok = 0
         for _ in range(count):
             payload = os.urandom(size)
-            s.sendto(payload, (address, ECHO_PORT))
+            try:
+                s.sendto(payload, (address, ECHO_PORT))
+            except OSError:
+                continue                     # no route or no peer for it: nothing was delivered
             try:
                 while True:
                     data, _ = s.recvfrom(65535)
