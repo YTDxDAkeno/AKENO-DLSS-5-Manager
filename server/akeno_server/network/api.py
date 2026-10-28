@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from akeno_server.api.deps import Caller, current, limit, not_in_maintenance
 from akeno_server.clock import utcnow
+from akeno_server.config import get_config
 from akeno_server.db import get_db
 from akeno_server.errors import ApiError, forbidden, unavailable
 from akeno_server.licensing import service as licenses, signing
@@ -97,22 +98,45 @@ def list_members(room:str,device_id:uuid.UUID,request:Request,caller:Caller=Depe
     return {'members':members(actor,room,s,db),'lease_seconds':s.PEER_LEASE,'transport':'not_implemented'}
 
 
+def coordinator(request):
+    return getattr(request.app.state,'lan_coordinator',None)
+
+
+def revoke(request,keys):
+    """Data-plane effect of a removal, leave or deletion: the relay stops at once, not at the next lease check."""
+    c=coordinator(request)
+    for key in keys:
+        if c is not None:c.revoke(key)
+
+
+def credential(room,peer,lease,c):
+    """A short-lived signed binding of one member: room, account, device, WireGuard key, virtual address and the
+    endpoint the coordinator proved for that key (or None). Clients configure peers only from these."""
+    now=int(utcnow().timestamp())
+    endpoint=c.endpoint(peer['public_key']) if c is not None else None
+    payload={'iss':'akeno-lan','aud':'akeno-lan-peer','sub':peer['actor'],'device_id':peer['device_id'],'room_id':room,
+             'public_key':peer['public_key'],'virtual_ip':peer['virtual_ip'],'iat':now,'exp':now+lease,
+             'nonce':secrets.token_urlsafe(16),'endpoint':list(endpoint) if endpoint else None}
+    try:
+        kid,key=signing.store().active()
+        return signing.sign(key,kid,'akeno-lan-peer',payload),payload
+    except signing.SigningUnavailable:
+        raise unavailable('peer_signing_unavailable','Peer credentials cannot be issued.') from None
+
+
 @router.post('/rooms/{room}/heartbeat')
 def heartbeat(room:str,body:DeviceBody,request:Request,caller:Caller=Depends(current),db:Session=Depends(get_db)):
     actor,device,s=bound(request,room,body.device_id,caller,db)
     operation(lambda:s.heartbeat(actor,room))
+    c=coordinator(request)
     peer=next(p for p in operation(lambda:s.members(actor,room)) if p['actor']==actor)
-    now=int(utcnow().timestamp())
-    payload={'iss':'akeno-lan','aud':'akeno-lan-peer','sub':actor,'device_id':device,'room_id':room,
-             'public_key':peer['public_key'],'virtual_ip':peer['virtual_ip'],'iat':now,'exp':now+s.PEER_LEASE,
-             'nonce':secrets.token_urlsafe(16)}
-    try:
-        kid,key=signing.store().active()
-        ticket=signing.sign(key,kid,'akeno-lan-peer',payload)
-    except signing.SigningUnavailable:
-        raise unavailable('peer_signing_unavailable','Peer credentials cannot be issued.') from None
-    return {'credential':ticket,'expires_at':payload['exp'],'members':members(actor,room,s,db),
-            'transport':'not_implemented'}
+    ticket,payload=credential(room,peer,s.PEER_LEASE,c)
+    valid=members(actor,room,s,db)
+    host=get_config().network_coordinator_host
+    info={'public_key':c.public_key,'host':host,'port':c.address[1]} if c is not None and host else None
+    return {'credential':ticket,'expires_at':payload['exp'],'members':valid,
+            'peers':[{'credential':credential(room,p,s.PEER_LEASE,c)[0]} for p in valid if p['actor']!=actor],
+            'coordinator':info,'transport':'wireguard' if info else 'not_implemented'}
 
 
 @router.post('/rooms/{room}/invite')
@@ -124,16 +148,22 @@ def invite(room:str,body:DeviceBody,request:Request,caller:Caller=Depends(curren
 @router.delete('/rooms/{room}/members/{member}',status_code=204)
 def remove(room:str,member:uuid.UUID,device_id:uuid.UUID,request:Request,caller:Caller=Depends(current),db:Session=Depends(get_db)):
     actor,device,s=bound(request,room,device_id,caller,db)
+    keys=[p['public_key'] for p in operation(lambda:s.members(actor,room)) if p['actor']==str(member)]
     operation(lambda:s.remove(actor,room,str(member)))
+    revoke(request,keys)
 
 
 @router.post('/rooms/{room}/leave',status_code=204)
 def leave(room:str,body:DeviceBody,request:Request,caller:Caller=Depends(current),db:Session=Depends(get_db)):
     actor,device,s=bound(request,room,body.device_id,caller,db)
+    keys=[p['public_key'] for p in operation(lambda:s.members(actor,room)) if p['actor']==actor]
     operation(lambda:s.leave(actor,room))
+    revoke(request,keys)
 
 
 @router.delete('/rooms/{room}',status_code=204)
 def delete(room:str,device_id:uuid.UUID,request:Request,caller:Caller=Depends(current),db:Session=Depends(get_db)):
     actor,device,s=bound(request,room,device_id,caller,db)
+    keys=operation(lambda:s.keys(room))
     operation(lambda:s.delete(actor,room))
+    revoke(request,keys)

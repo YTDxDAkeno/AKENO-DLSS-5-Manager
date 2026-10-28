@@ -171,6 +171,22 @@ class RoomStore:
                      'transport':'not_implemented'}
                     for r in db.execute('SELECT * FROM peers WHERE room=? ORDER BY host',(ident,))]
 
+    def grant_for(self,public_key):
+        """The live membership of a WireGuard key for the coordinator: room, actor, device and lease end (or None).
+        A key active in several rooms counts for the one it renewed most recently."""
+        with self._tx() as db:
+            row=db.execute('SELECT peers.room,peers.actor,peers.device,peers.seen FROM peers JOIN rooms ON rooms.id=peers.room '
+                           'WHERE peers.public_key=? AND rooms.expiry>? ORDER BY peers.seen DESC LIMIT 1',
+                           (public_key,self.clock())).fetchone()
+        if row is None or row['seen']+self.PEER_LEASE<=self.clock():
+            return None
+        return {'room':row['room'],'actor':row['actor'],'device':row['device'],'expires':row['seen']+self.PEER_LEASE}
+
+    def keys(self,ident):
+        """Public keys of every member of a room (for immediate data-plane revocation)."""
+        with self._tx() as db:
+            return [r[0] for r in db.execute('SELECT public_key FROM peers WHERE room=?',(ident,))]
+
     def require_device(self,actor,ident,device_id):
         with self._tx() as db:
             peer=self._member(db,self._room(db,ident),actor)

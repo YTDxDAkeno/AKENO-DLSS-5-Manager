@@ -35,6 +35,11 @@ class ServerConfig(BaseSettings):
     role: Literal["all", "api", "web", "admin"] = "all"
     network_enabled: bool = False  # Explicit opt-in; existing production installs expose no network API.
     network_database_path: Path = Path("/data/network.sqlite3")
+    # LAN Play data plane (UDP). Empty bind: no coordinator, rooms stay control-plane only. The host is what members'
+    # WireGuard uses as the coordinator/relay endpoint (public name or address of this server).
+    network_coordinator_bind: str = ""
+    network_coordinator_host: str = ""
+    network_coordinator_key_path: Path = Path("/data/network-coordinator.key")
 
     database_url: str = "sqlite:///./akeno-dev.sqlite3"
     public_url: str = ""                # e.g. https://licenses.your-domain (links in e-mails); empty: from the request

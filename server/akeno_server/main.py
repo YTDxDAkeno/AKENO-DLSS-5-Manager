@@ -5,6 +5,7 @@ account website) and ``admin`` (the admin website), so the admin site can get it
 
 from __future__ import annotations
 
+import contextlib
 import logging
 
 from fastapi import FastAPI, Request
@@ -32,6 +33,18 @@ SECURITY_HEADERS = {
 
 def create_app() -> FastAPI:
     cfg = get_config()
+
+    @contextlib.asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # The LAN coordinator (UDP) runs only while the app runs; nothing listens unless it is configured.
+        coordinator = getattr(app.state, "lan_coordinator", None)
+        if coordinator is not None:
+            coordinator.start()
+        try:
+            yield
+        finally:
+            if coordinator is not None:
+                coordinator.close()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     LIMITER.enabled = cfg.rate_limit_enabled
     docs = cfg.serves_api
@@ -39,7 +52,8 @@ def create_app() -> FastAPI:
                   description="Accounts, activation codes, licenses, devices and signed offline licenses for the "
                               "AKENO Gaming Suite. The server grants one generic entitlement, `akeno-suite`.",
                   docs_url=f"/api/{API_VERSION}/docs" if docs else None,
-                  redoc_url=None, openapi_url=f"/api/{API_VERSION}/openapi.json" if docs else None)
+                  redoc_url=None, openapi_url=f"/api/{API_VERSION}/openapi.json" if docs else None,
+                  lifespan=lifespan)
 
     @app.exception_handler(ApiError)
     async def _api_error(request: Request, exc: ApiError):
@@ -96,6 +110,8 @@ def create_app() -> FastAPI:
             from akeno_server.network.rooms import RoomStore
             from akeno_server.clock import utcnow
             app.state.lan_rooms = RoomStore(cfg.network_database_path, clock=lambda: utcnow().timestamp())
+            from akeno_server.network.service import build as build_coordinator
+            app.state.lan_coordinator = build_coordinator(cfg, app.state.lan_rooms)
             app.include_router(network_router)
     else:
         app.include_router(system.router, prefix=f"/api/{API_VERSION}")     # health checks on every service
