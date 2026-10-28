@@ -11,8 +11,10 @@ CI links in `docs/AKENO_NETWORK_PROGRESS.md`.
 | File | Content |
 |---|---|
 | `akeno-network-empty-{en,de}-fixture.png` | No room yet: create or join |
-| `akeno-network-session-{en,de}-fixture.png` | Active LAN session: one direct (P2P) and one relayed member |
-| `akeno-network-vpn-{en,de}-fixture.png` | VPN tab: one fixture own profile; the 8 target countries without AKENO servers (real state) |
+| `akeno-network-session-{en,de}-fixture.png` | Active LAN session: two members, both via the relay (relay-only), IP privacy "Protected: relay only" |
+| `akeno-network-vpn-{en,de}-fixture.png` | VPN tab: the 8 target countries, none available (the real state today: no AKENO exit runs) |
+| `akeno-network-vpn-connected-{en,de}-fixture.png` | One-click AKENO VPN with a **fixture** catalog (one German exit) and a **fixture** verified session using documentation addresses `203.0.113.24` / `2001:db8::24`; no real exit exists |
 | `akeno-network-diagnostics-{en,de}-fixture.png` | Diagnostics results (fixture rows) |
 
 Regenerated for 3.2.0 (redesign): dashboard, tabs, steps, owner view.
+Regenerated on the Claude continuation branch: one-click AKENO VPN card, relay-only privacy row, browser filters.

@@ -167,10 +167,8 @@ class AutomaticVPN(Card):
             'time yet. A VPN does not make you anonymous: the VPN operator and the sites you sign in to still know '
             'who you are.')))
         self.built = sys.platform == 'win32' and bool(getattr(sys, 'frozen', False))
-        self.stop_button.setEnabled(self.built)
-        self.recover_button.setEnabled(self.built)
         self.refresh_button.setEnabled(sys.platform == 'win32')
-        self.connect_button.setEnabled(False)
+        self._update_buttons()
         self.timer = QTimer(self)
         self.timer.setInterval(2000)
         self.timer.timeout.connect(self.poll)
@@ -324,3 +322,5 @@ class AutomaticVPN(Card):
         busy = getattr(self, 'active', False)
         self.connect_button.setEnabled(self.built and not busy and bool(self.selected) and
                                        self.available(self.selected))
+        self.stop_button.setEnabled(self.built and busy)
+        self.recover_button.setEnabled(self.built)

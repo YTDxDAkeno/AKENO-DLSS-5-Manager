@@ -3,7 +3,8 @@
     python tools/network_screenshots.py OUT_DIR
 
 Writes akeno-network-*-{en,de}-fixture.png: the empty page, an active LAN session with two relayed
-member, and diagnostics. The member list, paths and pings are synthetic; real connection evidence is in the CI runs
+members, the VPN tab (no AKENO exit available, as today), the one-click VPN in a FIXTURE connected state with
+documentation addresses, and diagnostics. The member list, paths and pings are synthetic; real connection evidence is in the CI runs
 listed in docs/AKENO_NETWORK_PROGRESS.md.
 """
 from __future__ import annotations
@@ -79,6 +80,21 @@ def main(out: Path):
         page.show_tab(1)
         settle()
         win.grab().save(str(out / f'akeno-network-vpn-{language}-fixture.png'))
+        # One-click AKENO VPN with a FIXTURE catalog (one German exit) and a FIXTURE verified session that uses
+        # documentation addresses (RFC 5737 / RFC 3849). No real exit server exists today.
+        vpn = page.automatic_vpn
+        page.session = {'state': 'stopped'}         # LAN Play and the VPN never run at the same time
+        page.show_room()
+        vpn.built = True
+        vpn.client = lambda: type('Fixture', (), {'catalog': staticmethod(lambda: {
+            'countries': ['DE'], 'servers': [{'id': 'fe' * 16, 'country': 'DE', 'capacity': 50, 'in_use': 3}]})})()
+        vpn.refresh()
+        vpn.show_status({'state': 'connected', 'updated': now, 'country': 'DE', 'exit_ipv4': '203.0.113.24',
+                         'exit_ipv6': '2001:db8::24', 'routing_verified': True, 'dns_verified': True,
+                         'connected_since': now - 754}, now=now)
+        settle()
+        win.grab().save(str(out / f'akeno-network-vpn-connected-{language}-fixture.png'))
+        vpn.built = False
         page.show_tab(2)
         clear_layout(page.diag_box)
         for state, title, detail in (('ok', 'Signed in on this PC', 'This PC is registered with your AKENO account.'),
