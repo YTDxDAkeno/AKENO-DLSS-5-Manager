@@ -138,8 +138,13 @@ def _run(args):
     publish()
     routes_before = ps('Get-NetRoute | Select-Object -ExpandProperty DestinationPrefix | Sort-Object | Out-String')
 
+    from akeno.licensing.storage import SecureStore
+    allow_store = SecureStore(work / 'lan-allow')
+
     def session(stop):
-        return LanSession(ROOM, FileControl(control_file), native, journal, status, stop.is_set)
+        # The same "allow this game" channel the GUI uses (akeno.network.helper.allow_game -> lan-allow store).
+        return LanSession(ROOM, FileControl(control_file), native, journal, status, stop.is_set,
+                          allow_request=allow_store.load)
 
     # -- 1. LAN Play refuses to run without Windows Defender Firewall --------------------------------------------
     original = ps('(Get-NetFirewallProfile -Name Public).Enabled')
@@ -274,7 +279,10 @@ def _run(args):
         threading.Thread(target=serve, args=(other_port,), daemon=True).start()
         before = probe(member.udp_packet(B_IP, A_IP, 41015, 3979, b'hello'), lambda i: i['sport'] == 3979)
         check(not before, 'game port is blocked before the user allows its reviewed profile')
-        LanFirewall(name, '10.203.9.0/24').allow_program(sys.executable, 'openttd')
+        import uuid
+        allow_store.save({'room': ROOM, 'program': sys.executable, 'game_id': 'openttd', 'id': uuid.uuid4().hex})
+        check(wait(lambda: Path(sys.executable).name in (status.load().get('allowed') or []), 20),
+              'the running session applied the allow request from the GUI channel', status.load().get('error'))
         after = probe(member.udp_packet(B_IP, A_IP, 41015, 3979, b'hello'),
                       lambda i: i['sport'] == 3979 and i['body'] == b'GAMEhello')
         check(after, 'after the user allows the game program, room members can reach its port')

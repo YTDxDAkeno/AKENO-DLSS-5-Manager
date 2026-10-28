@@ -60,11 +60,15 @@ def test_unreviewed_game_never_gets_all_port_permissions(tmp_path):
     f.allow_program(str(exe),'openttd')
     game_rules=[line for script in commands for line in script.split('; ') if ' game ' in line]
     assert len(game_rules)==2 and all('-LocalPort 3979' in line for line in game_rules)
-    assert any('default deny 2 TCP' in script and "-LocalPort '1-3978','3980-65535'" in script for script in commands)
-    assert any('default deny 2 UDP' in script and "'3980-51998','52000-65535'" in script for script in commands)
-    created=next(i for i,s in enumerate(commands) if 'New-NetFirewallRule' in s and 'default deny 2' in s)
-    removed=next(i for i,s in enumerate(commands) if 'Remove-NetFirewallRule' in s and 'default deny 1' in s)
-    assert created<removed
+    label=f'default deny 2.{f._instance}'
+    assert any(f'{label} TCP' in script and "-LocalPort '1-3978','3980-65535'" in script for script in commands)
+    assert any(f'{label} UDP' in script and "'3980-51998','52000-65535'" in script for script in commands)
+    created=next(i for i,s in enumerate(commands) if 'New-NetFirewallRule' in s and label in s)
+    # Every other default-deny set of this tunnel goes after the new one exists, whichever object created it.
+    removed=[i for i,s in enumerate(commands) if 'Remove-NetFirewallRule' in s and 'default deny' in s]
+    assert removed and created<removed[-1]
+    assert f"-notlike 'AKENO LAN Play {NAME} {label} *'" in commands[removed[-1]]
+    assert f"-like 'AKENO LAN Play {NAME} default deny *'" in commands[removed[-1]]
 
 
 class Store:

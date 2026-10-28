@@ -136,11 +136,23 @@ class DNSCapture:
         stats={}
         observed=list(packets(all_file.read_bytes(),stats));dropped={flow for flow,_ in packets(drops_file.read_bytes())}
         if not self.positive:raise CaptureError('DNS capture lacks a positive control.')
+        from akeno.network.dns_probe import valid_reply
         for query,source,target in self.positive:
-            flow=(target[0],target[1],source[0],source[1],17)
-            from akeno.network.dns_probe import valid_reply
-            if not any(item==flow and valid_reply(query,payload) for item,payload in observed):
-                raise CaptureError(f'The actual positive DNS reply was not captured (capture metadata={stats}; parsed={len(observed)}).')
+            # A connected UDP socket may report an unspecified local address on Windows; the reply is then bound
+            # by the resolver address, both ports and the random transaction id/question it must echo.
+            any_local=ipaddress.ip_address(source[0]).is_unspecified
+            def matches(item):
+                return (item[0],item[1],item[3],item[4])==(target[0],target[1],source[1],17) and \
+                    (any_local or item[2]==source[0])
+            if not any(matches(item) and valid_reply(query,payload) for item,payload in observed):
+                # Structural metadata only: no addresses, names or payload bytes leave this function.
+                shape={'from_resolver':sum(1 for item,_ in observed if item[:2]==(target[0],target[1])),
+                       'to_probe_port':sum(1 for item,_ in observed if item[3]==source[1]),
+                       'valid_reply_payload':sum(1 for _,payload in observed if valid_reply(query,payload)),
+                       'query_payload':sum(1 for _,payload in observed if payload[:2]==query[:2]),
+                       'unspecified_local':any_local}
+                raise CaptureError(f'The actual positive DNS reply was not captured (capture metadata={stats}; '
+                                   f'parsed={len(observed)}; shape={shape}).')
         if any(flow not in dropped for flow in self.pending):
             raise CaptureError('No kernel drop record proves an asynchronous DNS denial.')
         return len(self.pending)

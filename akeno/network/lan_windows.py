@@ -150,6 +150,7 @@ class LanFirewall:
         self.name, self.subnet, self.run = name, str(net), run
         self._ports = {'TCP': set(), 'UDP': {PROBE_PORT}}
         self._policy_version = 0
+        self._instance = os.urandom(4).hex()
 
     def require_enabled(self):
         enabled = self.run('(Get-NetFirewallProfile -Name Domain,Private,Public).Enabled').split()
@@ -210,9 +211,8 @@ class LanFirewall:
         Replacement policy is installed before the previous policy is removed, so expanding the reviewed game-port
         set never briefly exposes all ports. Explicit Windows-service block rules remain authoritative.
         """
-        previous = self._policy_version
         self._policy_version += 1
-        label = f'{GROUP} {self.name} default deny {self._policy_version}'
+        label = f'{GROUP} {self.name} default deny {self._policy_version}.{self._instance}'
         commands = []
         for protocol, allowed in self._ports.items():
             excluded = []
@@ -226,9 +226,11 @@ class LanFirewall:
                             f"-Direction Inbound -Action Block -InterfaceAlias '{self.name}' -Protocol {protocol} "
                             f"-LocalPort {values} -Profile Any | Out-Null")
         self.run('; '.join(commands))
-        if previous:
-            self.run(f"Get-NetFirewallRule -Group '{GROUP}' | Where-Object DisplayName "
-                     f"-like '{GROUP} {self.name} default deny {previous} *' | Remove-NetFirewallRule")
+        # Remove every older default-deny set of this tunnel (not only the previous version of this object): a
+        # second LanFirewall for the same tunnel must never leave an older, stricter set blocking an allowed port.
+        self.run(f"Get-NetFirewallRule -Group '{GROUP}' | Where-Object {{ $_.DisplayName -like "
+                 f"'{GROUP} {self.name} default deny *' -and $_.DisplayName -notlike '{label} *' }} | "
+                 "Remove-NetFirewallRule")
 
     def allow_program(self, program: str, game_id: str):
         from akeno.network.games import profile

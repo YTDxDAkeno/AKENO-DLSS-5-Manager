@@ -84,3 +84,20 @@ def test_bare_ip_records_of_layer3_adapters_are_parsed_only_with_a_valid_ip_head
     stats={}
     assert list(packets(capture(flow,query,framing=b'\0'*12+b'\x81\x00'),stats))==[]
     assert stats['ethertypes']==['8100']
+
+
+def test_reply_to_a_socket_with_unspecified_local_address_is_bound_by_ports_and_transaction(tmp_path):
+    query=question();reply=query[:2]+b'\x81\x80'+query[4:]
+    monitor=DNSCapture.__new__(DNSCapture)
+    monitor.directory=tmp_path;monitor.etl=tmp_path/'capture.etl';monitor._stop=lambda:None
+    monitor._call=lambda *args:None;monitor.pending=[]
+    monitor.positive=[(query,('0.0.0.0',43001),('10.203.78.1',53))]
+    (tmp_path/'drops.pcapng').write_bytes(capture(('10.0.0.9',1,'10.0.0.8',2,17),b'x'*12))
+    for flow,payload,ok in [(('10.203.78.1',53,'10.203.78.2',43001,17),reply,True),
+                            (('10.203.78.1',53,'10.203.78.2',43002,17),reply,False),
+                            (('10.203.78.9',53,'10.203.78.2',43001,17),reply,False),
+                            (('10.203.78.1',53,'10.203.78.2',43001,17),query,False)]:
+        (tmp_path/'all.pcapng').write_bytes(capture(flow,payload,framing=b''))
+        if ok:assert monitor.finish()==0
+        else:
+            with pytest.raises(CaptureError,match='shape'):monitor.finish()
