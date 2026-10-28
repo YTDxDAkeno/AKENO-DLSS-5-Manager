@@ -97,8 +97,68 @@ ausstehend — wird mit Lauf-Links für `build.yml`, `network-windows.yml`, `lan
   „Prüfung unvollständig“ ab (fail closed). Da ohnehin kein Ausgangsserver existiert, blockiert D1 die Auslieferung
   von 3.2.0 an Freunde nicht, wohl aber jede spätere VPN-Aktivierung.
 
-## 7. Installations- und Updateanleitung (ausstehend: Artefakt-Links)
+## 7. Installations- und Updateanleitung
 
-## 8. Offline-Signierung und Freigabeschritte (ausstehend)
+**Neuinstallation (Freunde ohne AKENO):** `AKENO-Gaming-Suite-3.2.0-Setup-x64.exe` ausführen (keine
+Administratorrechte nötig). Typ „Vollständig“, „Core (ohne Security Center)“ oder „Benutzerdefiniert“. Mit Norton:
+„Core“ wählen; meldet Norton den Installer oder `AKENO.exe` selbst, hilft nur Code-Signing bzw. eine
+False-Positive-Meldung an Norton (keine Umgehung, keine Ausschlüsse durch AKENO).
 
-## 9. Checkliste für den Eigentümer (ausstehend)
+**Update bestehender Installationen (3.0.0, 3.1.0, 3.1.1):** KONTO → Updates → „Nach Updates suchen“ → 3.2.0 →
+„Jetzt installieren“. Konto, Lizenz, Einstellungen, Desktop, Modulauswahl und Daten bleiben; LAN Play und VPN bleiben
+aus; es wird kein Netzwerkadapter und kein WireGuard installiert. Rückweg: KONTO → Updates → „Zurück zu …“.
+
+**AKENO Network einschalten (freiwillig):** ONLINE → AKENO Network → LAN Play bzw. VPN einschalten →
+„Netzwerkkomponenten installieren oder reparieren…“ (offizielles WireGuard, Signaturprüfung, ein UAC-Dialog) →
+Raum erstellen/Serverbrowser → „LAN-Sitzung starten“ (ein UAC-Dialog) → „Spiel freigeben“.
+
+**Voraussetzung auf dem Server:** LAN Play braucht den freigeschalteten AKENO-LAN-Dienst (Koordinator/Relay). Bis
+zur Freigabe zeigt die App „LAN Play ist auf dem AKENO-Server noch nicht aktiv“ und erstellt nichts.
+
+## 8. Offline-Signierung und Freigabeschritte (vorhandene Werkzeuge)
+
+Es gilt das Verfahren von 3.1.0 (`docs/release/3.1.0/VEROEFFENTLICHUNG.md`) mit diesen Abweichungen; die genauen
+Werte des freigegebenen Laufs stehen in `docs/release/3.2.0/` (Release-Manager-Werte werden aus dem grünen Lauf
+übernommen):
+
+1. Nur Dateien eines `build.yml`-Laufs verwenden, in dem **alle** Jobs grün sind (inkl. „Windows update end to end“
+   mit den Upgrades von 3.0.0, 3.1.0 **und 3.1.1**). Artefakt `AKENO-Gaming-Suite-windows-x64` herunterladen,
+   `SHA256SUMS.txt` vergleichen.
+2. `python tools/release_v2.py describe AKENO-Gaming-Suite-3.2.0-portable-x64.zip AKENO-Gaming-Suite-3.2.0-Setup-x64.exe`
+   → Werte müssen `docs/release/3.2.0/release-manager-values.json` entsprechen.
+3. Admin-Panel: **neues** Release 3.2.0, Kanal stable, `windows-x64`, `install_mode` `portable-directory-swap`,
+   `minimum_supported_version` leer, `unattended_install_allowed` nein, Notizen = `docs/release/3.2.0/release-notes.txt`,
+   **Sequenz 4** (Live: 3.1.1 = Sequenz 3), Gültigkeit ≤ 30 Tage.
+4. `signed_payload` unverändert speichern und **offline** mit dem bestehenden Schlüssel `d6139235b220a4aa` signieren
+   (privater Schlüssel bleibt im Tresor; nie GitHub, CI, VPS, Chat).
+5. Vor der Freischaltung prüfen:
+   `python tools/release_v2.py verify --payload signed_payload-3.2.0.txt --signature <Wert> --expect docs/release/3.2.0/release-manager-values.json --installed 3.1.1 --previous-sequence 3`
+   (zusätzlich `--zip … --exe …` mit den echten Dateien). Nur bei ausschließlich `[OK]` weiter.
+6. Veröffentlichen im Admin-Panel → Produktions-Lesecheck (`production-check.yml`) ausführen; erwartet: 3.2.0 live,
+   3.0.0/3.1.0/3.1.1 unverändert, Downloads signaturgleich.
+7. Achtung: 3.1.1 läuft am **25.11.2026** ab — 3.2.0 vorher veröffentlichen oder 3.1.1 mit neuer Sequenz neu ausstellen.
+
+**Nicht verwenden:** den Job „Publish to the public release repository“ und keinen `v3.2.0`-Tag pushen (Schema 1).
+
+## 9. Checkliste für den Eigentümer
+
+### Auf deinem Windows-PC (vor der Freigabe)
+- [ ] Artefakt des grünen Laufs installieren (Core und Vollständig je einmal), App startet, alle Seiten öffnen.
+- [ ] 125 % und 150 % Windows-Skalierung: AKENO Network ohne abgeschnittene Elemente.
+- [ ] Update von deinem 3.1.1 über KONTO → Updates (nach Signatur), Lizenz/Konto/Desktop erhalten, Rückweg testen.
+- [ ] AKENO Network: Modul einschalten → Komponenten installieren (UAC **ablehnen** einmal: es darf nichts passieren;
+      dann zustimmen) → Diagnose grün.
+- [ ] Mit einem Freund hinter einem anderen Router (nachdem der LAN-Dienst freigegeben ist): Raum, Einladung,
+      Session, OpenTTD/Factorio über virtuelle IP; prüfen, dass im Spiel nur `10.203.x.x`-Adressen sichtbar sind.
+- [ ] Session per Task-Manager beenden → AKENO neu starten → „Wiederherstellen“ → kein Adapter/keine Regel übrig.
+- [ ] WLAN wechseln, Standby/Resume während einer LAN-Sitzung (Erwartung: weiterverbunden oder ehrliche Fehlermeldung).
+
+### Für Codex/Betrieb auf dem VPS (erst nach deiner ausdrücklichen Freigabe)
+- [ ] LAN-Koordinator/Relay aus `deploy/network-staging/` bzw. `deploy/docker-compose.lan-play.yml` mit
+      Kapazitäts-/Missbrauchslimits, Monitoring und Rollback aktivieren (`ACTIVATION_AND_ROLLBACK.md`).
+- [ ] Öffentliche UDP-Freigabe nur für den Relay-Port; keine offenen UDP-Proxys; Bandbreitenbudget festlegen.
+- [ ] VPN-Ausgangsserver erst nach Anbieter-/Kosten-/Rechtsfreigabe pro Land (`AKENO_VPN_SERVER_DEPLOYMENT.md`),
+      unabhängige Länderprüfung, dann erscheinen Länder automatisch in der App.
+
+### Offline-Signierung (du)
+- [ ] Schritte 1–6 aus Abschnitt 8, Sequenz 4, Schlüssel `d6139235b220a4aa`, Prüfung mit `tools/release_v2.py verify`.
