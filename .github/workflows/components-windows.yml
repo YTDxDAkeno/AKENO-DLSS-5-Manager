@@ -8,7 +8,7 @@ permissions:
   contents: read
 concurrency:
   group: components-windows-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   components:
     runs-on: windows-2022

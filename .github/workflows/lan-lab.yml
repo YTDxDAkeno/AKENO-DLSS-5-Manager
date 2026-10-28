@@ -10,7 +10,7 @@ permissions:
   contents: read
 concurrency:
   group: lan-lab-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   nat-lab:
     runs-on: ubuntu-24.04
