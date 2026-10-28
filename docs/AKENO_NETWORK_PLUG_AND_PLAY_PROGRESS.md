@@ -31,6 +31,29 @@ Bounded managed-session reconnect is implemented with cleanup, fresh signed conf
 reverification, cancellation during backoff and expired-lease handling after resume.
 Focused reconnect/session/DNS/firewall tests: 37 passed with labelled native stand-ins.
 
+### Technical continuation checkpoint after `4530381`
+
+- `::/0` rejection is corrected with the exact same IPv6 set in two /1 rules.
+- A second native LAN startup failure was the parser rejecting its own generated
+  ListenPort; strict numeric validation now accepts only 1..65535. Real WireGuardNT
+  handshake, relay and encrypted echo then pass before the next assertion.
+- The next LAN assertion exposed the loopback fixture's unsuitable firewall boundary.
+  A private Windows-container peer now exercises a separate stack; all authenticated
+  direct-roaming, SMB/RDP and game-port assertions remain enabled. New fixture
+  pending native execution, not a passing test claim.
+- DNS observer now requires actual nonce-bound responses plus native denial or
+  packet-drop evidence. Packet Monitor integration is pending Windows validation;
+  run 40744749103 on `4530381` fails closed on its existing-filter precondition.
+- Per-account and per-room coordinator quotas supplement source/global quotas.
+  Backend: 262 passed at `15416d9`.
+- Complete corrected-environment client run at `15416d9`: 1472 passed, 19 skipped,
+  one real SIGSTOP status race (not either old missing-encodings failure). Linux
+  suspend now waits for stop acknowledgment. All 12 performance tests pass after
+  correction; complete final rerun still required.
+- Reconnect has three bounded attempts, fresh leases and verification on each;
+  expired leases after resume trigger cleanup/reprovisioning. Recovery failures
+  remain terminal. No live country exit is registered or advertised.
+
 ## Cloud continuation — 2026-10-28
 
 Active continuation branch: `codex/akeno-network-cloud-20261028`, based on the existing

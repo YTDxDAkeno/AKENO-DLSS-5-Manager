@@ -1,0 +1,7 @@
+# Disposable, separate Windows network stack for native relay-only firewall tests.
+# No host directory mount, host port publication, operator credential or live exit.
+FROM python:3.12-windowsservercore-ltsc2022
+RUN python -m pip install --no-cache-dir cryptography==44.0.0
+WORKDIR C:/fixture
+COPY tools/network_e2e/wgpeer.py tools/network_e2e/windows_peer_rpc.py ./
+CMD ["python", "-c", "import time; time.sleep(3600)"]

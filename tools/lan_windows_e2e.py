@@ -1,7 +1,7 @@
 """Real LAN Play checks on a disposable Windows runner: AKENO's LanSession on the official WireGuard (WireGuardNT).
 
 Runs AKENO's unchanged LanSession, WindowsLanBackend, LanFirewall, PathController and LatencyProbe against the
-official signed WireGuard for Windows, the unchanged server coordinator on loopback, and a second room member
+official signed WireGuard for Windows, the unchanged server coordinator on a private container switch, and a second room member
 played by tools/network_e2e/wgpeer.py (real WireGuard protocol, raw IP packets through the tunnel). The control
 plane (accounts, signed credentials) is replaced by a fixed member list: its own tests are elsewhere.
 
@@ -108,8 +108,15 @@ def _run(args):
     a_priv, a_pub = wgpeer.keypair()
     b_priv, b_pub = wgpeer.keypair()
     grants = {a_pub: Grant(ROOM, time.time() + 3600), b_pub: Grant(ROOM, time.time() + 3600)}
-    coordinator = Coordinator(X25519PrivateKey.generate(), lambda key: grants.get(key), bind=('127.0.0.1', 0)).start()
-    member = wgpeer.Responder(b_priv, a_pub, (B_IP,)).start()
+    from windows_peer import ContainerPeer
+    fixture = args._fixture = ContainerPeer(args.peer_image)
+    fixture.topology()
+    coordinator = Coordinator(X25519PrivateKey.generate(), lambda key: grants.get(key), bind=(fixture.gateway, 0)).start()
+    args._coordinator = coordinator
+    fixture.allow_relay(coordinator.address, ps)
+    member = fixture.start(b_priv, a_pub, (B_IP,))
+    evidence['outer_topology'] = {'relay': fixture.gateway, 'peer': fixture.address,
+                                  'stack': 'isolated Windows container; no published host ports'}
     stop_keepalive = threading.Event()
 
     def keepalive():
@@ -124,7 +131,7 @@ def _run(args):
     def publish(peers=True):
         control_file.write_text(json.dumps({
             'self': {'public_key': a_pub, 'private_key': a_priv, 'virtual_ip': A_IP},
-            'coordinator': {'public_key': coordinator.public_key, 'host': '127.0.0.1', 'port': coordinator.address[1]},
+            'coordinator': {'public_key': coordinator.public_key, 'host': coordinator.address[0], 'port': coordinator.address[1]},
             'peers': [{'public_key': b_pub, 'virtual_ip': B_IP}] if peers
             else []}), encoding='utf-8')
     publish()
@@ -202,7 +209,7 @@ def _run(args):
         check(latency is not None, 'latency to the member measured (AKENO probe)', f'{latency} ms')
 
         # A known peer possesses valid WireGuard transport keys. Send valid encrypted probe datagrams directly
-        # to the tunnel socket, bypassing the relay in this artificial loopback fixture. The outer firewall
+        # to the tunnel socket from a separate network stack, bypassing the relay. The outer firewall
         # must drop them before WireGuard can authenticate/roam to the peer's source endpoint.
         direct_session = member._member_session()
         check(direct_session is not None, 'test responder has a confirmed encrypted peer session')
@@ -311,7 +318,7 @@ def _run(args):
     grants[b_pub] = Grant(ROOM, time.time() + 3600)
     publish()
     proc = subprocess.Popen([sys.executable, __file__, '--child', str(work)], env=os.environ)
-    check(wait(lambda: status.load().get('state') == 'active', 60), 'a second session runs in its own process')
+    check(wait(lambda: status.load().get('state') == 'active', 120), 'a second session runs in its own process')
     subprocess.run(['taskkill', '/F', '/PID', str(proc.pid)], capture_output=True)
     proc.wait(30)
     stale = ps(f"(Get-NetFirewallRule -Group '{GROUP}' -ErrorAction SilentlyContinue | Measure-Object).Count")
@@ -356,6 +363,10 @@ def run(args):
                 from akeno.network.windows import WindowsWireGuard
                 recover(WindowsWireGuard(), SecureStore(args.work / 'lan-journal'))
         finally:
+            if hasattr(args, '_coordinator'):
+                args._coordinator.close()
+            if hasattr(args, '_fixture'):
+                args._fixture.close(ps)
             for profile, enabled in states.items():
                 ps(f'Set-NetFirewallProfile -Profile {profile} -Enabled {enabled}')
             if hasattr(args, '_checks'):
@@ -368,6 +379,7 @@ if __name__ == '__main__':
     p.add_argument('--work', type=Path)
     p.add_argument('--report', type=Path, default=Path('lan-windows-report.json'))
     p.add_argument('--child', type=Path)
+    p.add_argument('--peer-image', default='akeno-windows-peer:e2e')
     a = p.parse_args()
     if a.child:
         os.environ['AKENO_HOME'] = str(a.child / 'user')

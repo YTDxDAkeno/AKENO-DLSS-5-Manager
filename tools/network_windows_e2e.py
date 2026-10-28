@@ -363,5 +363,5 @@ if __name__ == '__main__':
             for command in (['status'],['filter','list']):
                 out=subprocess.run([_system_tool('pktmon.exe'),*command],capture_output=True,text=True,timeout=10)
                 # Disposable CI runner state only; never used in the production observer.
-                print('::notice title=CI Packet Monitor state::'+out.stdout.replace('\n',' ')[:800],flush=True)
+                print('::error title=CI Packet Monitor state::'+out.stdout.replace('%','%25').replace('\r','').replace('\n',' ')[:800],flush=True)
         raise

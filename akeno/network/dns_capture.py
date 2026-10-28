@@ -84,7 +84,7 @@ class DNSCapture:
         if not ('not running' in status or status=='stopped'):
             raise CaptureError('Another or unrecognized Packet Monitor session is active.')
         filters=self._call('filter','list').strip().casefold()
-        if not re.fullmatch(r'(?:no filters\.?|there are no filters\.?)',filters):
+        if not re.fullmatch(r'(?:packet filters:\s*)?(?:none|no filters(?: defined)?\.?|there are no filters\.?)',filters):
             raise CaptureError('Existing Packet Monitor filters must be preserved.')
         for port in (53,853):
             name='AKENO-DNS-'+uuid.uuid4().hex

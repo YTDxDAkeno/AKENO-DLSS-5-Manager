@@ -52,6 +52,8 @@ jobs:
         with:
           python-version: '3.12'
       - run: pip install -r requirements.txt argon2-cffi
+      - name: Build isolated Windows peer (private switch, no published ports)
+        run: docker build -f tools/network_e2e/Dockerfile.windows-peer -t akeno-windows-peer:e2e .
       - name: Test explicit-consent official component bootstrap (online signature and protected installer)
         run: python tools/network_bootstrap_windows_e2e.py --consent-install --report network-bootstrap-windows-report.json
       - name: AKENO LAN Play on WireGuardNT (coordinator proof, relay-only, firewall policy, revocation, crash recovery)
