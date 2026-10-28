@@ -28,6 +28,7 @@ CONSTRUCTION = b'Noise_IKpsk2_25519_ChaChaPoly_BLAKE2s'
 IDENTIFIER = b'WireGuard v1 zx2c4 Jason@zx2c4.com'
 LABEL_MAC1 = b'mac1----'
 ECHO_PORT = 7
+LATENCY_PORT = 51999
 
 
 def _hash(*parts: bytes) -> bytes:
@@ -108,7 +109,11 @@ class Responder:
         self.transport_packets = 0
         self.echoed = 0
         self.observed: list[dict] = []
+        self.inbox: list[dict] = []           # packets to our own addresses that are not echo requests
         self.drop = False
+        self.accept_from = None               # set of source addresses; None accepts any (relay-only tests)
+        self._pending = None                  # our own initiation (to a coordinator) awaiting its response
+        self.coordinator = None               # (session, address) once our endpoint proof completed
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._thread = threading.Thread(target=self._loop, name='wgpeer', daemon=True)
@@ -146,9 +151,13 @@ class Responder:
                 return
             if self.drop or len(data) < 4 or data[1:4] != b'\0\0\0':
                 continue
+            if self.accept_from is not None and addr[0:2] not in self.accept_from:
+                continue
             try:
                 if data[0] == 1:
                     self._initiation(data, addr)
+                elif data[0] == 2:
+                    self._response(data, addr)
                 elif data[0] == 4:
                     self._transport(data, addr)
             except Exception:
@@ -191,12 +200,97 @@ class Responder:
             self.handshakes += 1
         self.sock.sendto(reply, addr)
 
+    def prove(self, coordinator_public: str, address: tuple):
+        """Initiate a WireGuard handshake to a coordinator from this socket (its endpoint proof), as a member's
+        WireGuard does with PersistentKeepalive. Call again to refresh; a keepalive follows each response."""
+        responder = base64.b64decode(coordinator_public)
+        e = X25519PrivateKey.generate()
+        e_pub = _raw(e.public_key())
+        c = _hash(CONSTRUCTION)
+        h = _hash(_hash(c, IDENTIFIER), responder)
+        h = _hash(h, e_pub)
+        c, = _kdf(1, c, e_pub)
+        c, k = _kdf(2, c, e.exchange(X25519PublicKey.from_public_bytes(responder)))
+        enc_static = ChaCha20Poly1305(k).encrypt(_nonce(0), self._public, h)
+        h = _hash(h, enc_static)
+        c, k = _kdf(2, c, self._private.exchange(X25519PublicKey.from_public_bytes(responder)))
+        now = time.time()
+        stamp = struct.pack('>QI', 0x400000000000000a + int(now), int((now % 1) * 1e9))
+        enc_time = ChaCha20Poly1305(k).encrypt(_nonce(0), stamp, h)
+        h = _hash(h, enc_time)
+        index = os.urandom(4)
+        msg = bytes([1, 0, 0, 0]) + index + e_pub + enc_static + enc_time
+        msg += _mac(_hash(LABEL_MAC1, responder), msg) + b'\0' * 16
+        self._pending = (index, e, c, h, (str(address[0]), int(address[1])))
+        self.sock.sendto(msg, address)
+
+    def _response(self, msg: bytes, addr):
+        pending = self._pending
+        if len(msg) != 92 or pending is None or msg[8:12] != pending[0]:
+            return
+        if not hmac.compare_digest(_mac(_hash(LABEL_MAC1, self._public), msg[:60]), msg[60:76]):
+            return
+        index, e, c, h, address = pending
+        e_r = msg[12:44]
+        h = _hash(h, e_r)
+        c, = _kdf(1, c, e_r)
+        c, = _kdf(1, c, e.exchange(X25519PublicKey.from_public_bytes(e_r)))
+        c, = _kdf(1, c, self._private.exchange(X25519PublicKey.from_public_bytes(e_r)))
+        c, tau, k = _kdf(3, c, self._psk)
+        h = _hash(h, tau)
+        ChaCha20Poly1305(k).decrypt(_nonce(0), msg[44:60], h)
+        send, recv = _kdf(2, c, b'')
+        session = _Session(index, msg[4:8], recv, send, address)
+        self._pending = None
+        self.coordinator = session
+        self._send(session, b'')                     # keepalive: confirms the session and refreshes the proof
+
+    def keepalive(self):
+        if self.coordinator is not None:
+            self._send(self.coordinator, b'')
+
+    def _member_session(self):
+        live = [s for s in self.sessions.values() if s.confirmed]
+        return live[-1] if live else None
+
+    def send_ip(self, packet: bytes) -> bool:
+        """Send one raw IP packet to the client through the newest confirmed tunnel session."""
+        session = self._member_session()
+        if session is None:
+            return False
+        self._send(session, packet)
+        return True
+
+    @staticmethod
+    def ipv4(src: str, dst: str, proto: int, payload: bytes) -> bytes:
+        header = bytearray(struct.pack('!BBHHHBBH4s4s', 0x45, 0, 20 + len(payload), int.from_bytes(os.urandom(2), 'big'),
+                                       0, 64, proto, 0, ipaddress.ip_address(src).packed,
+                                       ipaddress.ip_address(dst).packed))
+        header[10:12] = struct.pack('!H', _checksum(bytes(header)))
+        return bytes(header) + payload
+
+    def udp_packet(self, src, dst, sport, dport, body: bytes) -> bytes:
+        udp = struct.pack('!HHHH', sport, dport, 8 + len(body), 0) + body
+        pseudo = ipaddress.ip_address(src).packed + ipaddress.ip_address(dst).packed + struct.pack('!BBH', 0, 17, len(udp))
+        udp = udp[:6] + struct.pack('!H', _checksum(pseudo + udp) or 0xFFFF) + udp[8:]
+        return self.ipv4(src, dst, 17, udp)
+
+    def tcp_syn(self, src, dst, sport, dport) -> bytes:
+        tcp = struct.pack('!HHIIBBHHH', sport, dport, int.from_bytes(os.urandom(4), 'big'), 0, 5 << 4, 0x02, 64240, 0, 0)
+        pseudo = ipaddress.ip_address(src).packed + ipaddress.ip_address(dst).packed + struct.pack('!BBH', 0, 6, len(tcp))
+        tcp = tcp[:16] + struct.pack('!H', _checksum(pseudo + tcp)) + tcp[18:]
+        return self.ipv4(src, dst, 6, tcp)
+
+    def inbox_snapshot(self) -> list[dict]:
+        with self._lock:
+            return list(self.inbox)
+
     def _transport(self, msg: bytes, addr):
         if len(msg) < 32:
             return
         session = self.sessions.get(msg[4:8])
         if session is None:
-            return
+            return                                   # (the coordinator never sends data to members)
         counter, = struct.unpack('<Q', msg[8:16])
         if counter in session.seen:
             return
@@ -241,10 +335,11 @@ class Responder:
         if address not in self.addresses:
             self._record(version, proto, address, port)
             return None
-        if proto == 17 and port == ECHO_PORT and len(payload) >= 8:
+        probe = proto == 17 and port == LATENCY_PORT and payload[8:12] == b'AKLP' and len(payload) == 24
+        if proto == 17 and (port == ECHO_PORT or probe) and len(payload) >= 8:
             sport, = struct.unpack('!H', payload[:2])
-            body = payload[8:]
-            udp = struct.pack('!HHHH', ECHO_PORT, sport, 8 + len(body), 0) + body
+            body = b'AKLR' + payload[12:] if probe else payload[8:]   # AKENO's LAN latency probe answer
+            udp = struct.pack('!HHHH', port, sport, 8 + len(body), 0) + body
             pseudo = (dst + src + struct.pack('!BBH', 0, 17, len(udp)) if version == 4 else
                       dst + src + struct.pack('!IxxxB', len(udp), 17))
             udp = udp[:6] + struct.pack('!H', _checksum(pseudo + udp) or 0xFFFF) + udp[8:]
@@ -257,6 +352,14 @@ class Responder:
             pseudo = dst + src + struct.pack('!IxxxB', len(icmp), 58)
             reply = icmp[:2] + struct.pack('!H', _checksum(pseudo + icmp)) + icmp[4:]
         else:
+            if version == 4:
+                sport = struct.unpack('!H', payload[:2])[0] if proto in (6, 17) and len(payload) >= 4 else None
+                flags = payload[13] if proto == 6 and len(payload) >= 14 else None
+                body = payload[8:] if proto == 17 else b''
+                with self._lock:
+                    if len(self.inbox) < 5000:
+                        self.inbox.append({'protocol': proto, 'source': str(ipaddress.ip_address(src)), 'sport': sport,
+                                           'dport': port, 'flags': flags, 'body': body})
             self._record(version, proto, address, port)
             return None
         with self._lock:
