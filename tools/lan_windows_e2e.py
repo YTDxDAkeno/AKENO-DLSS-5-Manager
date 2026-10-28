@@ -78,6 +78,7 @@ def _run(args):
     import wgpeer
     from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
     from akeno.network.lan_windows import GROUP, LanError, LanFirewall, recover, tunnel_name
+    from akeno.network.wfp import TransportLock
     from akeno.network.windows import service_state
     from akeno_server.network.coordinator import Coordinator, Grant
     native, journal, status, LanSession = session_parts(work)
@@ -196,7 +197,9 @@ def _run(args):
         check('block TCP' in rules and 'block UDP' in rules and 'latency probe' in rules,
               'AKENO LAN firewall rules on the LAN adapter', rules.replace('\n', ' | '))
         check('relay Inbound' in rules and 'relay Outbound' in rules,
-              'native outer firewall rules constrain inbound and outbound packets to the relay')
+              'Defender relay rules present (second layer; not relied on for WireGuardNT)')
+        check(TransportLock(name).verify() and status.load().get('privacy') == 'relay_locked',
+              'AKENO relay-only transport lock (persistent WFP filters) verified before reporting active')
 
         def mode():
             return (status.load().get('peers', {}).get(b_pub) or {}).get('mode')
@@ -306,6 +309,8 @@ def _run(args):
     check(status.load().get('state') == 'stopped' and service_state(name) is None, 'LAN session stopped, tunnel removed')
     leftover = ps(f"(Get-NetFirewallRule -Group '{GROUP}' -ErrorAction SilentlyContinue | Measure-Object).Count")
     check(leftover == '0', 'all AKENO LAN firewall rules removed', leftover)
+    check(not TransportLock(name).verify() and TransportLock(name).remove() == 0,
+          'transport lock removed after the tunnel ended')
     check(journal.load().get('phase') == 'disconnected', 'journal records a clean end')
     after_routes = ps('Get-NetRoute | Select-Object -ExpandProperty DestinationPrefix | Sort-Object | Out-String')
     check(after_routes == routes_before, 'route table identical to before the session')
@@ -318,11 +323,14 @@ def _run(args):
     subprocess.run(['taskkill', '/F', '/PID', str(proc.pid)], capture_output=True)
     proc.wait(30)
     stale = ps(f"(Get-NetFirewallRule -Group '{GROUP}' -ErrorAction SilentlyContinue | Measure-Object).Count")
-    check(service_state(name) == 'running' and stale != '0', 'after the crash the tunnel and its rules are still there',
-          f'rules: {stale}')
+    locked = TransportLock(name).verify()
+    check(service_state(name) == 'running' and stale != '0' and locked,
+          'after the crash the tunnel, its rules and its relay-only transport lock are still there',
+          f'rules: {stale}; lock: {locked}')
     recover(native, journal)
     remaining = ps(f"(Get-NetFirewallRule -Group '{GROUP}' -ErrorAction SilentlyContinue | Measure-Object).Count")
-    check(service_state(name) is None and remaining == '0', 'recovery removes the stale tunnel and firewall rules')
+    check(service_state(name) is None and remaining == '0' and not TransportLock(name).verify(),
+          'recovery removes the stale tunnel, firewall rules and transport lock')
     member.stop()
     coordinator.close()
     if original != 'True':

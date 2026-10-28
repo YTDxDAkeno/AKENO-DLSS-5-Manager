@@ -18,6 +18,25 @@ class CaptureError(ValueError):
     pass
 
 
+def _bare_ip(packet):
+    """True for a complete IPv4/IPv6 UDP/TCP packet without a link header.
+
+    Packet Monitor records packets of layer-3 adapters (WireGuardNT has no Ethernet framing) in an interface block
+    whose link type says Ethernet. Accept such a record only when its own IP header proves it: the length field
+    equals the captured length and, for IPv4, the header checksum is valid.
+    """
+    if len(packet)>=20 and packet[0]>>4==4:
+        ihl=(packet[0]&15)*4
+        if ihl<20 or len(packet)<ihl or struct.unpack_from('!H',packet,2)[0]!=len(packet) or packet[9] not in (6,17):
+            return False
+        total=sum(struct.unpack_from('!%dH'%(ihl//2),packet))
+        while total>>16:total=(total&0xffff)+(total>>16)
+        return total==0xffff
+    if len(packet)>=40 and packet[0]>>4==6:
+        return struct.unpack_from('!H',packet,4)[0]+40==len(packet) and packet[6] in (6,17)
+    return False
+
+
 def packets(raw, stats=None):
     if len(raw)>16*1024*1024:raise CaptureError('DNS capture exceeded its bound.')
     if raw[:4]!=b'\x0a\x0d\x0d\x0a':raise CaptureError('Missing capture section header.')
@@ -43,9 +62,15 @@ def packets(raw, stats=None):
         if iface>=len(interfaces) or captured>len(block)-20 or captured>original:raise CaptureError('Invalid packet length.')
         packet=block[20:20+captured];link=interfaces[iface]
         if link==1:
-            if len(packet)<14:continue
-            protocol=packet[12:14];packet=packet[14:]
-            if protocol not in (b'\x08\x00',b'\x86\xdd'):continue
+            if len(packet)>=14 and packet[12:14] in (b'\x08\x00',b'\x86\xdd'):
+                packet=packet[14:]
+            elif _bare_ip(packet):
+                if stats is not None:stats['bare_ip']=stats.get('bare_ip',0)+1
+            else:
+                # Metadata only (EtherType values), never addresses or payload.
+                if stats is not None and len(packet)>=14:
+                    stats['ethertypes']=sorted(set(stats.get('ethertypes',[])+[packet[12:14].hex()]))[:16]
+                continue
         elif link not in (101,228,229):continue
         if not packet:continue
         version=packet[0]>>4

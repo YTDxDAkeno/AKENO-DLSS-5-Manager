@@ -83,11 +83,15 @@ def test_tunnel_stops_before_privacy_rules_are_removed_and_failures_keep_recover
     class Firewall:
         def __init__(self,*a):pass
         def remove(self):calls.append('remove')
+    class Lock:
+        def __init__(self,name):assert name==NAME
+        def remove(self):calls.append('unlock')
     journal=Store({'phase':'lan_active','name':NAME,'public_key':'own key'})
-    session=LanSession(ROOM,None,Native(),journal,Store(),lambda:False,firewall=Firewall)
+    session=LanSession(ROOM,None,Native(),journal,Store(),lambda:False,firewall=Firewall,transport_lock=Lock)
     if fail:
         with pytest.raises(RuntimeError):session.stop()
+        # The tunnel may still run: neither the firewall rules nor the transport lock are touched.
         assert calls==['stop'] and journal.value['phase']=='lan_recovery_required'
     else:
         session.stop()
-        assert calls==['stop','remove'] and journal.value=={'phase':'disconnected'}
+        assert calls==['stop','remove','unlock'] and journal.value=={'phase':'disconnected'}

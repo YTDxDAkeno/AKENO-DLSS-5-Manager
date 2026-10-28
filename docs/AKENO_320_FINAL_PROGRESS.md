@@ -43,7 +43,20 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
 
 ## Fixes in this continuation
 
-- (pending push) Windows-only test assumptions 1 and 2.
+- `17ba26f` Windows-only test assumptions 1 and 2 (msiexec separator, PYTEST_CURRENT_TEST length).
+- (this push) **WFP relay-only transport lock** `akeno/network/wfp.py`: AKENO-owned persistent provider/sublayer,
+  six filters per LAN tunnel at INBOUND/OUTBOUND_TRANSPORT_V4/V6 (permit only UDP local port P <-> relay R:port,
+  block everything else on P; IPv6 fully blocked). Installed and verified in one BFE transaction before the tunnel
+  starts; re-verified every heartbeat (missing lock => session ends, never "active"); removed only after the tunnel
+  is gone; survives a helper crash; `recover()` removes tunnel -> Defender rules -> lock. Filter keys are uuid5 of the
+  tunnel name; a filter under an AKENO key that is not AKENO-owned is never deleted. Session status carries
+  `privacy: relay_locked`. Unit tests: `tests/test_network_wfp.py` (x64 ABI offsets, GUID layout, plan validation,
+  transactions/abort, ownership, session/recovery order). Windows proof pending: `network-windows.yml` `lan-play`.
+- (this push) DNS observer: Packet Monitor records of layer-3 adapters arrive under an Ethernet link type without an
+  Ethernet header (16 records, 0 parsed in run 40747826167). Such records are accepted only when the IP header proves
+  itself (length field == captured length, valid IPv4 header checksum); non-IP EtherTypes are reported as metadata.
+  Windows proof pending: `network-windows.yml` `wireguard`.
+- `network-local-e2e.yml` now also runs on `claude/**` (relay/OpenTTD and VPN-exit labs).
 
 ## Next concrete step
 

@@ -13,11 +13,19 @@ def block(kind,body):
     return struct.pack('<II',kind,size)+body+struct.pack('<I',size)
 
 
-def capture(flow,payload):
+def ipv4(flow,payload):
     source,sport,target,dport,protocol=flow
-    ip=bytearray(20);ip[0]=0x45;ip[9]=protocol
+    ip=bytearray(20);ip[0]=0x45;ip[8]=64;ip[9]=protocol
+    struct.pack_into('!H',ip,2,20+8+len(payload))
     ip[12:16]=ipaddress.ip_address(source).packed;ip[16:20]=ipaddress.ip_address(target).packed
-    packet=b'\0'*12+b'\x08\x00'+ip+struct.pack('!HHHH',sport,dport,len(payload)+8,0)+payload
+    total=sum(struct.unpack('!10H',bytes(ip)))
+    while total>>16:total=(total&0xffff)+(total>>16)
+    struct.pack_into('!H',ip,10,~total&0xffff)
+    return bytes(ip)+struct.pack('!HHHH',sport,dport,len(payload)+8,0)+payload
+
+
+def capture(flow,payload,framing=b'\0'*12+b'\x08\x00'):
+    packet=framing+ipv4(flow,payload)
     return (block(0x0a0d0d0a,struct.pack('<IHHq',0x1a2b3c4d,1,0,-1))+
             block(1,struct.pack('<HHI',1,0,65535))+
             block(6,struct.pack('<IIIII',0,0,0,len(packet),len(packet))+packet))
@@ -61,3 +69,18 @@ def test_async_success_requires_actual_drop_and_captured_positive_reply(tmp_path
     if missing=='none':assert monitor.finish()==1
     else:
         with pytest.raises(CaptureError):monitor.finish()
+
+
+def test_bare_ip_records_of_layer3_adapters_are_parsed_only_with_a_valid_ip_header():
+    """Packet Monitor stores WireGuardNT packets without an Ethernet header under an Ethernet link type."""
+    flow=('10.203.78.1',53,'10.203.78.2',43001,17);query=question()
+    stats={}
+    assert list(packets(capture(flow,query,framing=b''),stats))==[(flow,query)] and stats['bare_ip']==1
+    damaged=bytearray(ipv4(flow,query));damaged[11]^=0xff                       # wrong IPv4 header checksum
+    raw=capture(flow,query,framing=b'')
+    raw=raw.replace(ipv4(flow,query),bytes(damaged))
+    stats={}
+    assert list(packets(raw,stats))==[] and 'bare_ip' not in stats
+    stats={}
+    assert list(packets(capture(flow,query,framing=b'\0'*12+b'\x81\x00'),stats))==[]
+    assert stats['ethertypes']==['8100']

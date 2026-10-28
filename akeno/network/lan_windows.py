@@ -10,6 +10,11 @@ Firewall policy, on the LAN adapter only and only for the room's /24:
   a user's own "allow" rule for those can never apply to room members (Windows lets block rules win);
 * allowed inbound: the AKENO latency probe (UDP 51999) and, only after the user picks one, a single game program.
 Rules carry the group "AKENO LAN Play" and are removed when the session ends or is recovered after a crash.
+
+Peer IP privacy (relay-only) is enforced by ``akeno.network.wfp.TransportLock``: AKENO-owned, persistent Windows
+Filtering Platform filters on the tunnel's UDP socket that only let packets to and from the relay through. The Defender
+rules of ``LanFirewall.relay_only`` stay as a second layer but are not relied on: CI proved that WireGuardNT's kernel
+socket is not constrained by them. A session is never reported active without a verified transport lock.
 """
 from __future__ import annotations
 
@@ -311,13 +316,16 @@ class LanSession:
     TICK = 2
 
     def __init__(self, room, control, native, journal, status, stop_requested, firewall=LanFirewall, clock=time.time,
-                 allow_request=lambda: None):
+                 allow_request=lambda: None, transport_lock=None):
         self.room, self.control, self.native = room, control, native
         self.journal, self.status, self.stop_requested, self.clock = journal, status, stop_requested, clock
         # The GUI's only other input: "allow this game program" (validated .exe path, applied once per request id).
         self.allow_request = allow_request
         self.name = tunnel_name(room)
         self.firewall_type = firewall
+        if transport_lock is None:
+            from akeno.network.wfp import TransportLock as transport_lock
+        self.lock_type = transport_lock
 
     def run(self):
         state = self.control.refresh()
@@ -329,13 +337,21 @@ class LanSession:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as reservation:
             reservation.bind(('0.0.0.0', 0))
             listen_port = reservation.getsockname()[1]
-        self.journal.save({'phase': 'lan_starting', 'room': self.room, 'name': self.name, 'public_key': own['public_key']})
+        relay = (relay_ip, coord['port'])
+        self.journal.save({'phase': 'lan_starting', 'room': self.room, 'name': self.name, 'public_key': own['public_key'],
+                           'listen_port': listen_port, 'relay': list(relay)})
+        lock = self.lock_type(self.name)
         probe = None
         def phase(value):
             self.status.save({'state':'starting','phase':value,'room':self.room,'updated':self.clock()})
         try:
             phase('relay_firewall')
-            firewall.relay_only(listen_port, (relay_ip, coord['port']))
+            firewall.relay_only(listen_port, relay)
+            # The enforcing peer-IP protection: installed and verified before the tunnel can send its first packet.
+            phase('transport_lock')
+            lock.install(listen_port, relay)
+            if not lock.verify():
+                raise LanError('The relay-only IP protection could not be verified. LAN Play stays off.')
             phase('native_tunnel')
             self.native.start(self.name, interface_profile(own['private_key'], own['virtual_ip'],
                                                            dict(coord, host=relay_ip), listen_port=listen_port))
@@ -345,9 +361,8 @@ class LanSession:
             phase('game_firewall')
             firewall.apply()
             self.journal.save({'phase': 'lan_active', 'room': self.room, 'name': self.name,
-                               'public_key': own['public_key']})
-            controller = PathController(WindowsLanBackend(self.native, self.name), (relay_ip, coord['port']), subnet,
-                                        clock=self.clock)
+                               'public_key': own['public_key'], 'listen_port': listen_port, 'relay': list(relay)})
+            controller = PathController(WindowsLanBackend(self.native, self.name), relay, subnet, clock=self.clock)
             controller.apply(state['peers'])
             phase('latency_probe')
             probe = LatencyProbe(own['virtual_ip'])
@@ -363,6 +378,10 @@ class LanSession:
                     except (ValueError, NativeUnavailable) as exc:
                         error = str(exc)[:200]
                 if self.clock() - last_refresh >= self.HEARTBEAT:
+                    # Fail closed: if anything removed the transport lock, end the session instead of continuing
+                    # with a tunnel that could be made to talk to a peer's direct address.
+                    if not lock.verify():
+                        raise LanError('The relay-only IP protection disappeared; LAN Play was stopped.')
                     try:
                         state = self.control.refresh()
                         controller.apply(state['peers'])
@@ -375,7 +394,8 @@ class LanSession:
                     peer['latency_ms'] = probe.measure(peer['virtual_ip'], 0.5) if peer['mode'] == 'relay' \
                         else None
                 self.status.save({'state': 'active', 'room': self.room, 'virtual_ip': own['virtual_ip'],
-                                  'peers': peers, 'error': error, 'allowed': allowed, 'updated': self.clock()})
+                                  'peers': peers, 'error': error, 'allowed': allowed, 'privacy': 'relay_locked',
+                                  'updated': self.clock()})
                 time.sleep(self.TICK)
         finally:
             if probe:
@@ -391,16 +411,23 @@ class LanSession:
             self.journal.save({**state, 'phase': 'lan_recovery_required'})
             raise
         else:
+            # Only after the tunnel is gone: the lock outlives every packet the tunnel could send.
             self.firewall_type(name, str(ipaddress.ip_network('10.203.0.0/24'))).remove()
+            self.lock_type(name).remove()
             self.journal.save({'phase': 'disconnected'})
             self.status.save({'state': 'stopped', 'room': self.room, 'updated': self.clock()})
 
 
-def recover(native, journal, run=powershell):
-    """After a crash or power loss: remove AKENO LAN firewall rules and the LAN tunnel recorded in the journal."""
+def recover(native, journal, run=powershell, transport_lock=None):
+    """After a crash or power loss: remove the LAN tunnel recorded in the journal, then its firewall rules and its
+    transport lock. The lock is removed last so that a tunnel which survived the crash never runs without it; if the
+    tunnel cannot be removed, the journal keeps the recovery state and the lock stays."""
+    if transport_lock is None:
+        from akeno.network.wfp import TransportLock as transport_lock
     state = journal.load()
     if state.get('phase') in ('lan_starting', 'lan_active', 'lan_recovery_required') and TUNNEL.fullmatch(state.get('name', '')):
         native.stop(state['name'], public_key=state.get('public_key'))
         LanFirewall(state['name'], '10.203.0.0/24', run=run).remove()
+        transport_lock(state['name']).remove()
     journal.save({'phase': 'disconnected'})
 

@@ -2,7 +2,7 @@ name: Isolated relay and VPN exit traffic
 
 on:
   push:
-    branches: ['codex/akeno-network-plug-and-play', 'codex/akeno-network-cloud-20261028']
+    branches: ['codex/akeno-network-plug-and-play', 'codex/akeno-network-cloud-20261028', 'claude/**']
     paths: ['akeno/network/**', 'server/akeno_server/network/**', 'server/akeno_server/vpn/**',
             'deploy/vpn-exit/**', 'tools/network_e2e/**', '.github/workflows/network-local-e2e.yml']
   workflow_dispatch:
