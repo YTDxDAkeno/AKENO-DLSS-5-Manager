@@ -377,6 +377,13 @@ class E2E:
             keys.write_text(json.dumps({"keys": [{"kid": self.kid, "public_key": self.public}]}), encoding="utf-8")
             r.add(None, "test installation only: release key replaced by a disposable test key", self.kid)
         self.rc_exe = hashlib.sha256((self.target / "AKENO.exe").read_bytes()).hexdigest()
+        # this PC's component selection (written by installers since the optional Security Center); every update,
+        # rollback and recovery must keep it byte for byte
+        selection = self.target / "akeno-components.ini"
+        self.selection = selection.read_bytes() if selection.is_file() else None
+        if self.selection is not None:
+            r.add(None, "installer recorded this PC's component selection",
+                  self.selection.decode("utf-8", "replace").strip().replace("\n", " "))
         return True
 
     def publish(self, version: str, dist: Path, drop=(), extra=None, tamper: bool = False,
@@ -436,10 +443,16 @@ class E2E:
     def program_is(self, content: dict, what: str) -> bool:
         from akeno.updater import staging
         try:
-            staging.verify(self.target, content, extra_allowed=("unins000.exe", "unins000.dat", "unins000.msg"))
-            return self.report.add(True, what, f"{len(content['files'])} files match SHA-256")
+            staging.verify(self.target, content, extra_allowed=("unins000.exe", "unins000.dat", "unins000.msg",
+                                                                "akeno-components.ini"))
         except staging.StagingError as exc:
             return self.report.add(False, what, str(exc))
+        selection = self.target / "akeno-components.ini"
+        found = selection.read_bytes() if selection.is_file() else None
+        if found != getattr(self, "selection", None):
+            return self.report.add(False, what, f"the component selection changed: {found!r}")
+        kept = "; component selection kept" if found is not None else ""
+        return self.report.add(True, what, f"{len(content['files'])} files match SHA-256{kept}")
 
     def report_start(self, svc) -> None:
         """What the started suite does after an update: report the outcome (here without a license)."""
