@@ -31,6 +31,22 @@ def test_private_capture_parser_extracts_exact_probe_tuple_and_payload():
         with pytest.raises(CaptureError):list(packets(data))
 
 
+def test_capture_stop_preserves_foreign_collector_and_requires_own_private_file(tmp_path):
+    monitor=DNSCapture.__new__(DNSCapture)
+    monitor.started=True;monitor.etl=tmp_path/'random-private.etl'
+    calls=[]
+    def call(*args):
+        calls.append(args)
+        return 'Log file: another-collector.etl'
+    monitor._call=call
+    with pytest.raises(CaptureError,match='ownership'):
+        monitor._stop()
+    assert calls==[('status',)] and monitor.started
+    monitor._call=lambda *args:calls.append(args) or str(monitor.etl)
+    monitor._stop()
+    assert calls[-1]==('stop',) and not monitor.started
+
+
 @pytest.mark.parametrize('missing',['none','drop','positive'])
 def test_async_success_requires_actual_drop_and_captured_positive_reply(tmp_path,missing):
     query=question();reply=query[:2]+b'\x81\x83'+query[4:]

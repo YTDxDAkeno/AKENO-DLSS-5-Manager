@@ -90,7 +90,7 @@ class DNSCapture:
             name='AKENO-DNS-'+uuid.uuid4().hex
             self._call('filter','add',name,'-p',str(port));self.filters.append(name)
         self._call('start','--capture','--comp','all','--pkt-size','0','--file-name',self.etl,
-                   '--file-size','4','--log-mode','memory')
+                   '--file-size','4','--log-mode','circular')
         self.started=True
 
     def expect_reply(self,query,source,target):

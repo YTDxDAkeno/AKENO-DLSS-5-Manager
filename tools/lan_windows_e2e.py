@@ -363,15 +363,21 @@ def run(args):
                 from akeno.network.windows import WindowsWireGuard
                 recover(WindowsWireGuard(), SecureStore(args.work / 'lan-journal'))
         finally:
-            if hasattr(args, '_coordinator'):
-                args._coordinator.close()
-            if hasattr(args, '_fixture'):
-                args._fixture.close(ps)
-            for profile, enabled in states.items():
-                ps(f'Set-NetFirewallProfile -Profile {profile} -Enabled {enabled}')
-            if hasattr(args, '_checks'):
-                args.report.write_text(json.dumps({'platform': 'real Windows', 'checks': args._checks,
-                                                   'evidence': args._evidence}, indent=2), encoding='utf-8')
+            try:
+                if hasattr(args, '_coordinator'):
+                    args._coordinator.close()
+            finally:
+                try:
+                    if hasattr(args, '_fixture'):
+                        args._fixture.close(ps)
+                finally:
+                    try:
+                        for profile, enabled in states.items():
+                            ps(f'Set-NetFirewallProfile -Profile {profile} -Enabled {enabled}')
+                    finally:
+                        if hasattr(args, '_checks'):
+                            args.report.write_text(json.dumps({'platform': 'real Windows', 'checks': args._checks,
+                                                               'evidence': args._evidence}, indent=2), encoding='utf-8')
 
 
 if __name__ == '__main__':

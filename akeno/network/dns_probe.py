@@ -1,8 +1,9 @@
 """Measured Windows DNS checks for the official full-tunnel WireGuard firewall.
 
-Success requires a valid DNS reply from the tunnel resolver AND WSAEACCES on
-foreign DNS probes, including probes bound to every eligible non-tunnel NIC.
-Timeout, lack of routing and missing interfaces are never evidence of blocking.
+Success requires a valid tunnel DNS reply AND native denial/kernel-drop evidence
+for foreign probes bound to every eligible non-tunnel NIC. Independently proven
+missing routes are counted separately, never described as firewall denials.
+Timeouts without drop evidence and incomplete inventories fail closed.
 No firewall settings, DNS configuration or routes are changed by this observer.
 """
 from __future__ import annotations
