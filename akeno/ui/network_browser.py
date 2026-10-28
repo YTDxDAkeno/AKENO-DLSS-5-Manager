@@ -3,10 +3,16 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QInputDialog, QLineEdit,
                                QSpinBox, QTableWidget, QTableWidgetItem)
 
-from akeno.i18n import t
+from akeno.i18n import msg, t
 from akeno.network.browser import RoomBrowser
 from akeno.network.games import catalog
 from akeno.ui.widgets import SubCard, button, confirm, label
+
+REGIONS = (('eu', msg('Europe')), ('na', msg('North America')), ('sa', msg('South America')), ('as', msg('Asia')),
+           ('oc', msg('Oceania')), ('af', msg('Africa')), ('me', msg('Middle East')))
+STATUS = {'open': msg('open'), 'locked': msg('locked'), 'full': msg('full')}
+REPORTS = (('spam', msg('Spam')), ('harassment', msg('Harassment')), ('unsafe_content', msg('Unsafe content')),
+           ('other', msg('Other')))
 
 
 class PublicRooms(SubCard):
@@ -20,18 +26,24 @@ class PublicRooms(SubCard):
         self.search = QLineEdit()
         self.search.setPlaceholderText(t('Search rooms'))
         self.search.setMaxLength(64)
+        # Empty filter values mean "all" for the browser API; publishing a room needs a concrete game and region.
         self.game = QComboBox()
+        self.game.addItem(t('All games'), '')
+        self.names = {}
         for item in catalog():
             self.game.addItem(item['name'], item['id'])
+            self.names[item['id']] = item['name']
         self.region = QComboBox()
-        for code, name in (('eu','Europe'),('na','North America'),('sa','South America'),('as','Asia'),
-                           ('oc','Oceania'),('af','Africa'),('me','Middle East')):
+        self.region.addItem(t('All regions'), '')
+        for code, name in REGIONS:
             self.region.addItem(t(name), code)
         self.players = QSpinBox()
         self.players.setRange(0,16)
         self.players.setPrefix(t('Min. players: '))
+        self.players.setMinimumWidth(self.players.fontMetrics().horizontalAdvance(t('Min. players: ') + '16') + 48)
         filters = QHBoxLayout()
-        for w in (self.search,self.game,self.region,self.players):
+        filters.addWidget(self.search,2)
+        for w in (self.game,self.region,self.players):
             filters.addWidget(w)
         filters.addWidget(button(t('Refresh rooms'), 'refresh', on_click=lambda:self.refresh(0)))
         self.lay.addLayout(filters)
@@ -53,9 +65,11 @@ class PublicRooms(SubCard):
             actions.addWidget(button(text,icon,on_click=action))
         self.lay.addLayout(actions)
         owner = QHBoxLayout()
-        for text, action in ((t('Create public room'),self.create),(t('Publish current room'),self.publish),
-                             (t('Make room private'),self.make_private),(t('Lock room'),self.lock)):
-            owner.addWidget(button(text,'wifi',on_click=action))
+        for text, icon, action in ((t('Create public room'),'plus',self.create),
+                                   (t('Publish current room'),'globe',self.publish),
+                                   (t('Make room private'),'eye-off',self.make_private),
+                                   (t('Lock room'),'lock',self.lock)):
+            owner.addWidget(button(text,icon,on_click=action))
         self.lay.addLayout(owner)
 
     def client(self):
@@ -69,8 +83,10 @@ class PublicRooms(SubCard):
             self.offset, self.next_offset = result['offset'], result['next_offset']
             self.table.setRowCount(len(self.rows))
             for row, room in enumerate(self.rows):
-                values = [room['name'],room['game_id'],room['region'],f"{room['players']}/{room['capacity']}",
-                          t(room['status']),t('Yes') if room['password_required'] else t('No')]
+                region = dict(REGIONS).get(room['region'])
+                values = [room['name'],self.names.get(room['game_id'],room['game_id']),t(region) if region else
+                          room['region'],f"{room['players']}/{room['capacity']}",
+                          t(STATUS.get(room['status'],room['status'])),t('Yes') if room['password_required'] else t('No')]
                 for col,value in enumerate(values):
                     cell=QTableWidgetItem(value)
                     # Server-owned names must always remain plain text.
@@ -105,9 +121,18 @@ class PublicRooms(SubCard):
                 return
         self.page.work(lambda:self.client().join(room['room_id'],password),self.page.room_changed)
 
+    def listing(self):
+        """Game and region of a public listing: the filters must name one of each (not "All")."""
+        if not self.game.currentData() or not self.region.currentData():
+            self.page.say(t('Choose a game and a region for the public room first.'),'warn')
+            return None
+        return self.game.currentData(), self.region.currentData()
+
     def create(self):
         if self.page.current_room():
             self.page.say(t('Leave the current room before joining another.'),'warn')
+            return
+        if self.listing() is None:
             return
         if not confirm(self,t('Create public room'),t('Publish this room name, game and region for other licensed '
                                                      'AKENO players? Connections stay relay-only.')):
@@ -117,7 +142,7 @@ class PublicRooms(SubCard):
 
     def change(self,visibility='public',locked=False):
         room=self.page.current_room()
-        if not room:
+        if not room or self.listing() is None:
             return
         self.page.work(lambda:self.client().publish(room,game_id=self.game.currentData(),region=self.region.currentData(),
                        visibility=visibility,locked=locked),lambda _:self.page.members())
@@ -136,8 +161,9 @@ class PublicRooms(SubCard):
         room=self.selected()
         if room is None:
             return
-        categories=['spam','harassment','unsafe_content','other']
-        category,ok=QInputDialog.getItem(self,t('Report room'),t('Reason'),categories,0,False)
+        names=[t(name) for _,name in REPORTS]
+        choice,ok=QInputDialog.getItem(self,t('Report room'),t('Reason'),names,0,False)
         if ok:
+            category=REPORTS[names.index(choice)][0]
             self.page.work(lambda:self.client().report(room['room_id'],category),
                            lambda _:self.page.say(t('Room report received.'),'success'))

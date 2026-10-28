@@ -4887,5 +4887,17 @@
   "Your internet traffic leaves through {country}.": "Dein Internetverkehr läuft über {country}.",
   "Your network changed. AKENO checks the VPN again before showing Connected.": "Dein Netzwerk hat sich geändert. AKENO prüft das VPN erneut, bevor „Verbunden“ angezeigt wird.",
   "{n} authorised healthy exits.": "{n} freigegebene, funktionierende Ausgangsserver.",
-  "{n} ms": "{n} ms"
+  "{n} ms": "{n} ms",
+  "Active once the session runs": "Aktiv, sobald die Sitzung läuft",
+  "All regions": "Alle Regionen",
+  "Choose a game and a region for the public room first.": "Wähle zuerst ein Spiel und eine Region für den öffentlichen Raum.",
+  "Harassment": "Belästigung",
+  "IP privacy": "IP-Schutz",
+  "IP protection missing": "IP-Schutz fehlt",
+  "Not protected: LAN Play stopped": "Nicht geschützt: LAN Play angehalten",
+  "Protected: relay only": "Geschützt: nur über Relay",
+  "Spam": "Spam",
+  "The relay-only IP protection is not verified. Stop the session and use Recover.": "Der Relay-only-IP-Schutz ist nicht bestätigt. Beende die Sitzung und nutze „Wiederherstellen“.",
+  "Unsafe content": "Unangemessene Inhalte",
+  "Your PC is in the room network. Other players see only your virtual IP.": "Dein PC ist im Raumnetz. Andere Spieler sehen nur deine virtuelle IP."
 }

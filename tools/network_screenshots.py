@@ -61,7 +61,7 @@ def main(out: Path):
             {'actor': 'b7c1d2e3', 'public_key': friend, 'virtual_ip': '10.203.5.3', 'status': 'registered'},
             {'actor': 'f0e9d8c7', 'public_key': relayed, 'virtual_ip': '10.203.5.4', 'status': 'registered'}]
         now = time.time()
-        page.session = {'state': 'active', 'room': room, 'virtual_ip': '10.203.5.2', 'peers': {
+        page.session = {'state': 'active', 'privacy': 'relay_locked', 'room': room, 'virtual_ip': '10.203.5.2', 'peers': {
             friend: {'mode': 'relay', 'latency_ms': 18.4, 'handshake': now - 12, 'rx': 2_400_000, 'tx': 1_900_000,
                      'virtual_ip': '10.203.5.3'},
             relayed: {'mode': 'relay', 'latency_ms': 41.0, 'handshake': now - 30, 'rx': 650_000, 'tx': 720_000,

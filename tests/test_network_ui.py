@@ -52,7 +52,7 @@ def in_session(page, monkeypatch):
         {'actor': 'bbbbbbbb-1111', 'public_key': FRIEND, 'virtual_ip': '10.203.5.3', 'status': 'registered'},
         {'actor': 'cccccccc-2222', 'public_key': RELAYED, 'virtual_ip': '10.203.5.4', 'status': 'registered'}]
     now = time.time()
-    page.session = {'state': 'active', 'room': ROOM, 'virtual_ip': '10.203.5.2', 'peers': {
+    page.session = {'state': 'active', 'privacy': 'relay_locked', 'room': ROOM, 'virtual_ip': '10.203.5.2', 'peers': {
         FRIEND: {'mode': 'relay', 'latency_ms': 18.4, 'handshake': now - 12, 'rx': 2_400_000, 'tx': 1_900_000,
                  'virtual_ip': '10.203.5.3'},
         RELAYED: {'mode': 'relay', 'latency_ms': 41.0, 'handshake': now - 30, 'rx': 650_000, 'tx': 720_000,
@@ -270,3 +270,15 @@ def test_network_modules_start_off_and_switch_on_separately(qtbot):
     assert p.vpn_dash.state_label.text() == 'Disconnected' and p.lan_dash.state_label.text() == 'Off'
     p.show_tab(0)
     assert p.lan_off.isVisible()
+
+
+def test_active_session_without_verified_relay_lock_is_never_connected(page, monkeypatch):
+    in_session(page, monkeypatch)
+    page.session = dict(page.session, privacy=None)
+    page.show_room()
+    assert page.lan_dash.state_label.text() == 'IP protection missing'
+    assert page.session_pill.text().endswith('IP protection missing')
+    page.session = dict(page.session, privacy='relay_locked')
+    page.show_room()
+    assert page.lan_dash.state_label.text() == 'Connected'
+    assert 'virtual IP' in page.lan_dash.detail_label.text()

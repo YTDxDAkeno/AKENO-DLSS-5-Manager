@@ -38,7 +38,9 @@ WINDOWS = sys.platform == 'win32'
 BUILT = WINDOWS and bool(getattr(sys, 'frozen', False))
 
 SESSION = {None: (msg('Not connected'), 'unknown'), 'stopped': (msg('Not connected'), 'unknown'),
-           'starting': (msg('Starting…'), 'pending'), 'active': (msg('Connected'), 'ok'), 'failed': (msg('Failed'), 'fail')}
+           'starting': (msg('Starting…'), 'pending'), 'active': (msg('Connected'), 'ok'), 'failed': (msg('Failed'), 'fail'),
+           # an active session without the verified relay-only lock is never shown as connected
+           'unprotected': (msg('IP protection missing'), 'fail')}
 PATH = {'direct': (msg('Direct connections are blocked'), 'fail'), 'relay': (msg('Relay'), 'info'),
         'direct_trying': (msg('Direct connections are blocked'), 'fail'),
         'relay_trying': (msg('Connecting via relay…'), 'pending'), None: ('—', 'unknown')}
@@ -427,6 +429,8 @@ class AkenoNetworkPage(QWidget):
         self.no_room.setVisible(room is None)
         self.in_room.setVisible(room is not None)
         state = self.session.get('state')
+        if state == 'active' and self.session.get('privacy') != 'relay_locked':
+            state = 'unprotected'
         text, pill_state = SESSION.get(state, SESSION[None])
         if not self.modules.enabled('lan_play'):
             return
@@ -450,12 +454,19 @@ class AkenoNetworkPage(QWidget):
         self.delete_button.setVisible(owner or not self.room_info)
         self.leave_button.setVisible(not owner)
         self.copy_ip_button.setEnabled(bool(own))
-        rows = [(t('Your virtual IP'), own or t('After the first refresh')), (t('Session'), StatusPill(t(text), pill_state))]
+        privacy = StatusPill(t('Protected: relay only'), 'ok') if state == 'active' else \
+            StatusPill(t('Not protected: LAN Play stopped'), 'fail') if state == 'unprotected' else \
+            StatusPill(t('Active once the session runs'), 'unknown')
+        privacy.setToolTip(t(INFO_PATH))
+        rows = [(t('Your virtual IP'), own or t('After the first refresh')), (t('Session'), StatusPill(t(text), pill_state)),
+                (t('IP privacy'), privacy)]
         if self.session.get('error'):
             rows.append((t('Problem'), t(self.session['error'])))
         self.room_grid.set_rows(rows)
         self.session_pill.set(t(text), pill_state)
-        detail = {'active': t('Your PC is in the room network.'), 'starting': t('Creating the LAN adapter…'),
+        detail = {'active': t('Your PC is in the room network. Other players see only your virtual IP.'),
+                  'starting': t('Creating the LAN adapter…'),
+                  'unprotected': t('The relay-only IP protection is not verified. Stop the session and use Recover.'),
                   'failed': t('The session stopped. Use Recover, then start it again.')}.get(
             state, t('Start the LAN session to connect to the other members.'))
         self.lan_dash.set_state(t(text), pill_state, detail)

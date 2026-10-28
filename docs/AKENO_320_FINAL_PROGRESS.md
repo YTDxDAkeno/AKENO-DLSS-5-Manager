@@ -72,6 +72,20 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
 | [WireGuard on Windows 40762019770](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40762019770) `lan-play` | `acacccc` | **WFP lock proven:** "transport lock verified before reporting active", "valid encrypted direct datagrams cannot bypass the outer relay-only filter", "native peer endpoint stays on the relay"; WireGuard log shows no roaming. Then failed at "after the user allows the game program…": the E2E called `allow_program` on a second `LanFirewall` object whose "default deny 1" collided with the session's set (test bypassed the GUI→helper channel). Fixed: E2E uses the production `lan-allow` channel; `_deny_other_ports` now removes every older default-deny set of the tunnel, whichever object created it. |
 | same run, `wireguard` | `acacccc` | Bare-IP parsing confirmed (8/8 records parsed, all IPv4) but no record matched the expected reply tuple. Next: match by resolver address, both ports and the random transaction/question when Windows reports an unspecified local address for the connected UDP socket; failure now reports only structural counts. |
 
+| [WireGuard on Windows 40762936142](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40762936142) `lan-play` | `482ffa4` | **Green: 44 real Windows LAN Play checks passed** (coordinator proof, relay-only path, WFP lock verified before active, encrypted direct-roaming attack dropped and peer endpoint stays on the relay, SMB/RDP/NetBIOS unreachable, game allow via the GUI channel, ports outside the profile closed, AllowedIPs spoofing blocked, revocation, lock removed after clean stop, lock and rules survive a killed session process, recovery removes tunnel+rules+lock, routes restored). |
+| same run, `wireguard` | `482ffa4` | Positive tunnel DNS reply now captured. Remaining: "No kernel drop record proves an asynchronous DNS denial" -> structural diagnostics pushed in `2f14877`. |
+| [Isolated relay and VPN exit traffic 40762019845](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40762019845) | `acacccc` | success |
+| [LAN Play NAT lab 40762019741](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40762019741) | `acacccc` | success |
+
+## UI work
+
+- `1938385` One-click AKENO VPN card (`akeno/ui/network_vpn.py`): flag tiles for the eight planned countries plus any
+  catalog country, each saying why it can/cannot be chosen (no exit is available today, so all are disabled with
+  "No verified AKENO exit server in this country yet"); Connect/Disconnect/Recover/Diagnostics; facts only from the
+  verified session status (IPv4/IPv6 exit, verified country, connected-for, leak protection, latency only if measured);
+  stale status => Needs recovery; error codes => DE/EN sentences. Own WireGuard profiles + VPN Gate review moved to a
+  closed expert section. 35 new German strings.
+
 ## Next concrete step
 
 Read `network-windows.yml` run for `acacccc` (lan-play: WFP lock vs. direct attack; wireguard: DNS positive
