@@ -133,9 +133,17 @@ def run(args):
                 manager.disconnect()
         except Exception as exc:
             print(f'cleanup through AKENO failed: {type(exc).__name__}', flush=True)
+        from akeno.network.windows import service_state
         for name in active:
-            if service_exists(name):
+            # A still-starting service is only marked for deletion by the official uninstall: wait it out first.
+            deadline = time.monotonic() + 60
+            while service_state(name) not in (None, 'running', 'stopped') and time.monotonic() < deadline:
+                time.sleep(0.5)
+            if service_state(name) is not None:
                 subprocess.run([str(backend.root / 'wireguard.exe'), '/uninstalltunnelservice', name], timeout=60)
+            while service_state(name) is not None and time.monotonic() < deadline:
+                time.sleep(0.5)
+            print(f'emergency cleanup of {name}: service {service_state(name) or "removed"}', flush=True)
             (backend.configs / (name + '.conf.dpapi')).unlink(missing_ok=True)
 
     try:

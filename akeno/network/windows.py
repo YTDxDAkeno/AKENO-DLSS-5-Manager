@@ -71,7 +71,45 @@ def private_file(path:Path,data:bytes):
         kernel.LocalFree(descriptor)
 
 
+SERVICE_STATES={1:'stopped',2:'start_pending',3:'stop_pending',4:'running',5:'continue_pending',6:'pause_pending',
+                7:'paused'}
+
+
+def service_state(name):
+    """SCM state of the official tunnel service, or None when it does not exist. Queries the Service Control Manager
+    directly: no subprocess and no PATH lookup. A service marked for deletion still counts until it is gone."""
+    from ctypes import wintypes as w
+    adv=ctypes.WinDLL('advapi32',use_last_error=True)
+    adv.OpenSCManagerW.argtypes=[w.LPCWSTR,w.LPCWSTR,w.DWORD];adv.OpenSCManagerW.restype=ctypes.c_void_p
+    adv.OpenServiceW.argtypes=[ctypes.c_void_p,w.LPCWSTR,w.DWORD];adv.OpenServiceW.restype=ctypes.c_void_p
+    adv.CloseServiceHandle.argtypes=[ctypes.c_void_p]
+
+    class Status(ctypes.Structure):
+        _fields_=[(n,w.DWORD) for n in ('type','state','accepted','exit','service_exit','checkpoint','wait')]
+    adv.QueryServiceStatus.argtypes=[ctypes.c_void_p,ctypes.POINTER(Status)]
+    scm=adv.OpenSCManagerW(None,None,0x0001)                       # SC_MANAGER_CONNECT
+    if not scm:raise NativeUnavailable('Cannot query Windows services.')
+    try:
+        service=adv.OpenServiceW(scm,'WireGuardTunnel$'+name,0x0004)  # SERVICE_QUERY_STATUS
+        if not service:
+            error=ctypes.get_last_error()
+            if error==1060:return None                            # ERROR_SERVICE_DOES_NOT_EXIST
+            if error==1072:return 'deleting'                      # ERROR_SERVICE_MARKED_FOR_DELETE
+            raise NativeUnavailable('Cannot query the WireGuard tunnel service.')
+        try:
+            status=Status()
+            if not adv.QueryServiceStatus(service,ctypes.byref(status)):
+                raise NativeUnavailable('Cannot query the WireGuard tunnel service.')
+            return SERVICE_STATES.get(status.state,'unknown')
+        finally:adv.CloseServiceHandle(service)
+    finally:adv.CloseServiceHandle(scm)
+
+
 class WindowsWireGuard:
+    # The official CLI returns while the tunnel service is still START_PENDING; its control pipe and a stoppable
+    # service state appear later. Every operation waits for the real state instead of guessing.
+    READY_TIMEOUT=30
+
     def __init__(self):
         if sys.platform!='win32':raise NativeUnavailable('WireGuard tunnel services require Windows.')
         # Elevated code must not select an executable directory from user-controlled environment variables.
@@ -137,11 +175,34 @@ class WindowsWireGuard:
         finally:
             # A failed manager import must never leave plaintext profile data on disk.
             temp.unlink(missing_ok=True);plain.unlink(missing_ok=True)
+        if not self._ready(name):
+            raise NativeUnavailable('The WireGuard tunnel service did not start.')
+
+    def _ready(self,name):
+        """True once the tunnel answers on its control pipe; False if its service stops or never comes up."""
+        deadline=time.monotonic()+self.READY_TIMEOUT
+        while time.monotonic()<deadline:
+            if self._call('wg.exe','show',name,'public-key',check=False).returncode==0:return True
+            if service_state(name) in (None,'stopped','deleting'):return False
+            time.sleep(0.25)
+        return False
+
+    def _gone(self,name):
+        deadline=time.monotonic()+self.READY_TIMEOUT
+        while time.monotonic()<deadline:
+            if service_state(name) is None:return True
+            time.sleep(0.25)
+        return False
 
     def status(self,name):
         name=self._name(name)
         p=self._call('wg.exe','show',name,'latest-handshakes',check=False)
-        if p.returncode:return {'state':'disconnected','last_handshake':None}
+        if p.returncode:
+            state=service_state(name)
+            if state is None:return {'state':'disconnected','last_handshake':None}
+            # Installed but not answering yet (or any more): never reported as disconnected.
+            return {'state':{'start_pending':'starting','running':'starting','stop_pending':'stopping',
+                             'deleting':'stopping'}.get(state,'failed'),'last_handshake':None}
         times=[]
         for line in p.stdout.splitlines():
             parts=line.split()
@@ -153,15 +214,19 @@ class WindowsWireGuard:
 
     def stop(self,name,public_key):
         name=self._name(name)
-        actual=self._call('wg.exe','show',name,'public-key',check=False)
-        if actual.returncode:
+        if service_state(name) is None:
             if (self.configs/(name+'.conf.dpapi')).exists():
                 raise NativeUnavailable('An encrypted orphan remains. Remove this AKENO profile in the official manager, then recover.')
             return
-        if actual.stdout.strip()!=public_key:
+        # A starting service cannot be stopped yet (the official uninstall would only mark it for deletion and
+        # leave it running), and its key can only be proven once its control pipe answers.
+        if not self._ready(name):
+            raise NativeUnavailable('The tunnel service does not respond; remove it in the official WireGuard manager, then recover.')
+        actual=self._call('wg.exe','show',name,'public-key',check=False)
+        if actual.returncode or actual.stdout.strip()!=public_key:
             raise NativeUnavailable('The tunnel key does not belong to this imported profile; removal refused.')
         self._call('wireguard.exe','/uninstalltunnelservice',name,check=False)
-        if self.status(name)['state']!='disconnected':
+        if not self._gone(name):
             raise NativeUnavailable('Tunnel removal is incomplete; recovery is required.')
         no_links_on_the_way(self.configs,self.root.parent)
         (self.configs/(name+'.conf.dpapi')).unlink(missing_ok=True)

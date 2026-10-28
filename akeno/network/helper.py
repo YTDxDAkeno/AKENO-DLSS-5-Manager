@@ -35,7 +35,7 @@ def execute(ident):
                 raise ProfileError('An active AKENO license is required to connect. Disconnect and recovery remain available.')
             result=manager.connect(request['profile_id'])
             deadline=time.monotonic()+30
-            while result['state']=='awaiting_handshake' and time.monotonic()<deadline:
+            while result['state'] in ('starting','awaiting_handshake') and time.monotonic()<deadline:
                 time.sleep(1);result=manager.status()
         elif action=='disconnect':result=manager.disconnect()
         elif action=='status':result=manager.status()
