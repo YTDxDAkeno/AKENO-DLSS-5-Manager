@@ -204,3 +204,30 @@ def test_member_cannot_overwrite_another_members_live_wireguard_receiver_index(w
     assert coordinator._learn('room-1',index,a.public)
     assert not coordinator._learn('room-1',index,b.public)
     assert coordinator._index('room-1',index)==a.public
+
+
+def test_account_budget_cannot_be_bypassed_with_another_device_or_endpoint(world):
+    coordinator,grants,clock,wall=world
+    a,b=Member(),Member()
+    grants[a.key]=Grant('room-1',wall[0]+45,account='same-account')
+    grants[b.key]=Grant('room-1',wall[0]+45,account='same-account')
+    coordinator.ACCOUNT_BYTES_PER_SECOND=200
+    prove(coordinator,a,A)
+    # A second valid device costs another 148-byte handshake; changing source does
+    # not obtain another account's budget. Next second permits it normally.
+    assert coordinator.handle(b.initiation(coordinator.responder.public),B)==[]
+    clock[0]+=2
+    prove(coordinator,b,B)
+    assert coordinator.metrics()['identity_buckets']<=2*coordinator.MAX_GRANTS
+
+
+def test_room_budget_is_shared_across_accounts_and_other_rooms_remain_available(world):
+    coordinator,grants,clock,wall=world
+    a,b,c=Member(),Member(),Member()
+    grants[a.key]=Grant('room-1',wall[0]+45,account='a')
+    grants[b.key]=Grant('room-1',wall[0]+45,account='b')
+    grants[c.key]=Grant('room-2',wall[0]+45,account='c')
+    coordinator.ROOM_BYTES_PER_SECOND=200
+    prove(coordinator,a,A)
+    assert coordinator.handle(b.initiation(coordinator.responder.public),B)==[]
+    prove(coordinator,c,C)

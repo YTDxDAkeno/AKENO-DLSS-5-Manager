@@ -22,7 +22,8 @@ def test_dns_checks_require_positive_resolver_and_every_negative_path(monkeypatc
     def deny(address,**kw):calls.append((address,kw));return True
     result=probe.verify(NAME,['1.1.1.1'],run=lambda *a,**k:json.dumps(native_document()),
                         resolve=lambda address:True,deny=deny)
-    assert result['dns_verified'] is True and result['denied_paths']==10
+    assert result['dns_verified'] is True and result['denied_paths']==6
+    assert all(kw['interface'] is not None for _,kw in calls)
     assert all(address!='1.1.1.1' for address,_ in calls)
     assert any(kw['source']=='192.168.1.2' and kw['port']==853 for _,kw in calls)
     assert any(kw['source']=='2001:4860::1234' for _,kw in calls)

@@ -32,6 +32,7 @@ class Grant:
     """A live membership as the control plane sees it: the room and the end of the member's lease (wall clock)."""
     room: str
     expires: float
+    account: str = ''  # trusted account ID from authority, never supplied by a UDP packet
 
 
 class Coordinator:
@@ -46,6 +47,10 @@ class Coordinator:
     MAX_GRANTS = 8_192
     MAX_ENDPOINTS = 4_096
     MAX_INDICES = 8192
+    ACCOUNT_BYTES_PER_SECOND = 1_000_000
+    ACCOUNT_PACKETS_PER_SECOND = 800
+    ROOM_BYTES_PER_SECOND = 2_000_000
+    ROOM_PACKETS_PER_SECOND = 2_000
 
     def __init__(self, private_key: X25519PrivateKey, authority, bind=('127.0.0.1', 0), clock=time.monotonic,
                  wall=time.time):
@@ -59,6 +64,8 @@ class Coordinator:
         self._grants: dict[bytes, tuple[Grant | None, float]] = {}
         self._mac1: dict[bytes, bytes] = {}
         self._rate: dict[tuple, tuple[int, int, int]] = {}
+        self._identity_rate = {}
+        self._identity_window = None
         self._global_rate = (int(clock()), 0, 0)
         self.stats = {'proofs': 0, 'relayed': 0, 'dropped': 0}
         self._lock = threading.RLock()
@@ -108,6 +115,7 @@ class Coordinator:
         with self._lock:
             return {**self.stats, 'members': len(self.endpoints), 'indices': len(self.indices),
                     'source_buckets': len(self._rate), 'grant_cache': len(self._grants),
+                    'identity_buckets':len(self._identity_rate),
                     'packet_limit': self.GLOBAL_PACKETS_PER_SECOND, 'byte_limit': self.GLOBAL_BYTES_PER_SECOND}
 
     # -- packet path ----------------------------------------------------------------------------------------------
@@ -123,6 +131,8 @@ class Coordinator:
                     reply, public = self.responder.initiation(data)
                 except wg.Rejected:
                     return self._drop()
+                if not self._identity_budget(public,len(data)):
+                    return self._drop()
                 if not self._prove(public, source):
                     return self._drop()
                 self.stats['proofs'] += 1
@@ -130,6 +140,8 @@ class Coordinator:
             if kind == wg.TRANSPORT and self.responder.owns(data[4:8]):
                 public = self.responder.transport(data)
                 if public is not None and self._grant(public):
+                    if not self._identity_budget(public,len(data)):
+                        return self._drop()
                     if not self._prove(public, source):
                         return self._drop()
                     return []
@@ -138,6 +150,8 @@ class Coordinator:
             if sender is None:
                 return self._drop()
             public, room = sender
+            if not self._identity_budget(public,len(data)):
+                return self._drop()
             if kind == wg.INITIATION:
                 target = self._initiation_target(data, public, room)
                 if target is not None:
@@ -185,6 +199,29 @@ class Coordinator:
 
     def _accept(self, public: bytes) -> bool:
         return self._grant(public) is not None
+
+    def _identity_budget(self,public,size):
+        """Shared account/room limits survive NAT roaming and device/key multiplicity.
+
+        The dictionaries contain only current-second aggregate counters, no destination
+        history. Existing source/global parsing budgets still protect unauthenticated input.
+        """
+        grant=self._grant(public)
+        if grant is None:return False
+        window=int(self.clock())
+        if self._identity_window!=window:
+            self._identity_rate.clear()
+            self._identity_window=window
+        account=grant.account or wg.b64(public)  # test/legacy authorities have one key per identity
+        for key,packets,byte_limit in (
+                (('account',account),self.ACCOUNT_PACKETS_PER_SECOND,self.ACCOUNT_BYTES_PER_SECOND),
+                (('room',grant.room),self.ROOM_PACKETS_PER_SECOND,self.ROOM_BYTES_PER_SECOND)):
+            _,count,total=self._identity_rate.get(key,(window,0,0))
+            if count>=packets or total+size>byte_limit or \
+                    key not in self._identity_rate and len(self._identity_rate)>=2*self.MAX_GRANTS:
+                return False
+            self._identity_rate[key]=(window,count+1,total+size)
+        return True
 
     def _grant(self, public: bytes) -> Grant | None:
         now = self.clock()

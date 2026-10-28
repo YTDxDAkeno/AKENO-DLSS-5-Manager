@@ -92,7 +92,8 @@ def inventory(tunnel_name, dns, run):
     for address in targets:
         script+=f"$r+=@(Find-NetRoute -RemoteIPAddress '{address}' -ErrorAction Stop | Select-Object -ExpandProperty InterfaceAlias); "
     script+="$a=@(Get-NetIPAddress -AddressState Preferred -ErrorAction Stop | Select-Object InterfaceIndex,IPAddress,InterfaceAlias); "
-    script+="@{index=[int]$adapter.ifIndex;dns=$d;routes=$r;addresses=$a} | ConvertTo-Json -Depth 4 -Compress"
+    script+="$otherDns=@(Get-DnsClientServerAddress | Where-Object InterfaceIndex -ne $adapter.ifIndex | ForEach-Object {$_.ServerAddresses}); "
+    script+="@{index=[int]$adapter.ifIndex;dns=$d;routes=$r;addresses=$a;other_dns=$otherDns} | ConvertTo-Json -Depth 4 -Compress"
     try:
         raw=json.loads(run(script,timeout=10))
         if type(raw['index']) is not int or raw['index']<=0 or set(raw['dns'])!=set(targets) or \
@@ -100,6 +101,10 @@ def inventory(tunnel_name, dns, run):
                 not isinstance(raw['addresses'],list) or len(raw['addresses'])>256:
             raise ValueError()
         sources=set()
+        # Link-local IPv6 resolvers require scoped destination measurements; do not
+        # silently certify them from probes to an unrelated global destination.
+        if any(ipaddress.ip_address(value.split('%')[0]).is_link_local for value in raw.get('other_dns',[])):
+            raise DNSVerificationError('Native link-local DNS paths require scoped verification.')
         for row in raw['addresses']:
             address=ipaddress.ip_address(row['IPAddress'])
             index=row['InterfaceIndex']
@@ -127,14 +132,15 @@ def verify(tunnel_name,dns,*,run=None,resolve=resolver_responds,deny=blocked):
     probes=0
     for family,choices in candidates.items():
         foreign=next(value for value in choices if value not in before['dns'])
-        # Default-route probes check both stacks even if a physical NIC has no
-        # global IPv6 address. NIC-bound probes catch Windows multi-homed DNS leaks.
-        sources=[(None,None),*((index,address) for index,address in before['sources']
-                              if ipaddress.ip_address(address).version==family)]
+        # A DNS send accepted on the full tunnel is not an outside-tunnel leak:
+        # Windows can silently filter it later. Measure the actual bypass paths,
+        # forcing each eligible non-tunnel interface and source address instead.
+        sources=[(index,address) for index,address in before['sources']
+                 if ipaddress.ip_address(address).version==family]
         for index,address in sources:
             # Encrypted DNS may legitimately use the full tunnel. Port 853 is
             # required to be denied only on a physical/non-tunnel source path.
-            for tcp,port in ((False,53),(True,53),*(([(True,853)]) if index is not None else [])):
+            for tcp,port in ((False,53),(True,53),(True,853)):
                 if deny(foreign,source=address,interface=index,tcp=tcp,port=port) is not True:
                     raise DNSVerificationError('Windows did not explicitly deny a foreign DNS path.')
                 probes+=1

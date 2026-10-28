@@ -63,7 +63,7 @@ def authority(rooms):
             if not (user and user.active and device and device.active and device.user_id == uid and license_
                     and license_.running(utcnow())):
                 return None
-        return Grant(grant['room'], grant['expires'])
+        return Grant(grant['room'], grant['expires'],account=grant['actor'])
     return check
 
 
