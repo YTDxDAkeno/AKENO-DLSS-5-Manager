@@ -16,6 +16,9 @@ for n,s in d['services'].items():
     assert int(s.get('mem_limit',0))>0 and float(s.get('cpus',0))>0 and s.get('pids_limit',0)>0
     assert 'ALL' in s.get('cap_drop',[])
     assert s.get('profiles')
+    for mount in s.get('tmpfs',[]):
+        assert mount.startswith('/') and ':rw,' in mount
+        assert 'size=' in mount and 'nosuid' in mount and 'noexec' in mount
     for port in s.get('ports',[]):assert port['host_ip']=='127.0.0.1'
     for v in s.get('volumes',[]):
         if v['type']=='bind':

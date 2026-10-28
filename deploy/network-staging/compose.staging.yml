@@ -32,7 +32,7 @@ x-app: &app
   read_only: true
   cap_drop: [ALL]
   security_opt: [no-new-privileges:true]
-  tmpfs: [/tmp:rw,noexec,nosuid,size=64m,mode=1777]
+  tmpfs: ["/tmp:rw,noexec,nosuid,size=64m,mode=1777"]
   pids_limit: 96
   ulimits: {nofile: {soft: 4096, hard: 4096}}
   logging: *logs
@@ -80,7 +80,7 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/db_pg
     secrets: [db_pg]
     volumes: [staging-db:/var/lib/postgresql/data]
-    tmpfs: [/tmp:rw,noexec,nosuid,size=32m,mode=1777, /var/run/postgresql:rw,noexec,nosuid,size=8m,mode=3777]
+    tmpfs: ["/tmp:rw,noexec,nosuid,size=32m,mode=1777", "/var/run/postgresql:rw,noexec,nosuid,size=8m,mode=3777"]
     networks: [database]
     mem_limit: 512m
     memswap_limit: 512m
