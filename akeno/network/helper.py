@@ -50,8 +50,9 @@ def lan(store,request):
         store.save({'done':True,'result':{'state':'starting'}})
         status.save({'state':'starting','room':room,'updated':time.time()})
         client=LanClient(licenses,SecureStore(sub('network')/'lan-identity'))
+        allow=SecureStore(sub('network')/'lan-allow');allow.clear()
         LanSession(room,LanControl(client,room),native,journal,status,
-                   lambda:bool(stop.load().get('stop')) or stop.load().get('room')!=room).run()
+                   lambda:bool(stop.load().get('stop')) or stop.load().get('room')!=room,allow_request=allow.load).run()
         return 0
     except (ProfileError,NativeUnavailable,ValueError) as exc:
         status.save({'state':'failed','error':str(exc)[:300],'updated':time.time()})
@@ -99,6 +100,11 @@ def stop_lan(room):
     """Asks a running LAN session to end (it removes its tunnel and firewall rules itself). No elevation needed."""
     _,_,stop=lan_stores()
     stop.save({'stop':True,'room':room})
+
+
+def allow_game(room,program):
+    """Asks the running LAN session to allow one game program for this room (it validates the path itself)."""
+    SecureStore(sub('network')/'lan-allow').save({'room':room,'program':str(program),'id':uuid.uuid4().hex})
 
 
 def lan_status():

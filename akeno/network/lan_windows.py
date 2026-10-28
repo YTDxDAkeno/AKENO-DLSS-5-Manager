@@ -214,9 +214,12 @@ class LanSession:
     HEARTBEAT = 15
     TICK = 2
 
-    def __init__(self, room, control, native, journal, status, stop_requested, firewall=LanFirewall, clock=time.time):
+    def __init__(self, room, control, native, journal, status, stop_requested, firewall=LanFirewall, clock=time.time,
+                 allow_request=lambda: None):
         self.room, self.control, self.native = room, control, native
         self.journal, self.status, self.stop_requested, self.clock = journal, status, stop_requested, clock
+        # The GUI's only other input: "allow this game program" (validated .exe path, applied once per request id).
+        self.allow_request = allow_request
         self.name = tunnel_name(room)
         self.firewall_type = firewall
 
@@ -240,7 +243,16 @@ class LanSession:
             controller.apply(state['peers'])
             probe = LatencyProbe(own['virtual_ip'])
             last_refresh, error = self.clock(), None
+            handled, allowed = set(), []
             while not self.stop_requested():
+                request = self.allow_request()
+                if isinstance(request, dict) and request.get('room') == self.room and request.get('id') not in handled:
+                    handled.add(request.get('id'))
+                    try:
+                        firewall.allow_program(request.get('program', ''))
+                        allowed.append(Path(request['program']).name)
+                    except (LanError, NativeUnavailable) as exc:
+                        error = str(exc)[:200]
                 if self.clock() - last_refresh >= self.HEARTBEAT:
                     try:
                         state = self.control.refresh()
@@ -254,7 +266,7 @@ class LanSession:
                     peer['latency_ms'] = probe.measure(peer['virtual_ip'], 0.5) if peer['mode'] in ('direct', 'relay') \
                         else None
                 self.status.save({'state': 'active', 'room': self.room, 'virtual_ip': own['virtual_ip'],
-                                  'peers': peers, 'error': error, 'updated': self.clock()})
+                                  'peers': peers, 'error': error, 'allowed': allowed, 'updated': self.clock()})
                 time.sleep(self.TICK)
         finally:
             if probe:
