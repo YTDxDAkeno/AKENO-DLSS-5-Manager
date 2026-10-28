@@ -88,6 +88,7 @@ def _run(args):
         checks.append({'name': name, 'passed': bool(ok), 'detail': str(detail)[:600]})
         print(f"[{'OK' if ok else 'FAIL'}] {name}" + (f': {detail}' if detail != '' else ''), flush=True)
         if not ok:
+            print('::error title=Native LAN assertion::'+name,flush=True)
             raise AssertionError(name)
 
     def info(name, detail):

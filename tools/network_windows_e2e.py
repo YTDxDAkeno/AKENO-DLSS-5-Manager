@@ -348,4 +348,12 @@ if __name__ == '__main__':
     p.add_argument('--work', type=Path, required=True)
     p.add_argument('--report', type=Path, default=Path('network-windows-report.json'))
     p.add_argument('--full-tunnel', action='store_true')
-    run(p.parse_args())
+    try:
+        run(p.parse_args())
+    except Exception as exc:
+        from akeno.network.dns_probe import DNSVerificationError
+        from akeno.network.windows import NativeUnavailable
+        detail=str(exc) if isinstance(exc,(DNSVerificationError,NativeUnavailable,AssertionError)) else \
+               f'{type(exc).__name__}; winerror={getattr(exc,"winerror",None)}'
+        print('::error title=Native VPN test failure::'+detail,flush=True)
+        raise
