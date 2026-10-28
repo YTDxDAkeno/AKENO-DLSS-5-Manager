@@ -19,3 +19,11 @@ The coordinator uses UDP 3478; it is not an anonymous STUN/TURN or Internet exit
 - Exact Claude source: 110 fetched files match their Git blob hashes. 26 isolated network backend tests passed.
 - Last confirmed remote checkpoint before this update: `63fbe4fc76c28e68cda9938600a2142eb874b0db`.
 - Staging is NOT deployed; firewall, DNS, existing Caddy config and production services remain untouched.
+
+## Checkpoint: operational handover
+
+- Private Windows build must embed the staging API and fresh staging license/LAN public keys; packaged clients ignore runtime address overrides.
+- Existing release public key stays unchanged; no production private key or SMTP secret enters staging.
+- Added manual activation, source-IP/global UDP budget review, monitoring and rollback procedures.
+- Additional Internet VPN exits remain a separate future architecture; no server purchased/started or third-party VPN connected.
+- Both real-Windows-PC/ISP-NAT test and actual staging deployment remain pending explicit approval.

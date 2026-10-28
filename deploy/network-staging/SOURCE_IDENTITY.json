@@ -1,0 +1,776 @@
+{
+  "base_commit": "588b21ca64a78f13d937a89abb58d5289b34f7c5",
+  "files": [
+    {
+      "path": ".github/workflows/build.yml",
+      "git_blob_sha": "7645452ef6e0cf14429569a57a47ed7b46940cf5",
+      "local_blob_sha": "7645452ef6e0cf14429569a57a47ed7b46940cf5",
+      "sha256": "57221d913d3a223d77212927afae3ae57bff84ae5d62038e87960067f9e46aca",
+      "exact": true
+    },
+    {
+      "path": "akeno/__init__.py",
+      "git_blob_sha": "6e44fa33bfc92a5837e5e3fa29421f9d46e1a4f7",
+      "local_blob_sha": "6e44fa33bfc92a5837e5e3fa29421f9d46e1a4f7",
+      "sha256": "b4a9cdbfe62496eca15cff471961fc1260d936fd1f3000f4190e6cd585a20736",
+      "exact": true
+    },
+    {
+      "path": "akeno/data/licensing.json",
+      "git_blob_sha": "38f24bb313480c75285696c429a1179be8cd7e22",
+      "local_blob_sha": "38f24bb313480c75285696c429a1179be8cd7e22",
+      "sha256": "7e10e514a01118e65a2793a67fcba6bee4ce3b75f4d8ab55d48c6117e835a118",
+      "exact": true
+    },
+    {
+      "path": "akeno/i18n.py",
+      "git_blob_sha": "e12a887a052d2f298df82b1d7538c8c1d107ad0b",
+      "local_blob_sha": "e12a887a052d2f298df82b1d7538c8c1d107ad0b",
+      "sha256": "5aac6782eddc19fa93c9e506520e29e68a4d54800d7bac019f020691fff631a6",
+      "exact": true
+    },
+    {
+      "path": "akeno/licensing/api.py",
+      "git_blob_sha": "c2869bd4e2229444afdfe43c941deff33047e997",
+      "local_blob_sha": "c2869bd4e2229444afdfe43c941deff33047e997",
+      "sha256": "99f6b4ac22e1b320f9e7388176b40a29ab5eb21c6c6062ef39270eec8bac8a6b",
+      "exact": true
+    },
+    {
+      "path": "akeno/licensing/config.py",
+      "git_blob_sha": "c282cebdbd28794bc8720d7203af06063da29f2e",
+      "local_blob_sha": "c282cebdbd28794bc8720d7203af06063da29f2e",
+      "sha256": "e7e5589b61d306e2668b35bd536d7193e3cffbd518bad6b1e64fe2d26de70d2e",
+      "exact": true
+    },
+    {
+      "path": "akeno/licensing/crypto.py",
+      "git_blob_sha": "86179ba01ab8b047e62323ab751d1fcf9d790961",
+      "local_blob_sha": "86179ba01ab8b047e62323ab751d1fcf9d790961",
+      "sha256": "d8e923a3ab9d21768ea80e5eb20711db6f75f548f0bb58170b85de1f5e0187fe",
+      "exact": true
+    },
+    {
+      "path": "akeno/licensing/manager.py",
+      "git_blob_sha": "39fa7c0ff4bd062ee435597e65b45fc0c04d6eb2",
+      "local_blob_sha": "39fa7c0ff4bd062ee435597e65b45fc0c04d6eb2",
+      "sha256": "72061f15b99297fb2be1c766206ae288f1f7eb5ccd771d3838114c05d48504ed",
+      "exact": true
+    },
+    {
+      "path": "akeno/network/__init__.py",
+      "git_blob_sha": "71efe25e3fb35b2d5ef82b5cc321cf685845007d",
+      "local_blob_sha": "71efe25e3fb35b2d5ef82b5cc321cf685845007d",
+      "sha256": "b603aedef5cf734c23f7fa36e8cc229f1c6b2a1a2e95423c0c5ce1daef6e4670",
+      "exact": true
+    },
+    {
+      "path": "akeno/network/client.py",
+      "git_blob_sha": "968a1e09163ca42fc4aeec11ef029ab78367757f",
+      "local_blob_sha": "968a1e09163ca42fc4aeec11ef029ab78367757f",
+      "sha256": "237034c0e301817478ebb53ba3ebe5a9c6b8437bd058668f3a49408789f7cf20",
+      "exact": true
+    },
+    {
+      "path": "akeno/network/credentials.py",
+      "git_blob_sha": "2a4ab5bfe1fced88fe63cf9a42336afa4fee5b7b",
+      "local_blob_sha": "2a4ab5bfe1fced88fe63cf9a42336afa4fee5b7b",
+      "sha256": "0cbbb3d0278b1578cd201ee4cfa7fd900594310a2ca96491c08306dd683e512a",
+      "exact": true
+    },
+    {
+      "path": "akeno/network/lan.py",
+      "git_blob_sha": "78214d57b24fff357e58a9275a5cb0d5b2f42888",
+      "local_blob_sha": "78214d57b24fff357e58a9275a5cb0d5b2f42888",
+      "sha256": "a45028a8c6b2dcbfc93a914a0b7102ff2cafa31bda2149f667be2d3253827fb0",
+      "exact": true
+    },
+    {
+      "path": "akeno/paths.py",
+      "git_blob_sha": "acceb607601e40b0a49a3929090677f593414b81",
+      "local_blob_sha": "acceb607601e40b0a49a3929090677f593414b81",
+      "sha256": "fbc7973a989c9aaa7282e849b5e7f2dedd00d7ffc18b63eb23b1fee22e0e2804",
+      "exact": true
+    },
+    {
+      "path": "deploy/README.md",
+      "git_blob_sha": "2dd318cdb3aeb9b87906b4c3a8a9d4c369f51f8b",
+      "local_blob_sha": "2dd318cdb3aeb9b87906b4c3a8a9d4c369f51f8b",
+      "sha256": "68d5b7f7f0e0f4dbc96909d484e3198b53dc464704c0788f77f1510000dccec5",
+      "exact": true
+    },
+    {
+      "path": "deploy/docker-compose.lan-play.yml",
+      "git_blob_sha": "43969683439cc76dec90763dcf9724f0d5a32dfe",
+      "local_blob_sha": "43969683439cc76dec90763dcf9724f0d5a32dfe",
+      "sha256": "90abe1d39d78e1cb986d33665060d80a77acef66ec949f8012c4ef1ace283131",
+      "exact": true
+    },
+    {
+      "path": "deploy/docker-compose.yml",
+      "git_blob_sha": "54e377288023510f8e868ff7d13a3c85e909ff30",
+      "local_blob_sha": "54e377288023510f8e868ff7d13a3c85e909ff30",
+      "sha256": "09c8c98b38fca098bc717a624e5c5995b0e48dc886d6bc10a3b10c940a06ac30",
+      "exact": true
+    },
+    {
+      "path": "docs/AKENO_NETWORK_CLAUDE_HANDOFF.md",
+      "git_blob_sha": "fb71c444ead56ce412b15adda41cc43d1a84ad07",
+      "local_blob_sha": "fb71c444ead56ce412b15adda41cc43d1a84ad07",
+      "sha256": "0d6fd13556ccdacbe5ab686d5e257a3cf0d9f46c5026285ac9ce85990d7071e9",
+      "exact": true
+    },
+    {
+      "path": "docs/AKENO_NETWORK_PRIVATE_TEST_RELEASE.md",
+      "git_blob_sha": "7a4e79161d2d62128b13c7b5b913da0fc2a40b2a",
+      "local_blob_sha": "7a4e79161d2d62128b13c7b5b913da0fc2a40b2a",
+      "sha256": "fddbb7b825cf4a28793e3d4d7d97cab82e4827f5278486ef3e13e4c090903d33",
+      "exact": true
+    },
+    {
+      "path": "docs/AKENO_NETWORK_PROGRESS.md",
+      "git_blob_sha": "31fae0c452d2cb112e929ec3b4baeb6a6d6948bc",
+      "local_blob_sha": "31fae0c452d2cb112e929ec3b4baeb6a6d6948bc",
+      "sha256": "044e5cc0942cc5adff9d8a481f92fe0ba8cbfa7ac71573f9fb4478fcf0f1b9e7",
+      "exact": true
+    },
+    {
+      "path": "docs/AKENO_NETWORK_SECURITY_REVIEW.md",
+      "git_blob_sha": "9deefbc82b16d02b84771dd392ece7178533336a",
+      "local_blob_sha": "9deefbc82b16d02b84771dd392ece7178533336a",
+      "sha256": "b2ae5517d3298896e89349e93252e995ac51e42641107d0af68f4ca52b73ceae",
+      "exact": true
+    },
+    {
+      "path": "server/Dockerfile",
+      "git_blob_sha": "fa209803ab860b5ca673f09c6c58fdf7e3ab3896",
+      "local_blob_sha": "fa209803ab860b5ca673f09c6c58fdf7e3ab3896",
+      "sha256": "66cad2b4367bae404a97b80e8e778706cd62404f39b8bc7548acd3be22846b4c",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/__init__.py",
+      "git_blob_sha": "e014fd3fdddaf1d53077f1f9904a6f896dddaff5",
+      "local_blob_sha": "e014fd3fdddaf1d53077f1f9904a6f896dddaff5",
+      "sha256": "3d0504459a73989f70aae5a47978f9288bb5596587c764785cf08fd8f8d6a9f2",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/__main__.py",
+      "git_blob_sha": "7a07bed65dec4efa3ff30d22221e63098932870a",
+      "local_blob_sha": "7a07bed65dec4efa3ff30d22221e63098932870a",
+      "sha256": "00db4063114d11ba19c72e5afa8533563f80f5d0de7261a10c163361fa61d6ce",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/admin/service.py",
+      "git_blob_sha": "de384d05bf2868a0baeade1ba4db43987e925a10",
+      "local_blob_sha": "de384d05bf2868a0baeade1ba4db43987e925a10",
+      "sha256": "4d00b4d53f7956cbc500f3e19752418c6cd736a6997ffc0c5a41a50fca6962cb",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/api/__init__.py",
+      "git_blob_sha": "7031b053a408e4cc72fa45d26c72733fe72b220f",
+      "local_blob_sha": "7031b053a408e4cc72fa45d26c72733fe72b220f",
+      "sha256": "9a2ed6001f70be9a194c9bcfad7c0e42dd18057dfed52610f8b957080d4cd918",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/api/admin.py",
+      "git_blob_sha": "0912300c69381b97f5b7514c57a32877d60a7d09",
+      "local_blob_sha": "0912300c69381b97f5b7514c57a32877d60a7d09",
+      "sha256": "aa34773a335dfb3286b65565df966360aa4b549bf2d25c15caeae9d82c9bf2e3",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/api/auth.py",
+      "git_blob_sha": "fa0723e8b78a2353cb93000294870a3fcd27364a",
+      "local_blob_sha": "fa0723e8b78a2353cb93000294870a3fcd27364a",
+      "sha256": "84f37d7102dea9ffaf6b8516c0253e671d4519bc389f0e38125399338ad884f7",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/api/common.py",
+      "git_blob_sha": "807586966e5ba3a470b4a07d9b307a1c9350a532",
+      "local_blob_sha": "807586966e5ba3a470b4a07d9b307a1c9350a532",
+      "sha256": "fb6cdc6665fa39660d76bef8636b8eea734ea54382d5583bfe249e78cc506354",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/api/deps.py",
+      "git_blob_sha": "44c3d7d2431386f47fd40d23d751f5243817fe1d",
+      "local_blob_sha": "44c3d7d2431386f47fd40d23d751f5243817fe1d",
+      "sha256": "3eb1307274e8e7e3218a598bf25176087046d1ae2d63ec1b2f63ffcc2f1aad48",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/api/devices.py",
+      "git_blob_sha": "89d2063ab12c2daeb021330ed8ebd065a04ef7bf",
+      "local_blob_sha": "89d2063ab12c2daeb021330ed8ebd065a04ef7bf",
+      "sha256": "18e9cfb06a6815f3652919527bac687dedd0a08b6c2fbf7d952a27581e902a15",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/api/licenses.py",
+      "git_blob_sha": "b5b996c56f067ad806932d190a76285666c9a7bc",
+      "local_blob_sha": "b5b996c56f067ad806932d190a76285666c9a7bc",
+      "sha256": "0fad4f6406c9bf17c23cd022b8e20564e3a65f8531da8890998e3a8fabea35ce",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/api/schemas.py",
+      "git_blob_sha": "5e43879fad3a06d29e8d58c440eba98e4dac110e",
+      "local_blob_sha": "5e43879fad3a06d29e8d58c440eba98e4dac110e",
+      "sha256": "66422823082bf3c104cab4755b0e4bea1bcbb98dac78bc569cff9aacdfaa4416",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/api/system.py",
+      "git_blob_sha": "d84263bdeb68ca659366922d91c44b6d245c47d7",
+      "local_blob_sha": "d84263bdeb68ca659366922d91c44b6d245c47d7",
+      "sha256": "5e341c3d5bc7c6f60418705d3145972db308711dc3ee825a0e75d358008b483d",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/audit.py",
+      "git_blob_sha": "983dec076198f0204d940054113afcf5de4cf68e",
+      "local_blob_sha": "983dec076198f0204d940054113afcf5de4cf68e",
+      "sha256": "b526f47e3a022dc97e7b426799526dce6699a8abe308e9d17d7f8fcce0f9a2ee",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/auth/__init__.py",
+      "git_blob_sha": "47d259497ce84352d2cd65abc7e90cf1251a01c2",
+      "local_blob_sha": "47d259497ce84352d2cd65abc7e90cf1251a01c2",
+      "sha256": "134870a81ee3abd789fc3b5fa938dcad395b5db4f8401ed62087520b1276f39c",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/auth/passwords.py",
+      "git_blob_sha": "eca5203997df6f5e8e638f92091b8b51ac7aa6ce",
+      "local_blob_sha": "eca5203997df6f5e8e638f92091b8b51ac7aa6ce",
+      "sha256": "2bcd60f5862d2083105ca443826fe28f290adc56d3e4855e9a90caae6a9ed2be",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/auth/ratelimit.py",
+      "git_blob_sha": "ab6dbb6c6e9aa1b35e2b3b14ec3622852a558453",
+      "local_blob_sha": "ab6dbb6c6e9aa1b35e2b3b14ec3622852a558453",
+      "sha256": "42c0b01aa0eebdcbccab170864ef13e02be31409d325af44890d117d1380a438",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/auth/secretbox.py",
+      "git_blob_sha": "476c50b2cfc32a8932256a36d5f3b300ad600024",
+      "local_blob_sha": "476c50b2cfc32a8932256a36d5f3b300ad600024",
+      "sha256": "3ea004b0937673e42fe5f25294d9b9974d697613e6aba09baeb80eb1b5a7fb03",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/auth/service.py",
+      "git_blob_sha": "58df361df8b4ba61233c3b63ed023c57bfaaf61d",
+      "local_blob_sha": "58df361df8b4ba61233c3b63ed023c57bfaaf61d",
+      "sha256": "f481fba15481ee53850b70b61bff5096ac460e9cec5c60c1d1a1721d6a7a0ef5",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/auth/tokens.py",
+      "git_blob_sha": "9af4bbc02d64e3ef06e1b93a7ca75a9dfccba2fe",
+      "local_blob_sha": "9af4bbc02d64e3ef06e1b93a7ca75a9dfccba2fe",
+      "sha256": "cca7eb0176062cf7f76a705dfd19966c4b09354514a03533b14df10b4b4e2e26",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/auth/totp.py",
+      "git_blob_sha": "c968cc52df943d481d20a42bbc5c4488b73f4056",
+      "local_blob_sha": "c968cc52df943d481d20a42bbc5c4488b73f4056",
+      "sha256": "bfd67f971e0b02544bd9a32edac95ec12b1389906d6aebde505cdaabcd060466",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/cli.py",
+      "git_blob_sha": "4de43fe50ec3c5cdb4a7a9762e9f203068d51f1a",
+      "local_blob_sha": "4de43fe50ec3c5cdb4a7a9762e9f203068d51f1a",
+      "sha256": "2c1dd453132bfca651bb6ab97a35be5a4ee6dc250f1fb376c1185ae468a5c21c",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/clock.py",
+      "git_blob_sha": "b3db7ad553b41f5f712c8b382e1679527f11562a",
+      "local_blob_sha": "b3db7ad553b41f5f712c8b382e1679527f11562a",
+      "sha256": "c363d285a9d53cbd82ee2adf3abed6549883c803c3cff0c655f7fe31ef67dc96",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/config.py",
+      "git_blob_sha": "edb617df1c724cfac6b87ef74a80f172c0993a2a",
+      "local_blob_sha": "edb617df1c724cfac6b87ef74a80f172c0993a2a",
+      "sha256": "05b129fed371976eb4bd95ef090a3315ed77af4cc5fe03573b8920cb108f2404",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/db.py",
+      "git_blob_sha": "4bce8b58de9518048d6e85775a340ef0417ac4c0",
+      "local_blob_sha": "4bce8b58de9518048d6e85775a340ef0417ac4c0",
+      "sha256": "33e0a4da2f00000ae4823e1031ae97db06233c85e6c62e81d8cc26a8a04ceaf7",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/errors.py",
+      "git_blob_sha": "5fed95c81c535d8e367de21cd08059a510a45f35",
+      "local_blob_sha": "5fed95c81c535d8e367de21cd08059a510a45f35",
+      "sha256": "cf5fa01d1c2e2251130379598b485a8a314f9f7f84f9dea1863256d6fb5dc631",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/licensing/codes.py",
+      "git_blob_sha": "294a066b71d1964339435f3b4fa07ae0c93a356e",
+      "local_blob_sha": "294a066b71d1964339435f3b4fa07ae0c93a356e",
+      "sha256": "fc88072e866e446096d0577563442cd19928944e65c4c43165be4d8633989085",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/licensing/service.py",
+      "git_blob_sha": "ba3e8f73f27c5716db3f27c5604dced7f0d5e008",
+      "local_blob_sha": "ba3e8f73f27c5716db3f27c5604dced7f0d5e008",
+      "sha256": "742634d6c4eeeab3c179ad3c32846284b5026e4dbe472e3d983e5a15d9a7704e",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/licensing/signing.py",
+      "git_blob_sha": "9ce2cc3f90be13e1f38872e192aa8602d8a3a45b",
+      "local_blob_sha": "9ce2cc3f90be13e1f38872e192aa8602d8a3a45b",
+      "sha256": "c7b74f922551be52ade167667cd0bc9b6fe623f749746e823b77b08eaa1a39d7",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/mail.py",
+      "git_blob_sha": "822af70b819f85936a8f6b232061900023941e18",
+      "local_blob_sha": "822af70b819f85936a8f6b232061900023941e18",
+      "sha256": "0ebee365d46149f9b50795f8ab7691d9a352bec2f26d2c41ed78265bf1b6474e",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/main.py",
+      "git_blob_sha": "6816e26de07ca897e85a1b3caacebc7548d03eea",
+      "local_blob_sha": "6816e26de07ca897e85a1b3caacebc7548d03eea",
+      "sha256": "ed89c9c6f16ade4694f3fa3703a6f5bc26b7c03475cca08026e88c89118a1867",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/models/__init__.py",
+      "git_blob_sha": "69492251cfab326174b68637510952c980890edb",
+      "local_blob_sha": "69492251cfab326174b68637510952c980890edb",
+      "sha256": "cd28e7e1ae6ba9f0d1b43397bbcd5a46ab6fc4b9bec7bb2e5429e85c1bdd6cd4",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/network/__init__.py",
+      "git_blob_sha": "c50f57e9966cdc86deee2dfdd883d7130fe6c46b",
+      "local_blob_sha": "c50f57e9966cdc86deee2dfdd883d7130fe6c46b",
+      "sha256": "5286c2aeda87037d21b74aa6c3a5b59322500c467ae058816d1fd9458fd37eaa",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/network/api.py",
+      "git_blob_sha": "607c47ef8b59fea0096b66869a9328a8b68f494d",
+      "local_blob_sha": "607c47ef8b59fea0096b66869a9328a8b68f494d",
+      "sha256": "43206cf4fab5d98f3996f5881d4e23ea4ecd34e779a4a0360fc3af60602cb5e0",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/network/coordinator.py",
+      "git_blob_sha": "5536d2c203a263f0e0608f668eafc9161e72a0b1",
+      "local_blob_sha": "5536d2c203a263f0e0608f668eafc9161e72a0b1",
+      "sha256": "6db857d8067f42e4cdbccce8dbe38f047aee919585520ea24638cc897b366076",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/network/relay.py",
+      "git_blob_sha": "8d13b5dca7beeb33d59cefb15d7e9d924739a74f",
+      "local_blob_sha": "8d13b5dca7beeb33d59cefb15d7e9d924739a74f",
+      "sha256": "217d975830ae9d2c7681befbd74006cdc7d74e702660b92aad1ed60506c5a355",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/network/rooms.py",
+      "git_blob_sha": "1ea39ba3a2ceaf666964f0b39468b345b6d41ee3",
+      "local_blob_sha": "1ea39ba3a2ceaf666964f0b39468b345b6d41ee3",
+      "sha256": "7a701342e56f6a19d774aa3e009fb2b3b4578bb5b1d099df59cb31f04ac267af",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/network/service.py",
+      "git_blob_sha": "599f93ecb1b16a80cdd310ce2fd934da45725e9c",
+      "local_blob_sha": "599f93ecb1b16a80cdd310ce2fd934da45725e9c",
+      "sha256": "e21990dd9b7a70c1c81efb4789b9026068b004b66e92a886194ce9643646c7c5",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/network/wireguard.py",
+      "git_blob_sha": "1ff35b63a4764ba913847b8b29638fef4caeaff6",
+      "local_blob_sha": "1ff35b63a4764ba913847b8b29638fef4caeaff6",
+      "sha256": "009d684eb1ce19079e0e067bd49391f28562bd8e027370e41a152361bf7b6d15",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/settings.py",
+      "git_blob_sha": "1f0f850380e47bae7820465b9e1bd4995ac13239",
+      "local_blob_sha": "1f0f850380e47bae7820465b9e1bd4995ac13239",
+      "sha256": "9e72e62d2da82d8f49c476a4a14a1f10315b647074186439377914feaaa3d9e5",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/__init__.py",
+      "git_blob_sha": "971a2404c448b0626b84ac5712c10bd412d63e6d",
+      "local_blob_sha": "971a2404c448b0626b84ac5712c10bd412d63e6d",
+      "sha256": "f06fb24aca57c2ef5927a2416a06b3c84d96030a68a5ff9d4efba5634442b255",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/account.py",
+      "git_blob_sha": "3bb3d282b78578a75a4cf79d59a597ef438ef0f7",
+      "local_blob_sha": "3bb3d282b78578a75a4cf79d59a597ef438ef0f7",
+      "sha256": "5616081674b617e2687cd6f0bd3823c2d365fc475e8744033a16d82e92e2caad",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/admin.py",
+      "git_blob_sha": "7bc630c6f305257fcb271dc16bf721ae388f8c56",
+      "local_blob_sha": "7bc630c6f305257fcb271dc16bf721ae388f8c56",
+      "sha256": "95d1af620f153b316a85054907f70b579babbab792234eb208332283511bbdcd",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/i18n.py",
+      "git_blob_sha": "c08e1ce4827eab4cd3b812902e72efc787d48dab",
+      "local_blob_sha": "c08e1ce4827eab4cd3b812902e72efc787d48dab",
+      "sha256": "fdcdf90a9f1d6174d8ed824192c459da4936a082007c8ee8896833a296ef6b04",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/public.py",
+      "git_blob_sha": "f881f292dfe84815a66b3c40a6569d558de35f36",
+      "local_blob_sha": "f881f292dfe84815a66b3c40a6569d558de35f36",
+      "sha256": "c006459f05e425f988e4747e3261422c3abb647a901eccd588980a77d295c9e0",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/render.py",
+      "git_blob_sha": "cb174628c24d334de46eeed41dc3153419e6415a",
+      "local_blob_sha": "cb174628c24d334de46eeed41dc3153419e6415a",
+      "sha256": "24885093a1d8da2e7bc12c3ca76782daa9319d39b2912d227404fd678a0eb6fe",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/session.py",
+      "git_blob_sha": "ffaed978f2621b6d41fb36139a4bf08b49878a59",
+      "local_blob_sha": "ffaed978f2621b6d41fb36139a4bf08b49878a59",
+      "sha256": "3e68af495aa619f1ac713979bbe8c81253088cdd93734f422e6fbea0798b9fdd",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/static/akeno.css",
+      "git_blob_sha": "ddc938e1e773e1006eb92adad6a9ff4fe72eb8c2",
+      "local_blob_sha": "ddc938e1e773e1006eb92adad6a9ff4fe72eb8c2",
+      "sha256": "760fdc437340c19d2d9d069f1ec7daf9b4c3d2ff6d60bd2fc875e91a8beb2027",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/static/akeno.js",
+      "git_blob_sha": "cc8b38a38c18d97dbe94f8f26084ec7ce5c5cf76",
+      "local_blob_sha": "cc8b38a38c18d97dbe94f8f26084ec7ce5c5cf76",
+      "sha256": "702c2cd1995ce32f7f985ded5fd5ab987911145f78f6edf459b9f24334c9acb8",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/_macros.html",
+      "git_blob_sha": "7af457c522608319177af134d267ceaae03c3a86",
+      "local_blob_sha": "7af457c522608319177af134d267ceaae03c3a86",
+      "sha256": "6058747ccbbf7626f95224da7e04d727803818dcd2ae923f39f8a70671bc4c35",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/account/dashboard.html",
+      "git_blob_sha": "3d40b67f0eb25977bd2dc45e56be330b375f8a5b",
+      "local_blob_sha": "3d40b67f0eb25977bd2dc45e56be330b375f8a5b",
+      "sha256": "9e362349a886755b367da87396b761d794667d301fef2bf5d1c7300365113933",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/account/recovery.html",
+      "git_blob_sha": "9b965d5b3e9b320be858d0a67caeae57014113a2",
+      "local_blob_sha": "9b965d5b3e9b320be858d0a67caeae57014113a2",
+      "sha256": "6758f8393b01c644c74b77b967a0a4de0ae04cf7f28e06ba7a52de33c9662ced",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/account/security.html",
+      "git_blob_sha": "9d33e735a9bfbe520e7bf2a3d4aadd3a7c2fa88a",
+      "local_blob_sha": "9d33e735a9bfbe520e7bf2a3d4aadd3a7c2fa88a",
+      "sha256": "145b3c4ed9278abeddd543a63fa87e181a255b93e60fefa195577442450c3393",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/account/totp_setup.html",
+      "git_blob_sha": "958b7bad3d55a44f183f85bdeef6116483f199c9",
+      "local_blob_sha": "958b7bad3d55a44f183f85bdeef6116483f199c9",
+      "sha256": "c1f76be1edf10db67547884b62deecff2cfc6ce4c2ee69e740db808dda78cc00",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/_layout.html",
+      "git_blob_sha": "b72b716b78f68f110c62d35c9e7d7bc0fa163f4b",
+      "local_blob_sha": "b72b716b78f68f110c62d35c9e7d7bc0fa163f4b",
+      "sha256": "65bca3e25789ed0bd8984af036b3809878aa6a5aade602709b9b620bfea4bc8f",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/audit.html",
+      "git_blob_sha": "252926d1fa15aa0703f9cdc18d7fa96663bf4b95",
+      "local_blob_sha": "252926d1fa15aa0703f9cdc18d7fa96663bf4b95",
+      "sha256": "c3e7fc4b874e994eef9004ce50ac8f566904213236260ae2463eb4ca63e6bed8",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/codes.html",
+      "git_blob_sha": "5448d489df75e1bcb8cbeb1bbe1e3cd20a0a0222",
+      "local_blob_sha": "5448d489df75e1bcb8cbeb1bbe1e3cd20a0a0222",
+      "sha256": "c14e2c6eb4a2190918f442c44b65b55a05eb92bd9ddb3a65bf7af2f700a1f03e",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/codes_generated.html",
+      "git_blob_sha": "a8d9958d961065263e460d99f5db640d51081cc5",
+      "local_blob_sha": "a8d9958d961065263e460d99f5db640d51081cc5",
+      "sha256": "12a1c34feb3174bfb961c6445f210978abaccfbbf993dd559be85972a2a0916c",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/dashboard.html",
+      "git_blob_sha": "858e145d77d8ba31a2439bd1d705c21a2ab99e91",
+      "local_blob_sha": "858e145d77d8ba31a2439bd1d705c21a2ab99e91",
+      "sha256": "a367a628371d17289797568253135db7f6d0cf2c16e89b10af2d50bd68ea8c38",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/devices.html",
+      "git_blob_sha": "fb97560e0630b3c68a07fa24b68b05babf9bff48",
+      "local_blob_sha": "fb97560e0630b3c68a07fa24b68b05babf9bff48",
+      "sha256": "39619d66f8388396f34c039f08f8d206694622e98b8d699d70660d7f5ddf3ac7",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/settings.html",
+      "git_blob_sha": "2f5826fda87f68b68dba131ac439c122474a247c",
+      "local_blob_sha": "2f5826fda87f68b68dba131ac439c122474a247c",
+      "sha256": "de3f538c04b447b8af92fc04f05cb4dedbfa937a6b8ee93e6090037c6d12e3cd",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/system.html",
+      "git_blob_sha": "99ffc86c0a1c86e03437fc571c653e4ebb77f2a8",
+      "local_blob_sha": "99ffc86c0a1c86e03437fc571c653e4ebb77f2a8",
+      "sha256": "4b3d1c86d9ba6e7c6c888601685fa98828ce0c5619665d7b78089f912e414458",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/user.html",
+      "git_blob_sha": "0068f999ac6a539da8f3672cc1d909d07ddf55c7",
+      "local_blob_sha": "0068f999ac6a539da8f3672cc1d909d07ddf55c7",
+      "sha256": "1281616d80974614ce800850c25052c8e4eb0f004f4572fdf97f8d9d262ed8a9",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/admin/users.html",
+      "git_blob_sha": "968a77bd730485e857058024b9fe01c916646dcd",
+      "local_blob_sha": "968a77bd730485e857058024b9fe01c916646dcd",
+      "sha256": "622ecae71bf786cbb58cfdfb38685665b65576587dc566c43d1e329898e9312c",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/auth/forgot.html",
+      "git_blob_sha": "7c9451028f4475878114446b4ce9774acd94d597",
+      "local_blob_sha": "7c9451028f4475878114446b4ce9774acd94d597",
+      "sha256": "c6ee9af143199d05f4a3de9c38266d1763559a8c92ffea84902b09ea8d747bc9",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/auth/login.html",
+      "git_blob_sha": "279f13c322f368df606d15dc0441c5aeee758e35",
+      "local_blob_sha": "279f13c322f368df606d15dc0441c5aeee758e35",
+      "sha256": "2f65926835f0fae911d92fbdade556d971492d88fbad20f92af54584e786e41d",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/auth/register.html",
+      "git_blob_sha": "88395411bdc3b2362a7206e0979be1579faeae8d",
+      "local_blob_sha": "88395411bdc3b2362a7206e0979be1579faeae8d",
+      "sha256": "6f80a55b4fd7197fe087b89bfe540f09fe03fa2b5db5e32b72b082b950948a52",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/auth/reset.html",
+      "git_blob_sha": "89cece5e8f1e99b996917ef99d7c1aaaa005c0c8",
+      "local_blob_sha": "89cece5e8f1e99b996917ef99d7c1aaaa005c0c8",
+      "sha256": "bf6cca1748e5a2342aa1073e8dd85a6f1461fef4601a13c770de93e055df3f15",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/auth/totp.html",
+      "git_blob_sha": "27557277888ca51a4bb2c81aa503f974de6f47fe",
+      "local_blob_sha": "27557277888ca51a4bb2c81aa503f974de6f47fe",
+      "sha256": "55b7de15c487a66d59cc5b5cf5598fa36f72d48535a53198770c9e7a412fb401",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/base.html",
+      "git_blob_sha": "9eaf76b7df9ddd37038d7f06d0f845fb71f02aaf",
+      "local_blob_sha": "9eaf76b7df9ddd37038d7f06d0f845fb71f02aaf",
+      "sha256": "cf09b70b41753e87f601b502b4596d56bec6ceca7ed3c389fbd088f72387b67d",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/error.html",
+      "git_blob_sha": "fc1a05770298775b0581ba407717ef796928c8f6",
+      "local_blob_sha": "fc1a05770298775b0581ba407717ef796928c8f6",
+      "sha256": "85e9284aa9e3419de5811e9267323ca1134569a7ab6753681d31a530324b0dc8",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/index.html",
+      "git_blob_sha": "326b92274af2fa3da90d982c3e0a6694543ed992",
+      "local_blob_sha": "326b92274af2fa3da90d982c3e0a6694543ed992",
+      "sha256": "5de78b2a7b6b175fe666c5b2b58492dfe404017da3127611b0ee6d6d6061ee32",
+      "exact": true
+    },
+    {
+      "path": "server/akeno_server/web/templates/message.html",
+      "git_blob_sha": "8483d38a3454c3e7cc2c658f76aba8945d7c9532",
+      "local_blob_sha": "8483d38a3454c3e7cc2c658f76aba8945d7c9532",
+      "sha256": "4cab545a70a0e187623fa2144def9004719074f6c22378a4023a862835f5ffb8",
+      "exact": true
+    },
+    {
+      "path": "server/alembic.ini",
+      "git_blob_sha": "8548cee4ec50b6faf5d3ac31e6839e5f22f9c6db",
+      "local_blob_sha": "8548cee4ec50b6faf5d3ac31e6839e5f22f9c6db",
+      "sha256": "b1a89b4549257ddffa73685cb67dc78d4d286ea98ab5b77c51711fc2cd41e02c",
+      "exact": true
+    },
+    {
+      "path": "server/docker-entrypoint.sh",
+      "git_blob_sha": "f2608f6781c5b39d6cfd6c7697bcf114f72c70c3",
+      "local_blob_sha": "f2608f6781c5b39d6cfd6c7697bcf114f72c70c3",
+      "sha256": "d2ea6c64f60b88fd5c0fc8fc873fc82e26e608c8e3631a8bec6a343fae985603",
+      "exact": true
+    },
+    {
+      "path": "server/migrations/env.py",
+      "git_blob_sha": "5bd513cd0bbd591fcfc458c5228868dbcdb30273",
+      "local_blob_sha": "5bd513cd0bbd591fcfc458c5228868dbcdb30273",
+      "sha256": "18854bdbf2341c76e8a0cde80afaef7ef21ae1781c6c40174de5fc6299c88246",
+      "exact": true
+    },
+    {
+      "path": "server/migrations/script.py.mako",
+      "git_blob_sha": "36cd8efeda0d3f671a90fc6c7b4131af5758bbb4",
+      "local_blob_sha": "36cd8efeda0d3f671a90fc6c7b4131af5758bbb4",
+      "sha256": "114d2c8daf1106848ce42d0c5f13a4d0056ec4205dfc568999d988c131bb8c54",
+      "exact": true
+    },
+    {
+      "path": "server/migrations/versions/0001_licensing_schema.py",
+      "git_blob_sha": "23b275d1ed0bd946d82fbe6d9ee88a4558fa4a21",
+      "local_blob_sha": "23b275d1ed0bd946d82fbe6d9ee88a4558fa4a21",
+      "sha256": "70858c4186a36e735691fb7bb7da3aa1e47f835534796b01f7dbd8082eb60fa2",
+      "exact": true
+    },
+    {
+      "path": "server/pyproject.toml",
+      "git_blob_sha": "ff4a9dd49030b6d42a66654bd8ef793bf6620981",
+      "local_blob_sha": "ff4a9dd49030b6d42a66654bd8ef793bf6620981",
+      "sha256": "8854e7be02162d5135b67e6d8777532b2c1f8542c8b2bb972ae8551c70317c6a",
+      "exact": true
+    },
+    {
+      "path": "server/requirements-test.txt",
+      "git_blob_sha": "a575cbd6db6bb564ca7f6ed2b89bade40b5b0f50",
+      "local_blob_sha": "a575cbd6db6bb564ca7f6ed2b89bade40b5b0f50",
+      "sha256": "5ce32b31b052977aa4e9fadf20faa0d8bb59889693be52ea419c6eb4260f9739",
+      "exact": true
+    },
+    {
+      "path": "server/requirements.txt",
+      "git_blob_sha": "94b1e87d1516a4c80544e1876685296c22158b24",
+      "local_blob_sha": "94b1e87d1516a4c80544e1876685296c22158b24",
+      "sha256": "559f8227d77abdfc3456f42e8cde5d606cf0509c044417ded511059db207dcde",
+      "exact": true
+    },
+    {
+      "path": "server/tests/conftest.py",
+      "git_blob_sha": "900b3686c9ebd0891b9b8652e67af05c82545b77",
+      "local_blob_sha": "900b3686c9ebd0891b9b8652e67af05c82545b77",
+      "sha256": "b2e88c50cde3d631fedb9981179a0b73e4c58c1c589a0cabed04346cea5698a8",
+      "exact": true
+    },
+    {
+      "path": "server/tests/helpers.py",
+      "git_blob_sha": "5025cda5cde0fad3ed77b3affe6bec7c935445d8",
+      "local_blob_sha": "5025cda5cde0fad3ed77b3affe6bec7c935445d8",
+      "sha256": "9d77f5f331baa52f7892d3135acc00dbfc35548f3228d011df10204cd39c2732",
+      "exact": true
+    },
+    {
+      "path": "server/tests/test_network_api.py",
+      "git_blob_sha": "03a32a63604915bbf850d375c0ae74e75b88b38a",
+      "local_blob_sha": "03a32a63604915bbf850d375c0ae74e75b88b38a",
+      "sha256": "c03e7271f65246c8b42f5ee82dcb3ef8541b2768da70fb3054d1534ce41c18f4",
+      "exact": true
+    },
+    {
+      "path": "server/tests/test_network_client_live.py",
+      "git_blob_sha": "576b58664730d96a958ad8d0e1a94fa1037df5f4",
+      "local_blob_sha": "576b58664730d96a958ad8d0e1a94fa1037df5f4",
+      "sha256": "757f1272b94aa28b9d59526fa9a7b35e1ae2a803e3078a0b36b0b4476d7301ff",
+      "exact": true
+    },
+    {
+      "path": "server/tests/test_network_coordinator.py",
+      "git_blob_sha": "ca6efdb6ce77ebed0e2325f5ced47bcf82aa25d0",
+      "local_blob_sha": "ca6efdb6ce77ebed0e2325f5ced47bcf82aa25d0",
+      "sha256": "fbce90370ba8eb70b76dd93d1f591a6add519d7c9a403726b23062b1883c1342",
+      "exact": true
+    },
+    {
+      "path": "server/tests/test_network_relay.py",
+      "git_blob_sha": "b370644b421050dde9b3435f0ee25c62e9ac1531",
+      "local_blob_sha": "b370644b421050dde9b3435f0ee25c62e9ac1531",
+      "sha256": "3846074364ed4ee5f66f3fff2c2a73a8c16306596fd4dedc9d13bda6bf9fcbee",
+      "exact": true
+    },
+    {
+      "path": "server/tests/test_network_rooms.py",
+      "git_blob_sha": "01905cbb4d3d618bf189ff54001f47978fd214d0",
+      "local_blob_sha": "01905cbb4d3d618bf189ff54001f47978fd214d0",
+      "sha256": "5aef44b384c9bb76841f1286a36f82e317c1581c39d22739c5df46906c74ede3",
+      "exact": true
+    },
+    {
+      "path": "server/tests/wg_initiator.py",
+      "git_blob_sha": "1675d464c26d2b3741d546046c2c17446e77f302",
+      "local_blob_sha": "1675d464c26d2b3741d546046c2c17446e77f302",
+      "sha256": "a4bc6f4dc6768a844a5d7e3756ade986400699a105cd1d3428b7c21c1c401e19",
+      "exact": true
+    },
+    {
+      "path": "tools/configure-licensing.py",
+      "git_blob_sha": "11e620c23087cc620eb32efe945b45f2d3a777f0",
+      "local_blob_sha": "11e620c23087cc620eb32efe945b45f2d3a777f0",
+      "sha256": "0eaa14c5e47f7a256d167105aa0dd24a62e5497718c447774c324581cde4e2e0",
+      "exact": true
+    }
+  ],
+  "all_exact": true
+}
