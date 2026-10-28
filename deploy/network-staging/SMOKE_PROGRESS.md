@@ -16,3 +16,10 @@ Docker verwaltet später ausschließlich eigene Staging-Bridge-/Loopback-NAT-Reg
 - Neuer Staging-Lizenzkey `92c8ea977d38cd6c`, ausdrücklich verschieden vom produktiven Lizenzkey. Private Werte bleiben ausschließlich in Staging-Volumes/geschütztem runtime-Verzeichnis.
 - Zwei synthetische Standardnutzer mit befristeten Testlizenzen angelegt; Kennwörter nur im rootgeschützten lokalen Secret-Speicher. Kein SMTP-Versand, kein Administrator angelegt.
 - Ausschließlich Loopback: TCP 18510/18511/18512 und UDP 3478. Keine DNS-, Caddy-, UFW- oder DOCKER-USER-Regeländerung.
+
+## Live-Client-Prüfung
+
+- Aktueller Claude-LicenseManager meldet beide Konten mit aktiven, kryptografisch geprüften Lizenzen an und bindet getrennte Testgeräte.
+- Raum erstellen/beitreten, authentifizierte Heartbeats und Ablehnung fremder Geräte/Actor-Spoofing erfolgreich.
+- Ein Testfehler beim Verändern des letzten Base64-Zeichens wurde erkannt: nicht kanonische letzte Zeichen können identische Signaturbytes darstellen. Test geändert auf tatsächliches Bitflip eines dekodierten Signaturbytes, ohne Anwendungsprüfung zu ändern.
+- Der Lauf brach am fehlerhaften Test ab; nur API angehalten, genau der zugehörige Staging-Smoke-Raum bereinigt, Schlüssel/Konten/Lizenzen erhalten. Erneuter vollständiger UDP-/Client-Lauf folgt. Kein produktiver Zugriff des Live-Tests.
