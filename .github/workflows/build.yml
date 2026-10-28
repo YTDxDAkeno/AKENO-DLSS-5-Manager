@@ -506,9 +506,10 @@ jobs:
           Copy-Item "$env:LOCALAPPDATA\AKENO\logs\*" e2e-logs -ErrorAction SilentlyContinue
           Copy-Item "$env:RUNNER_TEMP\e2e\setup.log" e2e-logs -ErrorAction SilentlyContinue
           if ($code -ne 0) { throw "update end-to-end test failed" }
-      - name: Upgrade paths from the published releases to this build (real 3.0.0 and 3.1.0 installers)
+      - name: Upgrade paths from the published releases to this build (real 3.0.0, 3.1.0 and 3.1.1 installers)
         # The installers users have: downloaded read-only from the production download and checked against the
-        # SHA-256 their signed releases carry (3.0.0: sequence 1, 3.1.0: sequence 2, key d6139235b220a4aa). Then
+        # SHA-256 their signed releases carry (3.0.0: sequence 1, 3.1.0: sequence 2, 3.1.1: sequence 3 = live
+        # stable, key d6139235b220a4aa; read by the production read-only check on 2026-10-28). Then
         # the same scenarios as above update that installation to this commit's portable package.
         shell: pwsh
         run: |
@@ -518,7 +519,8 @@ jobs:
           Expand-Archive $zip.FullName -DestinationPath next-build -Force
           $published = @(
             @{ version = "3.0.0"; sha = "fe919b720e7db4a7e3e8fce97555bb77cde23851d205de3f039d847b1e0dd20f" },
-            @{ version = "3.1.0"; sha = "56d33da6c8ad35ed2afffdbb820a9f882231455ef93c759ab02afc04e92b8ca0" })
+            @{ version = "3.1.0"; sha = "56d33da6c8ad35ed2afffdbb820a9f882231455ef93c759ab02afc04e92b8ca0" },
+            @{ version = "3.1.1"; sha = "138e8958754755b8dd3611f07e864d371bb3f4aea2ecae8114b33d57f885f9c1" })
           $failed = @()
           foreach ($p in $published) {
             if ($v -eq $p.version) { continue }

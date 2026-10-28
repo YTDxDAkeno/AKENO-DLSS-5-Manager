@@ -101,7 +101,11 @@ signed, merged or released. Production VPS, DNS, Caddy, firewall, release keys a
 - `a8ca408` merged `codex/akeno-network-staging-20261028` @ `325d35c` (history only: the files were already identical).
 - `23d79e5` LAN privacy row + "IP protection missing" instead of Connected without the lock; browser polish.
 - `92ccc2b` regenerated fixture screenshots incl. a fixture connected-VPN view (documentation IPs).
-- Production read-only check dispatched (run 40765356305) to read the published stable version (proxy blocks it here).
+- [Production read-only check 40765356305](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40765356305)
+  (read-only, 14/14): **live stable is 3.1.1, schema 2, sequence 3**, key `d6139235b220a4aa`, issued 2026-10-26,
+  expires 2026-11-25; installer `138e8958…f9c1` (157 947 314 B), portable `bdcf3ae5…7b66` (223 594 634 B); 3.0.0
+  (seq 1) and 3.1.0 (seq 2) unchanged. => 3.2.0 is unpublished and must be signed as **sequence 4**. The build's
+  upgrade-path step now also installs the real 3.1.1 installer (SHA checked) and updates it to this build.
 
 ## Next concrete step
 
