@@ -1,0 +1,26 @@
+name: VPN Gate catalog review (read-only)
+# Reads the public VPN Gate catalog with AKENO's parser and VPN Gate's own policy pages. No VPN connection is made;
+# a TCP connection test to a few listed OpenVPN-TCP ports shows reachability from the runner only.
+on:
+  push:
+    branches: [feature/akeno-network-modular, 'claude/**']
+    paths: ['akeno/network/vpngate.py', 'tools/vpngate_report.py', '.github/workflows/vpngate-catalog.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  catalog:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install cryptography==44.0.0
+      - run: python tools/vpngate_report.py --report vpngate-report.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vpngate-catalog-report
+          path: vpngate-report.json
