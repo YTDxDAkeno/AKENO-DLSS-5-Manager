@@ -18,7 +18,7 @@ class CaptureError(ValueError):
     pass
 
 
-def packets(raw):
+def packets(raw, stats=None):
     if len(raw)>16*1024*1024:raise CaptureError('DNS capture exceeded its bound.')
     if raw[:4]!=b'\x0a\x0d\x0d\x0a':raise CaptureError('Missing capture section header.')
     offset,endian,interfaces=0,'<',[]
@@ -35,7 +35,9 @@ def packets(raw):
         if kind==1:
             if len(block)<8:raise CaptureError('Invalid capture interface.')
             interfaces.append(struct.unpack_from(endian+'H',block)[0])
+            if stats is not None:stats['links']=sorted(set(interfaces))
         if kind!=6:continue
+        if stats is not None:stats['records']=stats.get('records',0)+1
         if len(block)<20:raise CaptureError('Invalid packet record.')
         iface,_,_,captured,original=struct.unpack_from(endian+'IIIII',block)
         if iface>=len(interfaces) or captured>len(block)-20 or captured>original:raise CaptureError('Invalid packet length.')
@@ -47,6 +49,7 @@ def packets(raw):
         elif link not in (101,228,229):continue
         if not packet:continue
         version=packet[0]>>4
+        if stats is not None:stats['versions']=sorted(set(stats.get('versions',[])+[version]))
         if version==4 and len(packet)>=20:
             ihl=(packet[0]&15)*4
             if ihl<20 or len(packet)<ihl:continue
@@ -105,13 +108,14 @@ class DNSCapture:
         all_file=self.directory/'all.pcapng';drops_file=self.directory/'drops.pcapng'
         self._call('etl2pcap',self.etl,'--out',all_file)
         self._call('etl2pcap',self.etl,'--drop-only','--out',drops_file)
-        observed=list(packets(all_file.read_bytes()));dropped={flow for flow,_ in packets(drops_file.read_bytes())}
+        stats={}
+        observed=list(packets(all_file.read_bytes(),stats));dropped={flow for flow,_ in packets(drops_file.read_bytes())}
         if not self.positive:raise CaptureError('DNS capture lacks a positive control.')
         for query,source,target in self.positive:
             flow=(target[0],target[1],source[0],source[1],17)
             from akeno.network.dns_probe import valid_reply
             if not any(item==flow and valid_reply(query,payload) for item,payload in observed):
-                raise CaptureError('The actual positive DNS reply was not captured.')
+                raise CaptureError(f'The actual positive DNS reply was not captured (capture metadata={stats}; parsed={len(observed)}).')
         if any(flow not in dropped for flow in self.pending):
             raise CaptureError('No kernel drop record proves an asynchronous DNS denial.')
         return len(self.pending)

@@ -1,52 +1,88 @@
-# AKENO VPN — providers, locations and how a location becomes connectable
+# AKENO VPN provider and country preparation
 
-Status 2026-10-28. **No AKENO VPN server runs today, and no paid service was ordered or contacted.** The only
-connectable locations in the app are the user's own imported WireGuard profiles.
+Research checked 2026-10-28. No country exit is running or advertised, no account was
+created, no order placed and no host publicly activated by this task. The normal VPN
+flow uses the managed catalog and per-device signed leases, without profile import.
+An empty/failed health or country gate means the location remains unavailable.
 
-## Rule in code (`akeno/network/providers.py`)
+## Candidates requiring a specific owner-approved offer
 
-- A location is connectable only if a provider in `VERIFIED` is enabled **and** supplies a real server for it.
-- `own-wireguard` (user-imported profile): enabled. The user owns the server or has a contract with its provider.
-- `akeno` (AKENO-operated WireGuard exits): enabled as a provider, but `akeno/data/vpn_locations.json` lists **no
-  servers**, so all 8 target countries (TR, US, DE, NL, GB, FR, JP, CA) show "No AKENO VPN server runs in this
-  country yet." A catalog entry alone is not enough: the server must also deliver a signed profile (not built yet).
-- `vpngate`: disabled (logging ≥ 3 months, packet-header logs ≥ 2 weeks, disclosure to authorities, academic
-  non-commercial project, OpenVPN transport not integrated). The catalog can be loaded read-only for review.
-- Any other provider id is disabled ("has not been reviewed by AKENO"). Adding a provider = code change + a review
-  entry in this document.
+| Candidate | Intended review | Verified here | Still required before selection |
+|---|---|---|---|
+| Hetzner Cloud | USA and European exits | Official location SDK exposes country/city and location listing; MIT SDK license | Current US/European region/dual-stack capacity, commercial shared-VPN permission, quote, bandwidth/overage and abuse terms |
+| Gcore | Turkey (Istanbul candidate), USA and other countries | Official Python cloud REST SDK and Apache-2.0 SDK license | Current Istanbul availability, exact location/IPv6, VPN-exit permission, quote and abuse terms |
+| is*hosting | Turkey candidate | Official Turkey offer URL identified, page retrieval blocked | Entire offer, commercial VPN rights, real location, dual-stack, costs and contract |
+| Vultr | USA and additional regions | Official SDK lists country/city/region and per-region plan availability | Current region selection, dual-stack, explicit shared-VPN rights, quote/traffic and abuse terms |
+| Contracted white-label provider, e.g. Windscribe | Managed multi-country service alternative | Official white-label URL identified, retrieval blocked | Written integration/resale contract, supported device/API flow, privacy terms and current quote |
 
-## Integration models compared
+These are candidates, **not approved or legally cleared hosts**. SDK copyright licenses
+permit code use under their conditions; they do not grant hosting/resale rights or prove
+VPN traffic is permitted. Obtain the host's written applicable terms for the intended
+commercial shared exit before ordering. Consumer subscription credentials and arbitrary
+free/public relays are not infrastructure for this integration. VPN Gate remains disabled.
 
-| Model | Countries | Cost | API/SDK | Usage rights | Privacy | Protocol | Effort | Verdict |
-|---|---|---|---|---|---|---|---|---|
-| User imports own WireGuard profile | any the user has | user's own | none needed | user's own contract | AKENO stores DPAPI-encrypted, keys never leave the PC | WireGuard | done | **Shipped** |
-| Own WireGuard exits on rented VPS (one per country) | DE, NL, GB, FR, JP, CA, US widely available; TR via local providers (e.g. is\*hosting Premier DC Istanbul, Gcore Istanbul — to be confirmed on their pricing pages) | roughly 4–10 € per server per month plus traffic (provider list prices, not ordered) | provider REST APIs for provisioning; AKENO would issue per-device WireGuard peers signed by the license server | AKENO is the operator: needs ToS check of each host for VPN exit use, abuse handling, imprint/privacy policy | AKENO controls logging (can be no-logs), but becomes responsible for abuse complaints | WireGuard | high: provisioning, key distribution, revocation, monitoring, abuse desk | **Recommended path**, needs owner approval and budget |
-| Oracle Cloud Always Free VM as exit | only the tenancy's home region (one country) | free tier, ~10 TB/month outbound per Oracle's pricing page | OCI API | free tier is per account — not a basis for a public multi-user service | Oracle as host | WireGuard | medium | Only for the owner's private testing |
-| White-label / reseller VPN (e.g. Windscribe white label, Defguard partners, BillingServ reseller) | provider's network | contract (BillingServ from ~£150/month; others on request) | Windscribe offers API access for own apps; others panel-only | only under a signed contract | provider's logging policy applies and must be shown to users | WireGuard/OpenVPN | medium | Possible later; needs contract + review |
-| Consumer VPN accounts (Mullvad, Proton, …) | many | per user | no reseller API | personal use only | provider policy | WireGuard | — | **Not allowed** to embed; users may import their own profiles from them |
-| VPN Gate | volunteer servers | free | public CSV | academic, non-commercial; logs kept and disclosed | weak | OpenVPN/L2TP/SSTP | — | **Disabled** |
+Official provider web requests returned cloud proxy CONNECT 403, including Hetzner,
+Gcore, is*hosting and Windscribe. No price or current server stock was verified. Earlier
+rough prices and provider-rights assertions are intentionally removed. Git HTTPS and
+raw GitHub documentation were accessible over normal verified TLS.
 
-Sources checked during this work: Oracle networking pricing (https://www.oracle.com/cloud/networking/pricing),
-Windscribe white label (https://windscribe.com/white-label-vpn), Defguard partners (https://defguard.net/partners),
-BillingServ reseller (https://www.billingserv.com/blog/expand-your-offerings-introducing-our-whitelabel-vpn-service-for-resellers),
-is\*hosting Turkey VPS (https://ishosting.com/en/vps/tr), Gcore Istanbul
-(https://gcore.com/news/looking-for-a-virtual-server-in-turkey-order-it-in-istanbul/). Prices and terms must be
-re-confirmed on the providers' own pages before any order; nothing here is a commitment.
+## Reviewed official implementation sources
 
-## What an AKENO exit server needs before a country turns connectable
+Sources were fetched from these exact upstream commits; local copies/checksums are in
+`/workspace/akeno-cloud/research/source-manifest.json` (outside Git).
 
-1. Owner approval and budget; host ToS allows VPN exit traffic; privacy policy and abuse contact published.
-2. Server hardened (WireGuard only, no logs of destinations), monitored, with per-account bandwidth limits.
-3. License-server endpoint that issues a per-device WireGuard peer (device-bound, revocable, signed response).
-4. Client: provider `akeno` fetches the signed profile, stores it with DPAPI, then uses the existing
-   `TunnelManager` (route/DNS restore, leak probes — 40 real Windows checks in `network-windows.yml`).
-5. Real tests per country: handshake, exit IP in that country, IPv4/IPv6/DNS leak probes, reconnect.
-6. Only then add the server to `akeno_servers` in `akeno/data/vpn_locations.json` (shipped inside the signed
-   release), and the location becomes connectable.
+- [Hetzner location API](https://github.com/hetznercloud/hcloud-go/blob/9adc140755042b41d7a1d865d8c1afe94535b5d6/hcloud/location.go)
+  and [MIT license](https://github.com/hetznercloud/hcloud-go/blob/9adc140755042b41d7a1d865d8c1afe94535b5d6/LICENSE).
+- [Vultr region and plan availability](https://github.com/vultr/govultr/blob/dc6446c10c55fbbf8fd7b9e8fcde9e676958c057/region.go).
+- [Gcore official Python SDK](https://github.com/G-Core/gcore-python/blob/81eb3de72f78ba983fabbe8b42d5279925983860/README.md)
+  and [Apache-2.0 license](https://github.com/G-Core/gcore-python/blob/81eb3de72f78ba983fabbe8b42d5279925983860/LICENSE).
+- [Official WireGuard Windows enterprise integration](https://github.com/WireGuard/wireguard-windows/blob/6ece77bc487c8aa697e3c092197621c4f3e5ccb8/docs/enterprise.md)
+  and [Windows project license](https://github.com/WireGuard/wireguard-windows/blob/6ece77bc487c8aa697e3c092197621c4f3e5ccb8/COPYING).
+  The installed binary's actual Authenticode chain is independently checked; source
+  licensing does not validate a downloaded driver or replace its component notices.
 
-## Security status of the VPN client (what is and is not proven)
+Official offer/terms URLs to review once access is available:
+[Hetzner locations](https://docs.hetzner.com/cloud/general/locations/),
+[Hetzner cloud terms](https://www.hetzner.com/legal/cloud-server/),
+[Gcore Istanbul](https://gcore.com/news/looking-for-a-virtual-server-in-turkey-order-it-in-istanbul/),
+[is*hosting Turkey](https://ishosting.com/en/vps/tr),
+[Windscribe white label](https://windscribe.com/white-label-vpn).
 
-Proven in CI (`network-windows.yml`, WireGuard 1.1.1/WireGuardNT): split and full tunnel, leak probes, route and DNS
-restore, recovery after an interrupted tunnel. Not proven / not implemented: kill switch (none — documented in the
-UI), standby/resume, Wi-Fi changes, real third-party exit servers, IPv6-only networks. The VPN never changes routes
-at program start; it connects only on an explicit click and UAC.
+## Implemented provisioning and registration path
+
+The host-specific ordering step is deliberately separated from AKENO registration.
+No application startup, country click or CI job creates a provider VM or charges an
+account. A provider API adapter can consume an approved offer later; credentials are
+operator-only and must never enter the customer client.
+
+1. Approve a precise host/country offer and prepare a new dedicated dual-stack Linux
+   VM. Record provider, region ID, physical-location evidence, quote, traffic budget,
+   terms, abuse contact, approved public UDP ACL and rollback owner.
+2. Use `deploy/vpn-exit/` with an explicit reviewed image digest and separate private
+   runtime state. Its default binding is loopback-only; public binding needs separate
+   authorization. Never attach the production licensing database or host network.
+3. The existing operator-only registration API registers public identity, unique
+   IPv4/IPv6 pools, exact endpoint, DNS and capacity. It returns a one-time agent token;
+   write it directly to an owner-only file. The agent never receives the operator key.
+4. The actual WireGuard/nftables agent acknowledges generations and enforces short
+   device leases. Kernel timeout fences stop forwarding even when the agent freezes.
+5. A separate operator probe peer measures dual-stack egress through the real tunnel,
+   checks a fresh licensed, checksum-pinned country database and signs a one-use proof
+   with a separate pinned key. A requested flag or provider marketing location is
+   insufficient. Both IP families must agree with the chosen country.
+6. Only recent independent country proof, healthy authenticated agent and free capacity
+   expose the server. The client chooses a country, receives its device-bound signed
+   configuration, installs after consent, verifies handshake, routes, real DNS behavior
+   and source-bound HTTPS exit IPs, and only then displays Connected.
+7. Disable withdraws the catalog entry and revokes leases; the agent removes peers.
+   Stop the dedicated compose project to remove its owned namespace and forwarding.
+
+Exact API fields, commands, trust separation, deployment profile, independent probe and
+rollback are in [the deployment guide](AKENO_VPN_SERVER_DEPLOYMENT.md). Registration,
+agent and probe APIs are implemented and tested with isolated infrastructure. Native
+Windows validation and actual provider/country activation remain separate gates in
+[production readiness](AKENO_NETWORK_PRODUCTION_READINESS.md).
+
+Required owner approval covers new accounts, payment, recurring/traffic cost, provider
+terms, any public ACL/UDP binding and production changes. Nothing in this document
+supplies that approval. No real countries are enabled by documentation or lab results.
