@@ -75,9 +75,10 @@ SERVICE_STATES={1:'stopped',2:'start_pending',3:'stop_pending',4:'running',5:'co
                 7:'paused'}
 
 
-def service_state(name):
+def service_state(name,prefix='WireGuardTunnel$'):
     """SCM state of the official tunnel service, or None when it does not exist. Queries the Service Control Manager
-    directly: no subprocess and no PATH lookup. A service marked for deletion still counts until it is gone."""
+    directly: no subprocess and no PATH lookup. A service marked for deletion still counts until it is gone.
+    ``prefix=''`` queries another service by its full name (the WireGuard manager for diagnostics)."""
     from ctypes import wintypes as w
     adv=ctypes.WinDLL('advapi32',use_last_error=True)
     adv.OpenSCManagerW.argtypes=[w.LPCWSTR,w.LPCWSTR,w.DWORD];adv.OpenSCManagerW.restype=ctypes.c_void_p
@@ -90,7 +91,7 @@ def service_state(name):
     scm=adv.OpenSCManagerW(None,None,0x0001)                       # SC_MANAGER_CONNECT
     if not scm:raise NativeUnavailable('Cannot query Windows services.')
     try:
-        service=adv.OpenServiceW(scm,'WireGuardTunnel$'+name,0x0004)  # SERVICE_QUERY_STATUS
+        service=adv.OpenServiceW(scm,prefix+name,0x0004)            # SERVICE_QUERY_STATUS
         if not service:
             error=ctypes.get_last_error()
             if error==1060:return None                            # ERROR_SERVICE_DOES_NOT_EXIST
