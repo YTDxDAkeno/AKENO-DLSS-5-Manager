@@ -686,8 +686,8 @@ class AkenoNetworkPage(QWidget):
             return
         if state.get('room') not in (None, self.current_room()):
             return
-        self.session = state
-        if state.get('state') in ('stopped', 'failed', None):
+        self.session = stale_lan(state)
+        if self.session.get('state') in ('stopped', 'failed', None):
             self.timer.stop()
             self.game_allowed = False
         self.show_room()
@@ -1105,6 +1105,20 @@ class _Memory:
         pass
 
 
+# A running session rewrites its status every few seconds; starting may wait for WireGuard's driver and service.
+LAN_STALE = {'active': 30, 'starting': 120}
+
+
+def stale_lan(state, now=None):
+    """A status the elevated session stopped updating (helper crashed, PC resumed) is never shown as running."""
+    limit = LAN_STALE.get(state.get('state'))
+    now = time.time() if now is None else now
+    if limit and now - float(state.get('updated') or 0) > limit:
+        return {'state': 'failed', 'room': state.get('room'), 'updated': state.get('updated'),
+                'error': msg('LAN Play stopped unexpectedly; recover before retrying.')}
+    return state
+
+
 def _colour(state):
     from PySide6.QtGui import QColor
     return QColor(theme.STATE_COLORS.get(state, theme.TEXT_DIM))
@@ -1165,7 +1179,7 @@ def diagnostics(license_manager):
                  msg('On: members cannot reach file sharing, Remote Desktop or other services.') if enabled else
                  msg('Off or unknown: LAN Play refuses to start without it.')))
     from akeno.network.helper import lan_status
-    state = lan_status()
+    state = stale_lan(lan_status())
     if state.get('state') == 'failed':
         rows.append(('fail', msg('Last LAN session'), state.get('error') or msg('Failed.')))
     elif state.get('state') == 'active':

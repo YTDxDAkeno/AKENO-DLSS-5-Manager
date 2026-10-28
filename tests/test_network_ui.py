@@ -282,3 +282,14 @@ def test_active_session_without_verified_relay_lock_is_never_connected(page, mon
     page.show_room()
     assert page.lan_dash.state_label.text() == 'Connected'
     assert 'virtual IP' in page.lan_dash.detail_label.text()
+
+
+def test_lan_status_that_stopped_updating_is_shown_as_failed_not_running():
+    from akeno.ui.pages.akeno_network import stale_lan
+    now = 10_000.0
+    assert stale_lan({'state': 'active', 'updated': now - 5}, now)['state'] == 'active'
+    assert stale_lan({'state': 'active', 'updated': now - 31}, now)['state'] == 'failed'
+    assert stale_lan({'state': 'starting', 'updated': now - 60}, now)['state'] == 'starting'
+    gone = stale_lan({'state': 'starting', 'room': 'r', 'updated': now - 121}, now)
+    assert gone['state'] == 'failed' and 'recover' in gone['error'] and gone['room'] == 'r'
+    assert stale_lan({'state': 'stopped'}, now) == {'state': 'stopped'}
