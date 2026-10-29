@@ -1,0 +1,46 @@
+name: Free VPN exploration (VPN Gate over OpenVPN)
+# Development evidence for the free VPN: the public VPN Gate catalog, its policy pages, the official OpenVPN MSI and
+# short real connections of a disposable Windows runner through VPN Gate servers with AKENO-generated configurations.
+on:
+  push:
+    branches: ['claude/akeno-free-vpn']
+    paths: ['tools/free_vpn_explore.py', 'akeno/network/openvpn_profile.py', '.github/workflows/free-vpn-explore.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  catalog:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install cryptography==44.0.0
+      - run: python tools/free_vpn_explore.py catalog
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install cryptography==44.0.0
+      - name: Official OpenVPN MSI (source, SHA-256, Authenticode, features)
+        run: python tools/free_vpn_explore.py openvpn-msi "$env:RUNNER_TEMP\ovpn"
+      - name: Install it (default features, silent)
+        run: |
+          $msi = Get-Content "$env:RUNNER_TEMP\ovpn\msi.txt"
+          $p = Start-Process msiexec.exe -ArgumentList '/i', "`"$msi`"", '/qn', '/norestart', '/l*v', "$env:RUNNER_TEMP\ovpn\install.log" -Wait -PassThru
+          "msiexec exit $($p.ExitCode)"
+          Get-ChildItem "$env:ProgramFiles\OpenVPN\bin" | Select-Object Name, Length
+          & "$env:ProgramFiles\OpenVPN\bin\openvpn.exe" --version | Select-Object -First 3
+          (Get-AuthenticodeSignature "$env:ProgramFiles\OpenVPN\bin\openvpn.exe").SignerCertificate.Subject
+          Get-NetAdapter -IncludeHidden | Where-Object InterfaceDescription -match 'OpenVPN|Wintun|TAP' | Format-Table Name, InterfaceDescription, Status
+          Get-Service | Where-Object Name -match 'OpenVPN' | Format-Table Name, Status, StartType
+      - name: Real VPN Gate connections with AKENO configurations
+        run: python tools/free_vpn_explore.py connect "$env:ProgramFiles\OpenVPN\bin\openvpn.exe"
