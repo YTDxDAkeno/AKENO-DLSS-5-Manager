@@ -147,7 +147,18 @@ helper's error handling, so the exception reached the start guard's error dialog
 never close. Fix (next commit): `execute()` refuses a malformed id with exit 2 before reading/writing anything and
 never raises (also when the result cannot be saved); regression tests added.
 
+## Final result on `5cc77fd`
+
+All five workflows green on **`5cc77fd9eb12ed78a6d0c0ad6aacd9e34713fb71`**:
+build.yml [40775941347](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941347) (Linux, server, real assets, Windows build/tests/smoke/packaged GUI,
+packaged helper via runas, installer, portable, update E2E 58/58, upgrades 3.0.0/3.1.0/3.1.1 → 3.2.0 57/57 each,
+repair 3.1.0 15/15), network-windows [40775941177](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941177) (wireguard 41/41, `kernel_drop_proofs: 1`,
+`capture_recorded_tunnel: True`; lan-play 44/44), lan-lab [40775941320](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941320), network-local-e2e
+[40775941215](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941215), components-windows [40775941112](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941112).
+Installer `c9bc9d56…8cff` (158 176 247 B), portable `8c993ae4…3b3f` (223 837 453 B); values in
+`docs/release/3.2.0/release-manager-values.json`. Report: `docs/AKENO_320_FINAL_RELEASE_REPORT.md`.
+
 ## Next concrete step
 
-Wait for the five runs on `d32a0cc`; fill report sections 3–5 from them (run links, SHA-256, Release Manager
-values from the green build's log) and record the local full client run.
+Owner: checklist in report section 9 (own-PC tests, offline signature with sequence 4, approval). Nothing is
+published; no further code change is planned without a finding.

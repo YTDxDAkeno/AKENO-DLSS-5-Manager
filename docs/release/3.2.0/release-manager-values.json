@@ -1,0 +1,23 @@
+{
+ "version": "3.2.0",
+ "commit": "5cc77fd9eb12ed78a6d0c0ad6aacd9e34713fb71",
+ "ci_run": 40775941347,
+ "artifact": "AKENO-Gaming-Suite-windows-x64 (artifact id 12857297814, available until 2027-01-26)",
+ "portable": {
+  "file": "AKENO-Gaming-Suite-3.2.0-portable-x64.zip",
+  "size_bytes": 223837453,
+  "sha256": "8c993ae4682b308df2ffa4675c7c8a7a6d13ae8b516d576021c9a70606a95b3f",
+  "file_count": 2917,
+  "uncompressed_size_bytes": 494376757,
+  "pe_files": 356,
+  "top_folder": "(none)",
+  "accepted_by_the_updater": true,
+  "content_sha256": "46de9e86a189df5f02e155f2b0c85fc311dadea870491f02096d7f784025c2a3"
+ },
+ "installer": {
+  "file": "AKENO-Gaming-Suite-3.2.0-Setup-x64.exe",
+  "size_bytes": 158176247,
+  "sha256": "c9bc9d56900b17d32f6985a01a92f25611a2c2f4a24d7a0d81c3c86fbd6a8cff"
+ },
+ "within_the_release_manager_limits": true
+}

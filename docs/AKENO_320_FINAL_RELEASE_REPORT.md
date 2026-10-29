@@ -1,11 +1,12 @@
 # AKENO Gaming Suite 3.2.0 — finaler Releasebericht (Release-Kandidat, nicht veröffentlicht)
 
-Stand: 28.10.2026, Claude-Fortsetzung. **Nichts wurde veröffentlicht, signiert, gemergt, getaggt oder deployt.**
+Stand: 29.10.2026, Claude-Fortsetzung. **Nichts wurde veröffentlicht, signiert, gemergt, getaggt oder deployt.**
 Produktions-VPS, DNS, Caddy, Firewall, Lizenz- und Release-Schlüssel sowie kostenpflichtige Ressourcen wurden nicht
 angefasst. Der laufende Arbeitsstand steht in `docs/AKENO_320_FINAL_PROGRESS.md`.
 
-> Dieser Bericht wird mit dem letzten Commit dieser Arbeit abgeschlossen. Abschnitte mit **„ausstehend“** sind zum
-> Zeitpunkt des Schreibens noch nicht belegt und dürfen nicht als erledigt gelesen werden.
+> **Ergebnis: Release-Kandidat technisch GO** (alle fünf CI-Workflows grün auf genau einem Commit, `5cc77fd`).
+> **Veröffentlichung: NO-GO bis zu deinen Schritten** — Offline-Signatur (Sequenz 4), deine Freigabe, die Prüfungen
+> auf deinem PC (Abschnitt 9). LAN Play/VPN bleiben für Nutzer aus, bis Server/Exits freigegeben sind (Abschnitt 6 C).
 
 ## 1. Quelle
 
@@ -14,7 +15,7 @@ angefasst. Der laufende Arbeitsstand steht in `docs/AKENO_320_FINAL_PROGRESS.md`
 | Entwicklungsbranch | `claude/confident-goodall-i10aop` (Fast-Forward vom initialen `main`, kein Force-Push) |
 | Ausgangsbasis | `codex/akeno-network-cloud-20261028` @ `1991686c9c4f4f3d975de35b7da9b8dd26543c54` (enthält vollständig `claude/adoring-cerf-pzowiw` @ `9eead86`, `codex/akeno-network-plug-and-play` @ `4190496`, `feature/akeno-network-modular`, `hotfix/akeno-3.1.1-doctor-startup`) |
 | Staging | `codex/akeno-network-staging-20261028` @ `325d35c` zusammengeführt (`a8ca408`; Dateien waren bereits identisch) |
-| Getesteter Commit | siehe Abschnitt 4 (CI auf genau einem Commit) |
+| Getesteter Commit | **`5cc77fd9eb12ed78a6d0c0ad6aacd9e34713fb71`** (alle Workflows grün, Abschnitt 4); danach nur `docs/` |
 | Version | **3.2.0** — unveröffentlicht. Live-Stable laut Produktions-Lesecheck: **3.1.1, Sequenz 3** → 3.2.0 bekommt **Sequenz 4** |
 
 ## 2. Changelog dieser Fortsetzung (gegenüber `1991686`)
@@ -58,11 +59,14 @@ angefasst. Der laufende Arbeitsstand steht in `docs/AKENO_320_FINAL_PROGRESS.md`
 
 | Prüfung | Lauf | Commit | Ergebnis |
 |---|---|---|---|
-| LAN Play auf echtem Windows (WireGuardNT, isolierter Windows-Peer) | [40768762884](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768762884) (Job `lan-play`) | `d32a0cc` | **44/44 grün**: Koordinator-Nachweis, Relay-only mit verifizierter WFP-Sperre, verschlüsselter Direct-Roaming-Angriff blockiert, SMB/RDP/NetBIOS unerreichbar, Spielport erst nach Freigabe, Widerruf in einem Heartbeat, Stopp entfernt Tunnel/Regeln/Sperre, nach Absturz bleibt die Sperre bis zur Wiederherstellung. Zuerst grün auf `482ffa4` ([40762936142](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40762936142)) |
-| VPN/WireGuardNT inkl. produktiver DNS-Leckprüfung | [40768762884](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40768762884) (Job `wireguard`) | `d32a0cc` | **41/41 grün**: `dns_verified: True`, 3 gesperrte (davon 1 per WFP-Drop-Ereignis bewiesen, `kernel_drop_proofs: 1`) + 3 nicht routbare Fremd-DNS-Pfade, `capture_recorded_tunnel: True`; IPv4/IPv6 nur durch den Tunnel, Fremd-DNS nicht zugestellt, System-DNS zum Tunnel-Resolver, kein direktes Internet; Routen/DNS danach identisch. Vorher grün auf `118e7e0` ([40766590526](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40766590526)); rot auf `eaef058` ([40767466098](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40767466098), Packet Monitor zeichnete den Tunnel nicht auf → Ursache für `d32a0cc`) |
+| LAN Play auf echtem Windows (WireGuardNT, isolierter Windows-Peer) | [40775941177](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941177) (Job `lan-play`) | `5cc77fd` | **44/44 grün** (ebenso auf `d32a0cc`): Koordinator-Nachweis, Relay-only mit verifizierter WFP-Sperre, verschlüsselter Direct-Roaming-Angriff blockiert, SMB/RDP/NetBIOS unerreichbar, Spielport erst nach Freigabe, Widerruf in einem Heartbeat, Stopp entfernt Tunnel/Regeln/Sperre, nach Absturz bleibt die Sperre bis zur Wiederherstellung. Zuerst grün auf `482ffa4` ([40762936142](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40762936142)) |
+| VPN/WireGuardNT inkl. produktiver DNS-Leckprüfung | [40775941177](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941177) (Job `wireguard`) | `5cc77fd` | **41/41 grün** (ebenso auf `d32a0cc`): `dns_verified: True`, 3 gesperrte (davon 1 per WFP-Drop-Ereignis bewiesen, `kernel_drop_proofs: 1`) + 3 nicht routbare Fremd-DNS-Pfade, `capture_recorded_tunnel: True`; IPv4/IPv6 nur durch den Tunnel, Fremd-DNS nicht zugestellt, System-DNS zum Tunnel-Resolver, kein direktes Internet; Routen/DNS danach identisch. Vorher grün auf `118e7e0` ([40766590526](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40766590526)); rot auf `eaef058` ([40767466098](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40767466098), Packet Monitor zeichnete den Tunnel nicht auf → Ursache für `d32a0cc`) |
 | Komponenten-Bootstrap (Authenticode, geschützter Installer) | in jedem `network-windows`-Lauf | — | 11/11 grün (Schritt „explicit-consent official component bootstrap“) |
-| Vollständiger Build, Installer, Portable, Update-E2E, Rollback, Upgrades 3.0.0/3.1.0/3.1.1 | ausstehend | — | ausstehend |
-| Gebauter Helper über runas | ausstehend | — | ausstehend |
+| Update-E2E (Installer 3.2.0 → 3.2.1 mit offenem Fenster, kaputte Updates, Health-Check, automatischer und manueller Rollback, Abbruch/Wiederherstellung, manipulierte Pakete, fremder Schlüssel, falsche signierte Werte, Deinstallation) | [40775941347](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941347) (Job „Windows update end to end“) | `5cc77fd` | **58/58 grün** |
+| Upgrades der echten veröffentlichten Installer (SHA-geprüft) auf 3.2.0 | dito | `5cc77fd` | **3.0.0 → 3.2.0: 57/57**, **3.1.0 → 3.2.0: 57/57**, **3.1.1 → 3.2.0: 57/57** (je inkl. manuellem Rollback auf die Ausgangsversion; Lizenz/DPAPI, Einstellungen, Themes, Wallpaper, Mod-Backups, Nutzerdateien erhalten) |
+| Reparatur einer nicht mehr startenden 3.1.0 (Installer drüber) | dito | `5cc77fd` | **15/15 grün** |
+| Windows-Build, Unit/Integration/UI-Tests, 150-%-Oberfläche, Smoke-Test, Paket-GUI, Desktop Studio | [40775941347](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941347) (Job „Windows build, tests and smoke test“) | `5cc77fd` | **grün** |
+| Gebauter Helper über runas (`AKENO.exe --network-helper`) | dito | `5cc77fd` | **grün** (Status beantwortet; unbekannte Aktion, abgelaufene Anfrage und ungültige ID abgelehnt; danach kein Tunneldienst/Adapter). Auf `d32a0cc` rot → Fix Abschnitt 2, Punkt 9 |
 
 ## 4. CI auf dem finalen Commit
 
@@ -72,11 +76,30 @@ Code-Stand: **`5cc77fd9eb12ed78a6d0c0ad6aacd9e34713fb71`**. Spätere Commits än
 
 | Workflow | Lauf | Ergebnis |
 |---|---|---|
-| `build.yml` (Linux, Server SQLite/PostgreSQL/Docker, Original-Assets, Windows-Tests, Build, Installer, Portable, Helper über runas, Update-E2E inkl. Upgrades 3.0.0/3.1.0/3.1.1, Rollback, Reparatur) | [40775941347](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941347) | ausstehend |
-| `network-windows.yml` (`wireguard` 41 Checks, `lan-play` 44 Checks, Komponenten-Bootstrap 11 Checks je Job) | [40775941177](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941177) | ausstehend |
-| `lan-lab.yml` (NAT-Labor: Relay-only-Privatsphäre, Ausfall, Netzwechsel, Widerruf, Lease-Ablauf) | [40775941320](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941320) | ausstehend |
-| `network-local-e2e.yml` (echtes Relay-only-WireGuard mit OpenTTD und äußeren Mitschnitten; verwalteter Exit, Dual-Stack, Kernel-Lease-Ablauf) | [40775941215](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941215) | ausstehend |
-| `components-windows.yml` (echtes Inno-Setup, Full/Core-Installation, signierte Modul-Installation/-Entfernung/-Reparatur, Rollback bei fehlgeschlagener Health-Prüfung, Deinstallation) | [40775941112](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941112) | ausstehend |
+| `build.yml` (Linux, Server SQLite/PostgreSQL/Docker, Original-Assets, Windows-Tests, Build, Installer, Portable, Helper über runas, Update-E2E inkl. Upgrades 3.0.0/3.1.0/3.1.1, Rollback, Reparatur) | [40775941347](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941347) | **grün** (alle Jobs; „Draft development release“/„Publish“ planmäßig übersprungen) |
+| `network-windows.yml` (`wireguard` 41 Checks, `lan-play` 44 Checks, Komponenten-Bootstrap 11 Checks je Job) | [40775941177](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941177) | **grün** (41/41, 44/44) |
+| `lan-lab.yml` (NAT-Labor: Relay-only-Privatsphäre, Ausfall, Netzwechsel, Widerruf, Lease-Ablauf) | [40775941320](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941320) | **grün** |
+| `network-local-e2e.yml` (echtes Relay-only-WireGuard mit OpenTTD und äußeren Mitschnitten; verwalteter Exit, Dual-Stack, Kernel-Lease-Ablauf) | [40775941215](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941215) | **grün** |
+| `components-windows.yml` (echtes Inno-Setup, Full/Core-Installation, signierte Modul-Installation/-Entfernung/-Reparatur, Rollback bei fehlgeschlagener Health-Prüfung, Deinstallation) | [40775941112](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941112) | **grün** |
+
+### Release-Kandidat (Dateien genau dieses Laufs)
+
+Artefakt **`AKENO-Gaming-Suite-windows-x64`** aus [Lauf 40775941347](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941347) (Artefakt-ID 12857297814,
+verfügbar bis 26.01.2027; Download nur angemeldet über die Lauf-Seite). Inhalt laut `SHA256SUMS.txt`:
+
+| Datei | Größe | SHA-256 |
+|---|---|---|
+| `AKENO-Gaming-Suite-3.2.0-Setup-x64.exe` | 158 176 247 B | `c9bc9d56900b17d32f6985a01a92f25611a2c2f4a24d7a0d81c3c86fbd6a8cff` |
+| `AKENO-Gaming-Suite-3.2.0-portable-x64.zip` | 223 837 453 B | `8c993ae4682b308df2ffa4675c7c8a7a6d13ae8b516d576021c9a70606a95b3f` |
+| `AKENO-Gaming-Suite-3.2.0-source.zip` | — | `4423932071bd18fd369bff10b03a0597e68424696fbf13c06f5eb2ca549243e9` |
+| `AKENO-community-dependencies-3.2.0-x64.zip` | — | `7c397b67dae68b787aa33077ae5b0ddfb6cb2ee9d173e086d06b4d18aece02ec` |
+
+Release-Manager-Werte (Portable): `file_count` 2917, `uncompressed_size_bytes` 494 376 757, `pe_files` 356,
+`content_sha256` `46de9e86a189df5f02e155f2b0c85fc311dadea870491f02096d7f784025c2a3`, innerhalb der Grenzen, vom
+Updater akzeptiert → `docs/release/3.2.0/release-manager-values.json`. Screenshots: Artefakt
+`windows-test-results-and-screenshots` desselben Laufs (Runner ohne NVIDIA-GPU; Fixture-Screenshots sind als
+Testdaten gekennzeichnet) und `screenshots/network-fixtures/` im Repository. Release-Notes:
+`docs/release/3.2.0/release-notes.txt`.
 
 ## 5. Lokale Regression
 
@@ -88,9 +111,12 @@ Code-Stand: **`5cc77fd9eb12ed78a6d0c0ad6aacd9e34713fb71`**. Spätere Commits än
 
 ## 6. Releasebewertung
 
-### A. Fertig und real getestet
+### A. Fertig und real getestet (CI auf `5cc77fd`)
 - Relay-only-LAN mit AKENO-WFP-Sperre auf echtem Windows (44 Checks), NAT-Labor, verschlüsseltes Relay-/OpenTTD-
   Labor, VPN-Exit-Labor (Linux, NAT/NAT66, Ablauf, Absturz) — siehe `docs/AKENO_320_FINAL_PROGRESS.md`.
+- VPN über WireGuardNT mit DNS-Leckprüfung auf Kernel-Nachweisen (41 Checks).
+- Installer, Portable, Update/Rollback/Wiederherstellung (58), Upgrades 3.0.0/3.1.0/3.1.1 → 3.2.0 (je 57),
+  Reparatur 3.1.0 (15), Komponenten Full/Core/Module, gebauter Netzwerk-Helfer über runas.
 - Lizenzserver SQLite/PostgreSQL/Docker-Deployment; Upstream-Paketverträge; Linux-Testlauf.
 - Produktions-Lesecheck: 3.0.0/3.1.0 unverändert, 3.1.1 live (Sequenz 3), Downloads signaturgleich.
 
@@ -109,9 +135,9 @@ Code-Stand: **`5cc77fd9eb12ed78a6d0c0ad6aacd9e34713fb71`**. Spätere Commits än
 - **Offline-Signatur** des Release-Envelopes (Sequenz 4).
 
 ### D. Sicherheitskritische Blocker
-- Keiner offen auf den getesteten Commits. Behoben in dieser Arbeit: **D1** DNS-Leck-Nachweis (grün auf `118e7e0`,
-  41/41) und **D2** ungeschützter Peer-Verkehr/Direct-Roaming im LAN (grün auf `482ffa4`, 44/44). Beide Prüfungen
-  müssen auf dem finalen Commit erneut grün sein (Abschnitt 4).
+- **Keiner offen.** Behoben in dieser Arbeit und auf dem finalen Commit `5cc77fd` erneut grün: **D1** DNS-Leck-
+  Nachweis (41/41, Urteil nur auf Kernel-Nachweisen) und **D2** ungeschützter Peer-Verkehr/Direct-Roaming im LAN
+  (44/44, verschlüsselter Direktangriff blockiert).
 
 ## 7. Installations- und Updateanleitung
 

@@ -18,10 +18,17 @@ Schlüssel in GitHub, CI, Chat, Logs oder auf dem VPS.
 
 ## Release-Dateien 3.2.0
 
-Aus genau **einem** `build.yml`-Lauf, in dem alle Jobs grün sind, einschließlich „Windows update end to end“ mit
-den Upgrades von 3.0.0, 3.1.0 und 3.1.1. Lauf, Commit, SHA-256 und Release-Manager-Werte stehen in
-`docs/AKENO_320_FINAL_RELEASE_REPORT.md` (Abschnitt 4) und `release-manager-values.json` in diesem Ordner.
-Jeder neue CI-Lauf erzeugt andere Bytes: nur die Dateien dieses einen Laufs signieren.
+Lauf **[40775941347](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40775941347)** auf Commit `5cc77fd9eb12ed78a6d0c0ad6aacd9e34713fb71`: alle Jobs grün,
+einschließlich „Windows update end to end“ (58/58) mit den Upgrades von 3.0.0, 3.1.0 und 3.1.1 (je 57/57).
+Artefakt `AKENO-Gaming-Suite-windows-x64` (ID 12857297814, verfügbar bis 26.01.2027).
+
+| Datei | Größe | SHA-256 |
+|---|---|---|
+| `AKENO-Gaming-Suite-3.2.0-Setup-x64.exe` | 158 176 247 B | `c9bc9d56900b17d32f6985a01a92f25611a2c2f4a24d7a0d81c3c86fbd6a8cff` |
+| `AKENO-Gaming-Suite-3.2.0-portable-x64.zip` | 223 837 453 B | `8c993ae4682b308df2ffa4675c7c8a7a6d13ae8b516d576021c9a70606a95b3f` |
+
+Alle Werte: `release-manager-values.json` in diesem Ordner. Jeder neue CI-Lauf erzeugt andere Bytes: nur die
+Dateien dieses einen Laufs signieren.
 
 ## Schritte
 
