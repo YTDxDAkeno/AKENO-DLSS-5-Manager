@@ -14,10 +14,15 @@ never switch them on, never install a network adapter or WireGuard, and each mod
   lock** lets the LAN tunnel talk only to the relay; it is checked before the room shows "Connected", re-checked while
   it runs, survives a crash until recovery, and is removed only after the tunnel is gone. The relay operator still
   sees transport addresses; this is not anonymity.
-- **AKENO VPN — one click**: choose a country tile, click Connect, Windows asks once. AKENO creates the keys and the
-  tunnel itself and shows Connected only after the observed IPv4/IPv6 exit, routes and DNS were verified. **No
-  AKENO exit server is running yet**, so Turkey, USA, Germany, Netherlands, United Kingdom, France, Japan and Canada
-  are shown with that reason and cannot be selected. Your own WireGuard profiles remain under "Expert".
+- **Free VPN — one click**: choose a country, click Connect. AKENO reads the official VPN Gate list (volunteer and
+  University of Tsukuba servers), picks a server in exactly that country and connects with the official OpenVPN
+  (installed only after you agree; pinned installer, OpenVPN Inc. signature). Connected is shown only after the new
+  public IPv4, its country (at least two independent geolocation services), DNS outside the tunnel (denied, measured
+  natively) and IPv6 were verified. A server that fails is skipped; a country without a server says "Not available"
+  and AKENO never changes the country on its own. Before the first connection a notice explains that VPN Gate and the
+  operators log connections and that there is no anonymity guarantee.
+- **AKENO VPN (own exits)**: prepared; **no AKENO exit server is running yet**. Own WireGuard profiles remain under
+  "Expert".
 - **Diagnostics**: DNS, AKENO server, LAN service, relay, sign-in, license, WireGuard, firewall, sessions and VPN
   routing; export without passwords, tokens or keys.
 - **Network components**: missing WireGuard components are only installed after you agree; the official installer

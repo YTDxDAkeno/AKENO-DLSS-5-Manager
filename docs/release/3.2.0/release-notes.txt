@@ -4,7 +4,8 @@ Neu: AKENO Network (ONLINE → AKENO Network). LAN Play und VPN sind aus, bis du
 - LAN Play: private Räume mit Einladungscode und optionalem Passwort, Mitglieder, Ping, Spiel direkt aus deiner Bibliothek freigeben (nur die geprüften Ports dieses Spiels, nur für Raummitglieder).
 - Öffentlicher Serverbrowser: suchen, nach Spiel und Region filtern, beitreten, eigenen Raum veröffentlichen, privat schalten, sperren, melden. Keine IP-Adressen in der Liste.
 - IP-Schutz: Alle Räume laufen ausschließlich über das verschlüsselte AKENO-Relay. Mitspieler sehen nur virtuelle Adressen, nie deine Heim-IP. Eine eigene Windows-Filtersperre lässt den LAN-Tunnel nur mit dem Relay sprechen; ohne sie wird nie „Verbunden“ angezeigt.
-- AKENO VPN mit einem Klick: Land wählen, Verbinden. „Verbunden“ erst nach geprüfter IPv4/IPv6-Ausgangsadresse, Routen und DNS. Hinweis: Noch läuft kein AKENO-Ausgangsserver; alle Länder sind daher mit Begründung deaktiviert.
+- Kostenloses VPN mit einem Klick: Land wählen, Verbinden. AKENO wählt automatisch einen kostenlosen VPN-Gate-Server (Community-Server der Universität Tsukuba) in genau diesem Land, nutzt das offizielle OpenVPN (Installation nur nach Zustimmung, Signatur geprüft) und zeigt „Verbunden“ erst, wenn die neue öffentliche IP, ihr Land (zwei unabhängige Quellen), DNS und IPv6 geprüft sind. Gibt es im Land gerade keinen Server, steht dort „Nicht verfügbar“ – AKENO wechselt nie ungefragt das Land. Vor der ersten Nutzung erklärt AKENO, dass VPN Gate und die Serverbetreiber Verbindungen protokollieren; keine Anonymitätsgarantie.
+- AKENO-eigene VPN-Ausgangsserver sind vorbereitet, aber noch keiner aktiv.
 - Diagnose mit Export ohne Passwörter, Tokens oder Schlüssel.
 Noch nicht: automatische LAN-Spielsuche (Broadcast) unter Windows – verbinde dich über die virtuelle IP des Hosts. LAN Play und VPN laufen nicht gleichzeitig.
 
@@ -19,7 +20,8 @@ New: AKENO Network (ONLINE → AKENO Network). LAN Play and VPN stay off until y
 - LAN Play: private rooms with an invitation code and optional password, members, ping, allow a game straight from your library (only that game's reviewed ports, only for room members).
 - Public server browser: search, filter by game and region, join, publish your room, make it private, lock it, report. No IP addresses in the list.
 - IP privacy: all rooms run only through the encrypted AKENO relay. Other players see virtual addresses, never your home IP. A dedicated Windows filter lock lets the LAN tunnel talk only to the relay; without it AKENO never shows "Connected".
-- One-click AKENO VPN: choose a country, Connect. "Connected" only after the IPv4/IPv6 exit, routes and DNS were verified. Note: no AKENO exit server runs yet, so every country is disabled with that reason.
+- One-click free VPN: choose a country, Connect. AKENO picks a free VPN Gate server (community servers of the University of Tsukuba) in exactly that country, uses the official OpenVPN (installed only with your consent, signature checked) and shows "Connected" only after the new public IP, its country (two independent sources), DNS and IPv6 were verified. If the country has no server right now it says "Not available" – AKENO never switches country on its own. Before the first use AKENO explains that VPN Gate and the server operators log connections; no anonymity promise.
+- AKENO's own VPN exit servers are prepared, none runs yet.
 - Diagnostics with an export without passwords, tokens or keys.
 Not yet: automatic LAN game discovery (broadcast) on Windows – connect by the host's virtual IP. LAN Play and the VPN do not run at the same time.
 
