@@ -182,7 +182,7 @@ def main(args):
                                                                  for h in attempts])
             if not connected(status):
                 run.stop()
-                info(f'{country}: no verified connection', {k: status.get(k) for k in ('state', 'error', 'failures')})
+                info(f'{country}: no verified connection', {k: status.get(k) for k in ('state', 'error', 'detail', 'failures')})
                 continue
             tested = country
             check(True, f'{country}: connected through a real VPN Gate server', {k: status.get(k) for k in (

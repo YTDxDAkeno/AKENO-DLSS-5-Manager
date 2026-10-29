@@ -53,7 +53,7 @@ class Checks:
     def verify(self, country, baseline):
         outcome = self.verdicts.get(self.current, 'ok')
         if outcome != 'ok':
-            raise VerificationFailed(outcome)
+            raise VerificationFailed(outcome, f'{outcome} check')
         return {'exit_ipv4': '45.76.99.1', 'confirmed_by': ['country.is', 'ipinfo'], 'contradicted_by': [],
                 'country_verified': True, 'dns_verified': True, 'ipv6': 'blocked', 'latency_ms': 42.0}
     def inventory(self):
@@ -143,6 +143,7 @@ def test_mislabelled_country_skips_the_server_but_a_leak_ends_the_session():
                         verdicts={'45.76.10.1': 'free_vpn_leak'})
     result = s.run('US')
     assert result['error'] == 'free_vpn_leak' and ('start', '45.76.10.2') not in log
+    assert result['detail'] == 'free_vpn_leak check'                  # which check failed, for diagnostics
     assert not any(h.get('state') == 'connected' for h in s.status.history)
 
 

@@ -295,7 +295,8 @@ class FreeVPNSession:
                     self._stop_process()
                     if failed.code == 'free_vpn_country_mismatch':
                         continue                                    # a mislabelled server: try the next one
-                    final = self._status('failed', country, server, error=failed.code)
+                    # which check failed (no addresses or secrets): shown in diagnostics and support reports
+                    final = self._status('failed', country, server, error=failed.code, detail=failed.detail[:200])
                     break
                 self.connected_since = self.connected_since or self.clock()
                 self.journal.save({'phase': 'connected', 'session_id': self.session_id, 'server_ip': server.ip,
