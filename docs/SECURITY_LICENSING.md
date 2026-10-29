@@ -1,4 +1,4 @@
-# License trust model (AKENO Gaming Suite 3.0)
+# License trust model (AKENO Gaming Suite 3.0; module licenses since 3.2.0)
 
 The Windows app accepts a license only if it was signed by the official AKENO license server's private key.
 That key exists on the VPS only (the `keys` volume, mode 0600). Nothing the server sends unsigned can unlock the app.
@@ -78,3 +78,57 @@ The tests are in `tests/test_licensing_client.py` (app logic with a signing fake
 - **Built program:** it ignores the address environment variable and the user file, refuses plain HTTP and refuses address changes.
 - **No keys:** a build without keys accepts no license and pins no server key.
 - **Rotation:** a key endorsed by the old key is learned (`test_rotated_key_is_learned_through_endorsement`).
+
+## Module licenses (AKENO 3.2.0)
+
+An account can hold **AKENO Full** (`akeno-suite`, the existing `licenses` row, unchanged) and **single modules**
+next to it (`feature_grants`: `akeno-vpn` = AKENO VPN, `akeno-lan-play` = AKENO LAN Play; the catalog already maps
+Desktop Studio, DLSS Manager, Performance Tools and Gaming Tools, which are not offered yet). AKENO Full includes
+every module, also modules added later. A module grant never stands for AKENO Full.
+
+**Two document families.** The original family (`akeno-lease`, `akeno-offline-license`, `akeno-validation`,
+`ent = akeno-suite`) is issued exactly as before and **only for a running AKENO Full license**, so AKENO 3.1.1 and
+older keep working and can never mistake a module grant for the suite: for a VPN-only account they get a signed
+`no_license` answer. AKENO 3.2.0 sends `access: 1` and receives the access family:
+
+| Document (JWS `typ`) | `ent` | What it adds |
+|---|---|---|
+| `akeno-access-lease` | `akeno-access` | `grants`: every running entitlement with its type and own expiry; `nonce`, `dev`, `dfp`, `exp` as before |
+| `akeno-access-offline` | `akeno-access` | `ents` + `grants`: the account's **lifetime** entitlements on this PC (no end date) |
+| `akeno-access-validation` | `akeno-access` | the signed answer: result, `crev`, grants; bound to nonce, account and PC |
+
+The app checks issuer, audience, `ent`, signature (embedded or endorsed key), device binding and validity exactly as
+for the original family; in addition each entitlement stops at its own `exp` even while the lease runs (AKENO Full
+for 30 days ends on time also offline, AKENO VPN Lifetime stays). Entitlement ids this build does not know are
+ignored. A certificate whose `ents` and `grants` differ is not accepted. An access document never passes as an
+original document or the other way round (different `typ` and `ent`).
+
+**Updating from 3.1.1:** the original lifetime certificate stays valid after the update (AKENO starts offline as
+before) and is replaced by an access certificate at the next online check. A server without module licenses
+refuses the `access` field (`validation_error`); the app then asks the original way (suite only) for that run.
+
+**Where the license is enforced** (not only in the window):
+
+| Boundary | Check |
+|---|---|
+| Main window | pages of modules outside the license are not built at all (a lock page stands in); start-up scans, downloads check, compatibility updates, Cloud Sync and Desktop Studio run only with their module |
+| Desktop Studio host (own process) | starts and keeps running only with `allows("desktop")` |
+| Elevated network helper | free VPN, managed VPN and own WireGuard connections need `vpn`; LAN Play needs `lan_play`; installing the network or VPN components needs a network module; checked before anything native happens. Disconnect and recovery always work |
+| License server, LAN Play API and coordinator | `entitlements.has(user, akeno-lan-play)` (AKENO Full or AKENO LAN Play) for rooms, members and every WireGuard handshake |
+| License server, AKENO VPN API and exit agents | `entitlements.has(user, akeno-vpn)` |
+
+**Codes.** Unchanged format (`AKENO-XXXX-XXXX-XXXX-XXXX`, 80 random bits, only an HMAC verifier stored, single use
+under concurrency). New: `entitlement` (what it unlocks) and `duration_days` (a time code's own length: 30, 90,
+365 or custom days). The unused code's expiry (`expires_at`) stays separate from the length of the license it gives.
+Stacking: time adds up from the later of now and the current expiry; a lifetime grant is never shortened (a time code
+for it is refused and stays unused); a module code is refused while a lifetime AKENO Full already includes it.
+An app older than 3.2.0 is told to update instead of using up a module code. AKENO VPN licenses (codes and grants)
+stay switched off (`vpn_module_licenses`) until a super admin switches them on after the use of VPN Gate in AKENO is
+cleared.
+
+**Tests:** `server/tests/test_feature_licenses.py` (server), `server/tests/test_client_modules_e2e.py` (the app's
+licensing code against a real server: VPN only, upgrade, Full ending, 3.1.1 update, old server, revocation,
+tampering), `tests/test_feature_licenses_client.py` (documents, offline expiry, forged/foreign/unknown grants, the
+main window), `tests/test_network_helper.py` (helper boundaries), `server/tests/test_cli_migrations.py` (migration
+0002 with existing data and back) and the Windows run `.github/workflows/feature-licenses-windows.yml` (a VPN-only
+license from code to a real VPN connection through the real helper).

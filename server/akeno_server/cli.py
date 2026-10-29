@@ -108,6 +108,31 @@ def _keys(args) -> int:
     return 0
 
 
+def _schema(session) -> bool:
+    """The database's migration against this server's newest one, and what the licensing tables hold (counts only:
+    compare them before and after a migration)."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    root = Path(__file__).resolve().parent.parent
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "migrations"))
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    with session() as db:
+        current = db.execute(text("SELECT version_num FROM alembic_version")).scalar()
+        counts = {}
+        for table in ("users", "licenses", "license_codes", "license_redemptions", "devices", "offline_certificates",
+                      "feature_grants"):
+            try:
+                counts[table] = db.execute(text(f"SELECT count(*) FROM {table}")).scalar()
+            except Exception:           # a table of a newer migration that is not there yet
+                db.rollback()
+                counts[table] = "—"
+    print(f"schema          {current}" + (" (current)" if current == head else f" (this server needs {head}: "
+                                                                                 "akeno-server migrate)"))
+    print("records         " + ", ".join(f"{k} {v}" for k, v in counts.items()))
+    return current == head
+
+
 def _check(args) -> int:
     from akeno_server.config import get_config
     from akeno_server.db import session
@@ -123,6 +148,7 @@ def _check(args) -> int:
         with session() as db:
             db.execute(text("SELECT 1"))
         print("database        ok")
+        ok = _schema(session) and ok
     except Exception as exc:  # report, do not crash
         ok = False
         print(f"database        FAILED: {exc}")

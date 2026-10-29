@@ -66,6 +66,7 @@ def test_check_and_cleanup(capsys, keys):
     assert cli.main(["check"]) == 0
     out = capsys.readouterr().out
     assert "database        ok" in out and keys in out
+    assert "schema          0002 (current)" in out and "feature_grants 0" in out
     assert cli.main(["cleanup"]) == 0
 
 
