@@ -23,6 +23,12 @@ never switch them on, never install a network adapter or WireGuard, and each mod
   operators log connections and that there is no anonymity guarantee.
 - **AKENO VPN (own exits)**: prepared; **no AKENO exit server is running yet**. Own WireGuard profiles remain under
   "Expert".
+- **Licenses per module**: next to AKENO Full, codes can unlock single modules — AKENO VPN or AKENO LAN Play, for life
+  or for 30/90/365/custom days. AKENO then builds exactly those modules; the other paid modules stay visible with a
+  lock ("This module is not included in your current AKENO license" → Redeem activation code) and nothing of them
+  loads or scans. A later code adds modules or AKENO Full at once; when a time-limited AKENO Full ends, a lifetime
+  module stays. The same installer and updater for every license. Existing licenses (and AKENO 3.1.1) keep working
+  unchanged; the server must be updated first (`docs/FEATURE_LICENSES_VPS_MIGRATION.md`).
 - **Diagnostics**: DNS, AKENO server, LAN service, relay, sign-in, license, WireGuard, firewall, sessions and VPN
   routing; export without passwords, tokens or keys.
 - **Network components**: missing WireGuard components are only installed after you agree; the official installer

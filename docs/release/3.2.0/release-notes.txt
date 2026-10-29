@@ -6,6 +6,7 @@ Neu: AKENO Network (ONLINE → AKENO Network). LAN Play und VPN sind aus, bis du
 - IP-Schutz: Alle Räume laufen ausschließlich über das verschlüsselte AKENO-Relay. Mitspieler sehen nur virtuelle Adressen, nie deine Heim-IP. Eine eigene Windows-Filtersperre lässt den LAN-Tunnel nur mit dem Relay sprechen; ohne sie wird nie „Verbunden“ angezeigt.
 - Kostenloses VPN mit einem Klick: Land wählen, Verbinden. AKENO wählt automatisch einen kostenlosen VPN-Gate-Server (Community-Server der Universität Tsukuba) in genau diesem Land, nutzt das offizielle OpenVPN (Installation nur nach Zustimmung, Signatur geprüft) und zeigt „Verbunden“ erst, wenn die neue öffentliche IP, ihr Land (zwei unabhängige Quellen), DNS und IPv6 geprüft sind. Gibt es im Land gerade keinen Server, steht dort „Nicht verfügbar“ – AKENO wechselt nie ungefragt das Land. Vor der ersten Nutzung erklärt AKENO, dass VPN Gate und die Serverbetreiber Verbindungen protokollieren; keine Anonymitätsgarantie.
 - AKENO-eigene VPN-Ausgangsserver sind vorbereitet, aber noch keiner aktiv.
+- Lizenzen pro Modul: Neben AKENO Full gibt es Codes für einzelne Module (AKENO VPN, AKENO LAN Play), lebenslang oder zeitlich begrenzt. AKENO zeigt dann genau diese Module; die anderen bleiben mit Schloss sichtbar und lassen sich jederzeit mit einem weiteren Code freischalten. Bestehende Lizenzen bleiben unverändert gültig.
 - Diagnose mit Export ohne Passwörter, Tokens oder Schlüssel.
 Noch nicht: automatische LAN-Spielsuche (Broadcast) unter Windows – verbinde dich über die virtuelle IP des Hosts. LAN Play und VPN laufen nicht gleichzeitig.
 
@@ -22,6 +23,7 @@ New: AKENO Network (ONLINE → AKENO Network). LAN Play and VPN stay off until y
 - IP privacy: all rooms run only through the encrypted AKENO relay. Other players see virtual addresses, never your home IP. A dedicated Windows filter lock lets the LAN tunnel talk only to the relay; without it AKENO never shows "Connected".
 - One-click free VPN: choose a country, Connect. AKENO picks a free VPN Gate server (community servers of the University of Tsukuba) in exactly that country, uses the official OpenVPN (installed only with your consent, signature checked) and shows "Connected" only after the new public IP, its country (two independent sources), DNS and IPv6 were verified. If the country has no server right now it says "Not available" – AKENO never switches country on its own. Before the first use AKENO explains that VPN Gate and the server operators log connections; no anonymity promise.
 - AKENO's own VPN exit servers are prepared, none runs yet.
+- Licenses per module: next to AKENO Full there are codes for single modules (AKENO VPN, AKENO LAN Play), for life or for a time. AKENO then shows exactly those modules; the others stay visible with a lock and can be unlocked with another code at any time. Existing licenses stay valid as they are.
 - Diagnostics with an export without passwords, tokens or keys.
 Not yet: automatic LAN game discovery (broadcast) on Windows – connect by the host's virtual IP. LAN Play and the VPN do not run at the same time.
 
