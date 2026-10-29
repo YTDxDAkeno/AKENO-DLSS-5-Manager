@@ -48,6 +48,10 @@ ERRORS = {
     "code_not_for_account": "This activation code was issued for another account.",
     "trial_already_used": "A trial of this length was already used on this account.",
     "already_lifetime": "You already have a lifetime license, so the code was not used. Keep it for someone else.",
+    "already_included": "Your lifetime AKENO Full license already includes this module, so the code was not used. "
+                        "Keep it for someone else.",
+    "update_required": "This code unlocks a single AKENO module. Update AKENO, then redeem it again; the code stays "
+                       "unused.",
     "license_disabled": "This license is disabled. Contact support.",
     "device_blocked": "This PC was removed from the account by an administrator. Contact support.",
     "device_removals_exhausted": "You removed the maximum number of PCs for 30 days. Support can help.",
