@@ -55,7 +55,7 @@ VERIFIED = {
     'own-wireguard': Provider('own-wireguard', 'WireGuard (own profile)', OWN, ('wireguard',), True),
     'akeno': Provider('akeno', 'AKENO', AKENO, ('wireguard',), True),
     'vpngate': Provider('vpngate', 'VPN Gate', THIRD_PARTY, ('openvpn',), False, msg(
-        'Disabled: VPN Gate keeps connection logs, may disclose them, and its OpenVPN transport is not integrated.')),
+        'VPN Gate is used by the Free VPN above: choose a country there and AKENO picks a server automatically.')),
 }
 
 

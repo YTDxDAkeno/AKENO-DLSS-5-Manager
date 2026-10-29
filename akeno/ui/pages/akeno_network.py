@@ -75,10 +75,6 @@ HOW_VPN = msg('Full-tunnel profiles need IPv4, IPv6 and a DNS server, so no traf
               'tunnel. AKENO never changes routes on its own: the VPN connects only when you click Connect and '
               'Windows asks for permission. There is no kill switch yet: if the tunnel drops, Windows uses your '
               'normal connection again.')
-VPNGATE = msg('VPN Gate states that it keeps connection logs for at least three months, that each volunteer server '
-              'records packet headers for at least two weeks, and that logs are disclosed to police, prosecutors '
-              'and courts on request. Its servers use OpenVPN, which AKENO does not integrate. Connecting stays '
-              'disabled; the catalog can be loaded read-only for review.')
 
 
 def _bytes(n):
@@ -190,6 +186,25 @@ class AkenoNetworkPage(QWidget):
         if index == 1 and vpn is not None and not vpn.loaded and self.modules.enabled('vpn') and \
                 getattr(self.window, 'license', None) is not None and WINDOWS:
             vpn.refresh()
+        free = getattr(self, 'free_vpn', None)
+        # ... and reads the public VPN Gate list once (rate-limited, cached without profiles).
+        if index == 1 and free is not None and not free.loaded and self.modules.enabled('vpn') and WINDOWS:
+            free.refresh()
+
+    def show_free_vpn(self, text, colour, country, ipv4, active):
+        """The dashboard's VPN card follows the free VPN while it is active."""
+        if not active and not getattr(self, '_free_dashboard', False):
+            return
+        self._free_dashboard = active
+        connected = colour == 'ok'
+        self.vpn_pill.set(text, colour)
+        self.tile_status.set(text)
+        self.vpn_dash.set_state(text, colour, t('Your internet traffic goes through {where}.').format(where=country)
+                                if connected else t('Your internet traffic uses your normal connection.'))
+        self.tile_location.set(country if connected else '—')
+        self.tile_exit.set(ipv4 if connected else '—')
+        self.tile_provider.set(t('VPN Gate · community') if connected else '—')
+        self.tile_protocol.set('OpenVPN' if connected else '—')
 
     def show_managed_vpn(self, text, colour, country, ipv4):
         """The dashboard's VPN card follows the one-click AKENO VPN while it is active."""
@@ -778,13 +793,18 @@ class AkenoNetworkPage(QWidget):
         content = QVBoxLayout(self.vpn_content)
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(16)
+        from akeno.ui.network_free_vpn import FreeVPN
         from akeno.ui.network_vpn import AutomaticVPN
+        # The free VPN (VPN Gate community servers) is the one-click path. AKENO's own exit servers are prepared but
+        # none runs yet; own WireGuard profiles stay for experts. Both sections are closed by default.
+        self.free_vpn = FreeVPN(self)
+        content.addWidget(self.free_vpn)
         self.automatic_vpn = AutomaticVPN(self)
-        content.addWidget(self.automatic_vpn)
-        # Own WireGuard profiles stay available for experts, below the one-click AKENO VPN and closed by default.
-        self.expert_vpn = Details(t('Expert: your own WireGuard profiles and providers'))
+        self.akeno_vpn = Details(t('AKENO exit servers (prepared, none running yet)'))
+        self.akeno_vpn.body.addWidget(self.automatic_vpn)
+        content.addWidget(self.akeno_vpn)
+        self.expert_vpn = Details(t('Expert: your own WireGuard profiles'))
         self.expert_vpn.body.addWidget(row)
-        self.expert_vpn.body.addWidget(self._vpngate_card())
         content.addWidget(self.expert_vpn)
         lay.addWidget(self.vpn_content)
         self.vpn_off = self._off_card('vpn', t('VPN'), 'shield', t(
@@ -989,69 +1009,6 @@ class AkenoNetworkPage(QWidget):
     def clear_history(self):
         self.prefs.clear_history()
         self.render_history()
-
-    # -- VPN Gate review (connecting disabled) ---------------------------------------------------------------------
-    def _vpngate_card(self):
-        card = Card(t('VPN Gate (disabled)'), 'lock', right=StatusPill(t('Not available'), 'unknown'))
-        details = Details(t('Why it is disabled and what the catalog lists'), t(VPNGATE))
-        line = QHBoxLayout()
-        line.setSpacing(8)
-        self.countries = QComboBox()
-        self.countries.addItem(t('Load the catalog first'))
-        self.countries.setEnabled(False)
-        line.addWidget(self.countries, 1)
-        line.addWidget(button(t('Load catalog'), 'refresh', on_click=self.catalog))
-        details.body.addLayout(line)
-        self.location_grid = KeyValueGrid(130)
-        self.location_grid.set_rows([(t('USA'), t('Not checked')), (t('Turkey'), t('Not checked'))])
-        details.body.addWidget(self.location_grid)
-        connect = button(t('Connect (not available yet)'), 'lock')
-        connect.setEnabled(False)
-        details.body.addWidget(connect)
-        card.body.addWidget(details)
-        self.vpngate_details = details
-        return card
-
-    def catalog(self):
-        from akeno.network.vpngate import countries, fetch_catalog, reachable
-
-        def load():
-            servers = fetch_catalog()
-            # Only the two target countries are probed, at most five servers each, from this PC.
-            probes = {code: [reachable(s) for s in [s for s in servers if s.country == code][:5]]
-                      for code in ('US', 'TR')}
-            return servers, probes
-
-        def show(result):
-            servers, probes = result
-            self.catalog_servers = servers
-            self.countries.clear()
-            counts = {}
-            for s in servers:
-                counts[s.country] = counts.get(s.country, 0) + 1
-            for code, name in countries(servers):
-                self.countries.addItem(t('{name} ({code}) · {n} servers').format(name=name, code=code, n=counts[code]),
-                                       code)
-            self.countries.setEnabled(bool(servers))
-            if not servers:
-                self.countries.addItem(t('The catalog lists no usable servers right now'))
-
-            def where(code):
-                n = counts.get(code, 0)
-                if not n:
-                    return t('Not in the current catalog')
-                states = probes.get(code, [])
-                ok = states.count('reachable')
-                if ok:
-                    reach = t('{ok} of {n} checked reachable from this PC').format(ok=ok, n=len(states))
-                elif states.count('unreachable'):
-                    reach = t('not reachable from this PC')
-                else:
-                    reach = t('reachability unknown (UDP)')
-                return t('{n} servers in the catalog').format(n=n) + ' · ' + reach
-            self.location_grid.set_rows([(t('USA'), where('US')), (t('Turkey'), where('TR'))])
-            self.say(t('Catalog loaded. Public VPN connections remain disabled.'))
-        self.work(load, show)
 
     # -- diagnostics --------------------------------------------------------------------------------------------------
     def _diagnostics_tab(self):

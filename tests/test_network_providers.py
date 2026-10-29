@@ -12,7 +12,7 @@ def test_no_fake_locations_only_own_profiles_connect(tmp_path):
         loc = next(loc for loc in items if loc.country == code and loc.kind == P.AKENO)
         assert not loc.available and 'No AKENO VPN server' in loc.reason
     gate = next(loc for loc in items if loc.provider == 'vpngate')
-    assert not gate.available and 'logs' in gate.reason
+    assert not gate.available and 'Free VPN' in gate.reason
 
 
 def test_shipped_catalog_has_no_akeno_servers():

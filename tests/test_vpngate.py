@@ -133,3 +133,36 @@ def test_reachability_probe_only_opens_a_tcp_connection_to_the_listed_address(mo
     other = vpngate.Server('h', '45.1.2.5', 'US', 'United States', 10, 1, 1, '2 weeks', 'client\nproto tcp\nremote 9.9.9.9 443\n')
     assert vpngate.reachable(tcp) == 'reachable' and calls == [('45.1.2.3', 443)]
     assert vpngate.reachable(udp) == 'unknown' and vpngate.reachable(other) == 'unknown' and len(calls) == 1
+
+
+def test_list_download_retries_once_after_a_network_error_but_not_after_an_http_error(monkeypatch):
+    import urllib.error
+    calls = []
+
+    class Answer:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self, n): return b'list'
+
+    class Opener:
+        def __init__(self, failures): self.failures = failures
+        def open(self, request, timeout):
+            calls.append(request.full_url)
+            if self.failures:
+                error = self.failures.pop(0)
+                raise error
+            return Answer()
+    monkeypatch.setattr(vpngate.urllib.request, 'build_opener', lambda *a: Opener([TimeoutError('read timed out')]))
+    assert vpngate.fetch_raw(pause=lambda s: None) == b'list' and len(calls) == 2
+    calls.clear()
+    monkeypatch.setattr(vpngate.urllib.request, 'build_opener',
+                        lambda *a: Opener([TimeoutError(), TimeoutError()]))
+    with pytest.raises(CatalogError, match='not reachable'):
+        vpngate.fetch_raw(pause=lambda s: None)
+    calls.clear()
+    monkeypatch.setattr(vpngate.urllib.request, 'build_opener',
+                        lambda *a: Opener([urllib.error.HTTPError(vpngate.URL, 503, 'busy', {}, None)]))
+    with pytest.raises(CatalogError, match='unexpected answer'):
+        vpngate.fetch_raw(pause=lambda s: None)
+    assert len(calls) == 1

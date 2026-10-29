@@ -15,9 +15,9 @@ import csv
 import io
 import ipaddress
 import json
-import math
 import re
 import time
+import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -136,23 +136,31 @@ class NoRedirects(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def fetch_raw(url: str = URL, timeout: float = 20.0) -> bytes:
+def fetch_raw(url: str = URL, timeout: float = 20.0, attempts: int = 2, pause=time.sleep) -> bytes:
+    """The official list over HTTPS; one quiet second attempt after a timeout or network error (CI saw a 30 s
+    read timeout once). An HTTP error answer is not retried."""
     if url != URL:
         raise CatalogError('Only the official VPN Gate server list is used.')
     import ssl
     opener = urllib.request.build_opener(NoRedirects(), urllib.request.HTTPSHandler(context=ssl.create_default_context()))
     request = urllib.request.Request(url, headers={'User-Agent': 'AKENO-Gaming-Suite-VPNGate-client/1',
                                                    'Accept-Encoding': 'identity'})
-    try:
-        with opener.open(request, timeout=timeout) as response:
-            if response.status != 200:
-                raise CatalogError('The VPN Gate server list returned an unexpected answer.')
-            raw = response.read(MAX_BYTES + 1)
-    except CatalogError:
-        raise
-    except (OSError, ValueError) as exc:
-        raise CatalogError('The VPN Gate server list is not reachable right now. Check the Internet connection and '
-                           'try again.') from exc
+    for attempt in range(attempts):
+        try:
+            with opener.open(request, timeout=timeout) as response:
+                if response.status != 200:
+                    raise CatalogError('The VPN Gate server list returned an unexpected answer.')
+                raw = response.read(MAX_BYTES + 1)
+            break
+        except CatalogError:
+            raise
+        except urllib.error.HTTPError as exc:
+            raise CatalogError('The VPN Gate server list returned an unexpected answer.') from exc
+        except (OSError, ValueError) as exc:
+            if attempt + 1 >= attempts:
+                raise CatalogError('The VPN Gate server list is not reachable right now. Check the Internet '
+                                   'connection and try again.') from exc
+            pause(3)
     if len(raw) > MAX_BYTES:
         raise CatalogError('The VPN Gate server list is larger than expected.')
     return raw
