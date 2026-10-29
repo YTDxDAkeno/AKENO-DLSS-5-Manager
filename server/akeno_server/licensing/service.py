@@ -739,7 +739,9 @@ def validate_access(db: Session, user: User, device: Device | None, app_version:
         result = "no_license"
     elif not claims:
         statuses = {e["status"] for e in entries}
-        result = "expired" if "expired" in statuses else f"license_{entries[0]['status']}"
+        # nothing runs: an ended entitlement first (a code renews it), then a reversible block, then a revocation
+        result = next((r for r, st in (("expired", "expired"), ("license_disabled", "disabled"),
+                                       ("license_revoked", "revoked")) if st in statuses), "expired")
     if result != "ok":
         claims = []
     else:

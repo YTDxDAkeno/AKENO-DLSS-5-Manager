@@ -378,6 +378,8 @@ async def settings_save(request: Request, db: Session = Depends(get_db)):
     values = {}
     for key, (_, kind, _, _) in settings.DEFAULTS.items():
         values[key] = key in form if kind is bool else str(form.get(key, ""))
+    if not admin.can(actor, "vpn_licenses"):
+        values.pop("vpn_module_licenses")        # only a super admin switches AKENO VPN licenses
     try:
         admin.update_settings(db, actor, values, client_ip(request))
         db.commit()
