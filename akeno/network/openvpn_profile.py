@@ -257,7 +257,9 @@ def render(profile: SafeProfile, *, dns: tuple[str, ...] = ('1.1.1.1', '9.9.9.9'
 
     File paths (log, status) are never written into the configuration: OpenVPN reads backslashes there as escapes.
     The caller passes them as fixed command-line arguments. ``server_name`` pins the certificate name of the
-    server (the provider's CA alone accepts any certificate of that public CA); ``adapter`` is AKENO's own TAP
+    server (the provider's CA alone accepts any certificate of that public CA; VPN Gate servers present a Let's
+    Encrypt certificate for ``opengw.net`` without the TLS-server key usage OpenVPN's ``remote-cert-tls`` demands,
+    so the name is the binding); ``adapter`` is AKENO's own TAP
     adapter so that routes and DNS checks concern exactly this tunnel."""
     for value in dns:
         address = ipaddress.ip_address(value)
@@ -278,15 +280,12 @@ def render(profile: SafeProfile, *, dns: tuple[str, ...] = ('1.1.1.1', '9.9.9.9'
         # full tunnel: IPv4 through the server, every IPv6 packet answered locally (the server is IPv4-only)
         'redirect-gateway def1 ipv6', 'block-ipv6', 'block-outside-dns',
         *[f'dhcp-option DNS {value}' for value in dns],
-        'register-dns',
-        # what a server may push: addresses, gateway, DNS servers and keepalive; nothing that names routes,
-        # IPv6, domains, proxies or environment
-        'pull-filter ignore "route"', 'pull-filter ignore "route-ipv6"', 'pull-filter ignore "ifconfig-ipv6"',
-        'pull-filter ignore "redirect-private"', 'pull-filter ignore "dhcp-option DOMAIN"',
-        'pull-filter ignore "dhcp-option DOMAIN-SEARCH"', 'pull-filter ignore "dhcp-option PROXY_"',
-        'pull-filter ignore "dhcp-option ADAPTER_DOMAIN_SUFFIX"', 'pull-filter ignore "dhcp-option WINS"',
-        'pull-filter ignore "dhcp-option NBT"', 'pull-filter ignore "dhcp-option NTP"',
+        # what a server may push: its tunnel address, gateway and keepalive. Routes, IPv6, DNS servers, domains,
+        # proxies, environment and messages from a server are dropped (AKENO sets DNS itself, through the tunnel).
+        'pull-filter ignore "route "', 'pull-filter ignore "route-ipv6"', 'pull-filter ignore "ifconfig-ipv6"',
+        'pull-filter ignore "redirect-private"', 'pull-filter ignore "dhcp-option"', 'pull-filter ignore "dns "',
         'pull-filter ignore "setenv"', 'pull-filter ignore "echo"', 'pull-filter ignore "register-dns"',
+        'pull-filter ignore "block-outside-dns"',
         'ping 10', 'ping-restart 45', 'verb 3', 'mute 20',
     ]
     if profile.fallback:
@@ -298,7 +297,7 @@ def render(profile: SafeProfile, *, dns: tuple[str, ...] = ('1.1.1.1', '9.9.9.9'
     if server_name:
         if not re.fullmatch(r'[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63}){1,4}', server_name):
             raise ValueError('Invalid server name.')
-        lines += ['remote-cert-tls server', f'verify-x509-name {server_name} name']
+        lines.append(f'verify-x509-name {server_name} name')
     if profile.password_auth:
         if any(ch in password_file for ch in '"\n\r\\'):
             raise ValueError('Invalid credentials path.')

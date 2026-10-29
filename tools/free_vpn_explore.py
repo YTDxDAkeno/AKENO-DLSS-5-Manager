@@ -196,13 +196,13 @@ def connect(exe):
             tried += 1
             log = work / f'{tried}.log'
             conf = work / f'{tried}.ovpn'
-            pinned = tried % 2 == 1
-            name = f"{row['HostName']}.opengw.net" if pinned else None
+            pinned = True
+            name = 'opengw.net' if pinned else None
             conf.write_text(openvpn_profile.render(safe, server_name=name))
             start = time.monotonic()
             process = subprocess.Popen([str(exe), '--config', str(conf.resolve()), '--log', str(log.resolve())])
             state = 'timeout'
-            while time.monotonic() - start < 40:
+            while time.monotonic() - start < 75:
                 text = log.read_text(errors='replace') if log.exists() else ''
                 if 'Initialization Sequence Completed' in text:
                     state = 'connected'
@@ -222,6 +222,7 @@ def connect(exe):
             except subprocess.TimeoutExpired:
                 process.kill()
             text = log.read_text(errors='replace') if log.exists() else ''
+            after_push = text.split('PUSH_REPLY', 1)[1].splitlines()[1:60] if 'PUSH_REPLY' in text else []
             interesting = [l[25:200] for l in text.splitlines() if re.search(
                 r'error|fail|warn|cipher|tls|peer|ncp|initializ|PUSH|route|dns|ipv6|wintun|block|verify|certificate',
                 l, re.I)][-30:]
@@ -235,6 +236,8 @@ def connect(exe):
             print('    exit:', after)
             for line in interesting:
                 print('    |', line)
+            for line in after_push:
+                print('    >', line[:200])
             time.sleep(3)
 
 

@@ -38,11 +38,11 @@ def test_vpn_gate_shaped_profile_becomes_akenos_own_configuration():
     safe = parse(profile(), '45.76.10.7')
     assert (safe.proto, safe.host, safe.port, safe.fallback, safe.digest) == ('tcp', '45.76.10.7', 443, 'AES-128-CBC', 'SHA1')
     assert safe.ciphers[:3] == ('AES-256-GCM', 'AES-128-GCM', 'CHACHA20-POLY1305') and 'AES-128-CBC' in safe.ciphers
-    text = render(safe, server_name='public-vpn-1.opengw.net')
+    text = render(safe, server_name='opengw.net')
     for required in ('redirect-gateway def1 ipv6', 'block-ipv6', 'block-outside-dns', 'script-security 1',
-                     'pull-filter ignore "route"', 'data-ciphers-fallback AES-128-CBC', 'remote 45.76.10.7 443',
+                     'data-ciphers-fallback AES-128-CBC', 'remote 45.76.10.7 443',
                      'proto tcp-client', '<ca>', '<cert>', '<key>', 'dev-node AKENO-FreeVPN', 'disable-dco',
-                     'verify-x509-name public-vpn-1.opengw.net name', 'remote-cert-tls server'):
+                     'verify-x509-name opengw.net name', 'pull-filter ignore "route "', 'pull-filter ignore "dhcp-option"'):
         assert required in text
     for absent in ('resolv-retry infinite', 'persist-tun', 'http-proxy', 'auth-user-pass', 'log ', '\\'):
         assert absent not in text
