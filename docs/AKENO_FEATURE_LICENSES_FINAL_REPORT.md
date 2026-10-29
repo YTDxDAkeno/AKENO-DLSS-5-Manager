@@ -113,7 +113,7 @@ fremder PC). Details: `docs/SECURITY_LICENSING.md` → „Module licenses“.
 
 | Bereich | Ergebnis |
 |---|---|
-| Server gesamt (SQLite) | **294 bestanden** (u. a. 21 Feature-Lizenz-Tests, Migration mit Daten, Rollback-Skript) |
+| Server gesamt (SQLite) | **293 bestanden** (u. a. 21 Feature-Lizenz-Tests, Migration mit Daten, Rollback-Skript) |
 | Client ↔ echter Server (Lizenzcode der App) | 8 neue + 25 bestehende Ende-zu-Ende-Tests bestanden |
 | Client gesamt (Linux, Qt offscreen, lokal) | **1659 bestanden**, 19 plattformbedingt übersprungen |
 | **Windows, echt** | [Lauf 40844585574](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40844585574): **19/19** |
@@ -197,4 +197,41 @@ Kontaktadresse bitte selbst von vpngate.net übernehmen). Keine fremden Server w
 
 ## CI auf dem finalen Commit
 
-wird nach dem letzten Code-Commit eingetragen.
+Letzter Code-Commit **`c4a11241c61ece4cc6736ef6d91916b3ee0a3f34`** (Branch `claude/akeno-feature-licenses`). Alle
+Workflows auf genau diesem Commit:
+
+| Workflow | Lauf | Ergebnis |
+|---|---|---|
+| Build and test (Linux-Tests, Lizenzserver SQLite + **PostgreSQL 16** + Docker, Upstream-Verträge, Windows-Build/Tests/Smoke, Update-E2E) | [40848297227](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848297227) | **grün**; Update-E2E 58/58, Upgrades 3.0.0/3.1.0/3.1.1 → 3.2.0 je 57/57, Repair 15/15; Release/Publish übersprungen |
+| Module licenses on Windows (AKENO VPN Lifetime end to end) | [40848827475](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848827475) | **grün** (19 Prüfungen, echte VPN-Verbindung für VPN-only) |
+| Free VPN on Windows (VPN Gate über OpenVPN) | [40848822921](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848822921) | **grün** |
+| WireGuard on Windows (LAN Play, Helfer) | [40848297296](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848297296) | **grün** im 2. Versuch (1. Versuch: Docker-Dienst des Runners nicht gestartet, vor jedem Test) |
+| LAN Play NAT lab | [40848297187](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848297187) | grün |
+| Isolated relay and VPN exit traffic | [40848297341](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848297341) | grün |
+| Optional components on Windows | [40848297246](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848297246) | grün |
+| Production read-only check (Push / manuell) | [40848297255](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848297255) · [40848831361](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848831361) | grün (live weiterhin 3.1.1) |
+
+**Ehrlich vermerkt:** Auf dem Zwischenstand `b53a746` lief die Free-VPN-E2E einmal rot
+([40847355371](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40847355371)): Auf diesem Runner beendete AKENO die Verbindung in JP und KR mit `free_vpn_leak`
+(sicheres Verhalten: nie „Verbunden“). Welche Leck-Prüfung anschlug, war nicht gespeichert; seit `436df5f` steht der
+Grund im Status. Der zweite Versuch scheiterte an einem PowerShell-Zeitlimit direkt nach der MSI-Installation — als
+echter Fehler behoben in `c4a1124` (60 s, verständliche Meldung). Danach 26/26 auf `436df5f` und grün auf `c4a1124`.
+Die Relay-Isolation war auf `2dfcfa2`/`b53a746` je einmal durch Netzwerk-Umgebungsfehler im Docker-Lab rot (IPv6-NAT66,
+belegter Port) und auf allen späteren Commits grün; der Lizenzcode liegt dort nicht im fehlgeschlagenen Pfad.
+
+**Private Build-Artefakte** (Artefakt `AKENO-Gaming-Suite-windows-x64`, ID 12889448819, unsigniert, nur mit
+Repository-Zugriff): https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40848297227/artifacts/12889448819
+
+| Datei | Größe | SHA-256 |
+|---|---|---|
+| `AKENO-Gaming-Suite-3.2.0-Setup-x64.exe` | 158 382 356 B | `2796b6da76d0e0f3c51e85fd240b4f2c42f46a6ceb520f62894852e8cb6b05ed` |
+| `AKENO-Gaming-Suite-3.2.0-portable-x64.zip` | 223 983 507 B | `38a12386604e80f55cc76d696cfef8e37dd9fa28dbcad2bde75664985b539260` |
+| `AKENO-Gaming-Suite-3.2.0-source.zip` | — | `2cdf0310956437aae0c79124c66c91f5533c3b9d871c851c50fb6a52fea644bf` |
+| `AKENO-community-dependencies-3.2.0-x64.zip` | — | `42afc273cea1e3ab4153b09189b8dc46457dd9ccca121f71fb723a3dc4391240` |
+
+Release-Manager-Werte (für die Offline-Signatur): Portable 2917 Dateien, 494 533 128 B entpackt, `content_sha256`
+`ac8098b265301481640aa968aa06dcc55e3b6f32391d49fb90fcff83ab83c08f`, vom Updater akzeptiert, innerhalb der Grenzen.
+Server-Bundle (Artefakt `akeno-licensing-server-bundle`, ID 12887496999) aus demselben Lauf.
+
+Hinweis: Dieser Bericht wird in einem reinen Doku-Commit ergänzt; dessen Build baut denselben Code erneut (andere
+Installer-SHA möglich). Maßgeblich sind die Dateien oben.
