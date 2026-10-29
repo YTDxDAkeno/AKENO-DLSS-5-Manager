@@ -248,9 +248,17 @@ def parse(profile: str, expected_ip: str) -> SafeProfile:
                        static_key, static_mode, direction, bool(auth_user_pass))
 
 
-def render(profile: SafeProfile, *, log_path: str | None = None, dns: tuple[str, ...] = ('1.1.1.1', '9.9.9.9'),
-           password_file: str | None = None) -> str:
-    """AKENO's complete client configuration: fixed directives plus validated values, nothing copied as text."""
+ADAPTER = 'AKENO-FreeVPN'
+
+
+def render(profile: SafeProfile, *, dns: tuple[str, ...] = ('1.1.1.1', '9.9.9.9'), server_name: str | None = None,
+           adapter: str | None = ADAPTER, password_file: str | None = None) -> str:
+    """AKENO's complete client configuration: fixed directives plus validated values, nothing copied as text.
+
+    File paths (log, status) are never written into the configuration: OpenVPN reads backslashes there as escapes.
+    The caller passes them as fixed command-line arguments. ``server_name`` pins the certificate name of the
+    server (the provider's CA alone accepts any certificate of that public CA); ``adapter`` is AKENO's own TAP
+    adapter so that routes and DNS checks concern exactly this tunnel."""
     for value in dns:
         address = ipaddress.ip_address(value)
         if address.version != 4 or not address.is_global:
@@ -259,9 +267,9 @@ def render(profile: SafeProfile, *, log_path: str | None = None, dns: tuple[str,
         raise ValueError('This provider needs its fixed credentials file.')
     lines = [
         '# AKENO free VPN: generated configuration. Provider values are validated; nothing else is accepted.',
-        'client', 'dev tun', 'windows-driver wintun', 'disable-dco',
+        'client', 'dev tun', 'disable-dco',
         f'proto {"tcp-client" if profile.proto == "tcp" else "udp"}',
-        f'remote {profile.host} {profile.port}', 'nobind', 'persist-key',
+        f'remote {profile.host} {profile.port}', 'nobind',
         'resolv-retry 0', 'connect-retry 2 5', 'server-poll-timeout 10', 'hand-window 30',
         'tls-version-min 1.2',
         f'data-ciphers {":".join(profile.ciphers)}',
@@ -283,12 +291,16 @@ def render(profile: SafeProfile, *, log_path: str | None = None, dns: tuple[str,
     ]
     if profile.fallback:
         lines.append(f'data-ciphers-fallback {profile.fallback}')
-    if log_path:
-        if any(ch in log_path for ch in '"\n\r'):
-            raise ValueError('Invalid log path.')
-        lines.append(f'log "{log_path}"')
+    if adapter:
+        if not re.fullmatch(r'[A-Za-z0-9-]{1,32}', adapter):
+            raise ValueError('Invalid adapter name.')
+        lines.append(f'dev-node {adapter}')
+    if server_name:
+        if not re.fullmatch(r'[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63}){1,4}', server_name):
+            raise ValueError('Invalid server name.')
+        lines += ['remote-cert-tls server', f'verify-x509-name {server_name} name']
     if profile.password_auth:
-        if any(ch in password_file for ch in '"\n\r'):
+        if any(ch in password_file for ch in '"\n\r\\'):
             raise ValueError('Invalid credentials path.')
         lines.append(f'auth-user-pass "{password_file}"')
     lines += ['<ca>', *(pem.strip() for pem in profile.ca), '</ca>']

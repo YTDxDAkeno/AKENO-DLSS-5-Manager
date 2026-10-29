@@ -38,12 +38,13 @@ def test_vpn_gate_shaped_profile_becomes_akenos_own_configuration():
     safe = parse(profile(), '45.76.10.7')
     assert (safe.proto, safe.host, safe.port, safe.fallback, safe.digest) == ('tcp', '45.76.10.7', 443, 'AES-128-CBC', 'SHA1')
     assert safe.ciphers[:3] == ('AES-256-GCM', 'AES-128-GCM', 'CHACHA20-POLY1305') and 'AES-128-CBC' in safe.ciphers
-    text = render(safe, log_path='C:/x/openvpn.log')
+    text = render(safe, server_name='public-vpn-1.opengw.net')
     for required in ('redirect-gateway def1 ipv6', 'block-ipv6', 'block-outside-dns', 'script-security 1',
                      'pull-filter ignore "route"', 'data-ciphers-fallback AES-128-CBC', 'remote 45.76.10.7 443',
-                     'proto tcp-client', '<ca>', '<cert>', '<key>'):
+                     'proto tcp-client', '<ca>', '<cert>', '<key>', 'dev-node AKENO-FreeVPN', 'disable-dco',
+                     'verify-x509-name public-vpn-1.opengw.net name', 'remote-cert-tls server'):
         assert required in text
-    for absent in ('resolv-retry infinite', 'persist-tun', 'http-proxy', 'auth-user-pass'):
+    for absent in ('resolv-retry infinite', 'persist-tun', 'http-proxy', 'auth-user-pass', 'log ', '\\'):
         assert absent not in text
     assert 'BEGIN PRIVATE KEY' in text and 'BEGIN RSA PRIVATE KEY' not in text          # re-serialised, not copied
 
@@ -106,5 +107,6 @@ def test_render_refuses_private_dns_and_paths_that_would_inject_directives():
     safe = parse(profile(), '45.76.10.7')
     with pytest.raises(ValueError):
         render(safe, dns=('192.168.1.1',))
-    with pytest.raises(ValueError):
-        render(safe, log_path='C:/x"\nup evil.cmd')
+    for bad in ({'server_name': 'x\nup evil.cmd'}, {'adapter': 'a b'}, {'server_name': 'UPPER.example.com'}):
+        with pytest.raises(ValueError):
+            render(safe, **bad)

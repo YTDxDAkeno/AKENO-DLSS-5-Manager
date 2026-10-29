@@ -178,6 +178,10 @@ def connect(exe):
     servers = rows()
     work = Path('free-vpn-explore')
     work.mkdir(exist_ok=True)
+    tapctl = exe.parent / 'tapctl.exe'
+    made = subprocess.run([str(tapctl), 'create', '--hwid', 'root\\tap0901', '--name', openvpn_profile.ADAPTER],
+                          capture_output=True, text=True)
+    print('tapctl create', made.returncode, made.stdout.strip()[:200], made.stderr.strip()[:200])
     tried = 0
     for country in ('JP', 'KR', 'US'):
         for row in [r for r in servers if r['CountryShort'] == country][:6]:
@@ -192,9 +196,11 @@ def connect(exe):
             tried += 1
             log = work / f'{tried}.log'
             conf = work / f'{tried}.ovpn'
-            conf.write_text(openvpn_profile.render(safe, log_path=str(log.resolve())))
+            pinned = tried % 2 == 1
+            name = f"{row['HostName']}.opengw.net" if pinned else None
+            conf.write_text(openvpn_profile.render(safe, server_name=name))
             start = time.monotonic()
-            process = subprocess.Popen([str(exe), '--config', str(conf.resolve())])
+            process = subprocess.Popen([str(exe), '--config', str(conf.resolve()), '--log', str(log.resolve())])
             state = 'timeout'
             while time.monotonic() - start < 40:
                 text = log.read_text(errors='replace') if log.exists() else ''
@@ -219,7 +225,12 @@ def connect(exe):
             interesting = [l[25:200] for l in text.splitlines() if re.search(
                 r'error|fail|warn|cipher|tls|peer|ncp|initializ|PUSH|route|dns|ipv6|wintun|block|verify|certificate',
                 l, re.I)][-30:]
-            print(f'=== {country} {row["IP"]} {safe.proto}:{safe.port} catalog-ping={row["Ping"]} -> {state} in {took}s')
+            dns = subprocess.run(['powershell', '-NoProfile', '-Command',
+                                  "Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object ServerAddresses | ForEach-Object { $_.InterfaceAlias + '=' + ($_.ServerAddresses -join ',') }"],
+                                 capture_output=True, text=True).stdout.strip().replace('\n', '; ') if state == 'connected' else ''
+            print(f'=== {country} {row["IP"]} {safe.proto}:{safe.port} host={row["HostName"]} pinned={name} '
+                  f'catalog-ping={row["Ping"]} -> {state} in {took}s')
+            print('    dns while up:', dns)
             print('    routes while up:', route)
             print('    exit:', after)
             for line in interesting:
