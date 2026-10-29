@@ -23,6 +23,13 @@ class Memory:
         self.value = {}
 
 
+class View(SimpleNamespace):
+    """The license view the helper reads: unlocked, and which modules it includes ('*': AKENO Full)."""
+
+    def allows(self, module):
+        return self.unlocked and ('*' in self.modules or module in self.modules)
+
+
 @pytest.fixture
 def helper(tmp_path, monkeypatch):
     stores, events = {}, []
@@ -31,7 +38,7 @@ def helper(tmp_path, monkeypatch):
     monkeypatch.setenv('AKENO_HOME', str(tmp_path / 'home'))
     monkeypatch.setattr(h, 'SecureStore', storage)
     monkeypatch.setattr(h, 'sys', SimpleNamespace(platform='win32', frozen=True))
-    license = SimpleNamespace(unlocked=True)
+    license = View(unlocked=True, modules={'*'})
     import akeno.licensing
     monkeypatch.setattr(akeno.licensing, 'manager', lambda: SimpleNamespace(view=lambda: license))
     @contextmanager
@@ -272,3 +279,27 @@ def test_gui_requests_only_reach_the_running_session(helper):
     h.free_vpn_request(switch=True)
     h.free_vpn_request(stop=True)
     assert h.free_vpn_stores()[2].load()=={'session_id':'d'*32,'switch':2,'stop':True}
+
+
+def test_a_vpn_only_license_connects_the_vpn_but_never_lan_play(helper):
+    NetworkModules().set_enabled('vpn',True)
+    NetworkModules().set_enabled('lan_play',True)
+    helper.license.modules={'vpn'}
+    assert h._new_connection('vpn') is not None
+    with pytest.raises(ProfileError) as exc:
+        h._new_connection('lan_play')
+    assert 'does not include this module' in str(exc.value)
+    code,reply=request({'action':'lan_session','room_id':'c'*32,'created':time.time()})
+    assert code==1 and 'error' in reply and 'native' not in helper.events
+
+
+def test_a_lan_only_license_never_starts_or_installs_a_vpn(helper):
+    NetworkModules().set_enabled('vpn',True)
+    helper.license.modules={'lan_play'}
+    code,reply=request({'action':'free_vpn_session','country':'JP','consent':1,'created':time.time()})
+    assert code==1 and 'does not include this module' in reply['error']
+    code,reply=request({'action':'install_vpn_component','consent':True,'created':time.time()})
+    assert code==1 and 'does not include this module' in reply['error']
+    with pytest.raises(ProfileError):
+        h._new_connection('vpn')
+    assert 'native' not in helper.events and 'session' not in helper.events

@@ -310,9 +310,13 @@ def build_suite(app, args, lic, services=None):
     ctl.settings_changed.connect(setting)
 
     def startup() -> None:
-        if services.system is None or services.settings.get("rescan_on_start"):
+        # the scans belong to the game modules: a license without them (AKENO VPN only) scans nothing
+        games = win.allows("gaming") or win.allows("dlss")
+        if games and (services.system is None or services.settings.get("rescan_on_start")):
             ctl.scan_hardware()
-        if not services.library.games() or services.settings.get("rescan_on_start"):
+        if not games:
+            pass
+        elif not services.library.games() or services.settings.get("rescan_on_start"):
             # the runtime search also looks in library games, so it runs after the library scan
             ctl.scan_games(on_done=lambda games: ctl.discover_dependencies())
         elif stale := services.library.stale_games():
@@ -321,7 +325,7 @@ def build_suite(app, args, lic, services=None):
                     lambda _: (ctl.games_changed.emit(), ctl.discover_dependencies()), silent=True)
         else:
             ctl.discover_dependencies()
-        if services.settings.get("auto_update_compat_db"):
+        if services.settings.get("auto_update_compat_db") and win.allows("dlss"):
             win.pages["settings"].update_compat()
         win.pages["updates"].auto_check(on_start=True)   # when enabled (not again within the hour)
         def report_update() -> None:
@@ -336,9 +340,11 @@ def build_suite(app, args, lic, services=None):
         # right after an update the updater is still confirming this start (its health check): report it then
         QTimer.singleShot(45_000, report_update)
         license_reminder()
-        win.pages["downloads"].auto_check()
+        if win.allows("dlss"):
+            win.pages["downloads"].auto_check()
         try:
-            win.desktop.ensure()                # wallpapers, dock and widgets come back with the suite
+            if win.allows("desktop"):
+                win.desktop.ensure()            # wallpapers, dock and widgets come back with the suite
         except Exception as exc:                # Desktop Studio must never keep the suite from starting
             logging.getLogger(__name__).warning("desktop studio: %s", exc)
 

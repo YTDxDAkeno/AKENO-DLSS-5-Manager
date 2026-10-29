@@ -174,7 +174,8 @@ class LicenseSummary(QWidget):
         self.message = label("", "dim", shrink=True)
         grid.addWidget(self.message, 1, 0, 1, 2)
         self.values: dict[str, object] = {}
-        rows = [("type", "License type"), ("activated", "Activated"), ("expires", "Expires"),
+        rows = [("modules", "Included modules"), ("type", "License type"), ("activated", "Activated"),
+                ("expires", "Expires"),
                 ("remaining", "Remaining"), ("device", "This PC"), ("verified", "Last verified"),
                 ("offline", "Works offline")]
         for i, (key, text) in enumerate(rows, start=2):
@@ -194,6 +195,7 @@ class LicenseSummary(QWidget):
         self.pill.set(t(STATUS_NAME[view.status]), STATE[view.status])
         self.message.setText(t(view.message))
         v = self.values
+        v["modules"].setText(modules_text(view))
         v["type"].setText(t(view.type_name) if view.license_type else "—")
         v["activated"].setText(when(view.activated_at))
         v["expires"].setText(t("Never") if view.lifetime else when(view.expires_at))
@@ -220,6 +222,20 @@ class LicenseSummary(QWidget):
             rem = max(0.0, rem - (time.monotonic() - self._shown_at))
         self.values["remaining"].setText(remaining_text(rem) if (rem is not None or self.view.lifetime)
                                          else "—")
+
+
+def modules_text(view: LicenseView) -> str:
+    """``AKENO Full (every module)``, or each module with how long it runs: ``AKENO VPN (lifetime)``."""
+    from akeno.licensing import entitlements as ents
+    if not view.unlocked:
+        return "—"
+    parts = []
+    for ent in sorted(view.grants, key=lambda e: (e != ents.SUITE, e)):
+        g = view.grants[ent]
+        length = t("lifetime") if g.get("exp") is None else t("until {d}", d=when(g["exp"]))
+        name = t("AKENO Full (every module)") if ent == ents.SUITE else t(ents.name(ent))
+        parts.append(f"{name} · {length}")
+    return "\n".join(parts) or "—"
 
 
 class CodeEdit(QLineEdit):

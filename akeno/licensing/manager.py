@@ -12,6 +12,13 @@ whenever it can:
   from the server can end a license, and only its own data: settings, games, mods, backups and
   customisations are never touched by licensing.
 
+Module licenses (AKENO 3.2.0): an account can hold AKENO Full (``akeno-suite``) and single modules (AKENO VPN,
+AKENO LAN Play …). The app asks for the access documents (``akeno-access-lease``, ``akeno-access-offline``,
+``akeno-access-validation``); each lists the entitlements and their own expiry, signed and bound to this PC.
+``LicenseView.allows(module)`` decides what runs. The original suite documents of AKENO 3.1.1 and older stay
+valid after an update (a lifetime suite certificate keeps working offline) and are replaced at the next online
+check. A server that predates module licenses still answers the original way; AKENO then works suite-only.
+
 Methods that talk to the server block; the UI calls them from worker threads.
 """
 
@@ -30,6 +37,7 @@ from akeno import __version__
 from akeno.i18n import Msg, msg
 from akeno.licensing import config as cfgmod
 from akeno.licensing import crypto, device
+from akeno.licensing import entitlements as ents_mod
 from akeno.licensing.api import ApiError, LicenseApi, ServerUnavailable
 from akeno.licensing.clock import TOLERANCE, ClockGuard
 from akeno.licensing.storage import SecureStore
@@ -37,8 +45,9 @@ from akeno.licensing.storage import SecureStore
 log = logging.getLogger(__name__)
 
 ENTITLEMENT = "akeno-suite"
+ACCESS = "akeno-access"                 # ``ent`` of the access documents (never the suite entitlement itself)
 TYPE_NAMES = {"trial_24h": "Trial (24 hours)", "trial_72h": "Extended trial (72 hours)", "monthly": "Monthly (30 days)",
-              "lifetime": "Lifetime"}
+              "lifetime": "Lifetime", "timed": "Time-limited"}
 EXPIRING_SOON = {"trial_24h": 6 * 3600, "trial_72h": 6 * 3600, "monthly": 3 * 86400}
 KEEP_ON_SIGN_OUT = ("clock", "keys", "remember")
 ACCOUNT_FIELDS = ("id", "email", "display_name", "role", "language", "email_verified", "two_factor", "created_at")
@@ -60,6 +69,7 @@ class Status(str, enum.Enum):
 
 
 UNLOCKED = {Status.ACTIVE_ONLINE, Status.ACTIVE_CACHED, Status.LIFETIME_OFFLINE, Status.EXPIRING}
+EXPIRING_MODULE = 3 * 86400             # a timed module grant announces its end this long before
 
 STATUS_TEXT = {
     Status.NOT_CONFIGURED: "This copy of AKENO has no license server address yet.",
@@ -97,10 +107,28 @@ class LicenseView:
     email_verified: bool | None = None        # as the server said last time (None: not known yet)
     session_ended: str | None = None          # why the sign-in ended (invalid_refresh_token, session_revoked …)
     details: dict = field(default_factory=dict)
+    # running entitlements, verified on this PC: id -> {"lt": type, "exp": expiry (None: lifetime), "act": ...}
+    grants: dict = field(default_factory=dict)
 
     @property
     def unlocked(self) -> bool:
-        return self.status in UNLOCKED
+        """Something can be used: AKENO Full or at least one module."""
+        return self.status in UNLOCKED and bool(self.grants)
+
+    @property
+    def entitlements(self) -> list[str]:
+        return sorted(self.grants) if self.status in UNLOCKED else []
+
+    @property
+    def full(self) -> bool:
+        return ENTITLEMENT in self.entitlements
+
+    def allows(self, module: str) -> bool:
+        """``module`` may run now (``vpn``, ``lan_play``, ``desktop``, ``dlss`` …; ``*``: AKENO Full)."""
+        return ents_mod.allows(self.entitlements, module)
+
+    def page_allowed(self, page: str) -> bool:
+        return ents_mod.page_allowed(self.entitlements, page)
 
     @property
     def lifetime(self) -> bool:
@@ -139,6 +167,7 @@ class LicenseManager:
         self._verified_this_run = False
         self._info: tuple[float, dict] | None = None
         self._last_view: LicenseView | None = None
+        self._legacy_server = False      # the server predates module licenses: ask the original way this run
         self.listeners: list[Callable[[LicenseView], None]] = []
         if self.state.get("account") and not self.state.get("refresh_token") and not self.remember:
             self.state["needs_sign_in"] = True      # "keep me signed in" was off: this start asks again
@@ -231,11 +260,89 @@ class LicenseManager:
         self._learn_keys(api)
         return crypto.verify(token, self.trusted_keys(), typ)[1]
 
-    def _bound_here(self, payload: dict) -> bool:
-        """Issued by the AKENO license server for this app, this entitlement and this PC."""
+    def _bound_here(self, payload: dict, ent: str = ENTITLEMENT) -> bool:
+        """Issued by the AKENO license server for this app, this document family and this PC."""
         return (payload.get("iss") == cfgmod.ISSUER and payload.get("aud") == cfgmod.AUDIENCE
-                and payload.get("ent") == ENTITLEMENT and payload.get("dfp") == device.fingerprint()
+                and payload.get("ent") == ent and payload.get("dfp") == device.fingerprint()
                 and payload.get("dev") == self.state.get("device_id") and payload.get("dev") is not None)
+
+    @staticmethod
+    def _claims(payload: dict, lifetime_only: bool = False) -> dict:
+        """The entitlements a verified access document lists: id -> {"lt", "exp", "act"} (malformed entries and
+        ids this build does not know are left out; they can never unlock anything)."""
+        out = {}
+        for g in payload.get("grants") or []:
+            if not isinstance(g, dict) or not isinstance(g.get("ent"), str) or g["ent"] not in ents_mod.MODULES:
+                continue
+            exp = g.get("exp")
+            if exp is not None and not isinstance(exp, (int, float)):
+                continue
+            if lifetime_only and exp is not None:
+                continue
+            out[g["ent"]] = {"lt": g.get("lt"), "exp": exp, "act": g.get("act")}
+        return out
+
+    def _access_certificate(self) -> dict | None:
+        token = self.state.get("access_certificate")
+        if not token:
+            return None
+        try:
+            payload = crypto.verify(token, self.trusted_keys(), "akeno-access-offline")[1]
+        except crypto.BadSignature:
+            return None
+        if not self._bound_here(payload, ACCESS):
+            return None
+        claims = self._claims(payload, lifetime_only=True)
+        listed = payload.get("ents")
+        if not isinstance(listed, list) or sorted(claims) != sorted(e for e in listed if e in claims):
+            return None
+        return payload
+
+    def _access_lease(self, now: float, rolled_back: bool) -> dict | None:
+        token = self.state.get("access_lease")
+        if not token or rolled_back:
+            return None
+        try:
+            payload = crypto.verify(token, self.trusted_keys(), "akeno-access-lease")[1]
+        except crypto.BadSignature:
+            return None
+        if not self._bound_here(payload, ACCESS):
+            return None
+        exp, nbf = payload.get("exp"), payload.get("nbf", payload.get("iat", 0))
+        if not isinstance(exp, (int, float)) or now >= exp or not isinstance(nbf, (int, float)) or \
+                nbf > now + TOLERANCE:
+            return None
+        return payload
+
+    def _grants(self, now: float, rolled_back: bool) -> tuple[dict, str | None, float | None]:
+        """Running entitlements from every verified document on this PC, the source that counts (certificate or
+        lease) and how long the lease lets AKENO work offline."""
+        grants: dict = {}
+        source, offline_until = None, None
+        cert = self._access_certificate()
+        if cert is not None:
+            grants.update(self._claims(cert, lifetime_only=True))
+            source = "certificate"
+        lease = self._access_lease(now, rolled_back)
+        if lease is not None:
+            for ent, g in self._claims(lease).items():
+                if g["exp"] is None or g["exp"] > now:
+                    grants.setdefault(ent, g)
+            offline_until = lease["exp"]
+            source = source or "lease"
+        legacy_cert = self._certificate()
+        if legacy_cert is not None:
+            grants.setdefault(ENTITLEMENT, {"lt": "lifetime", "exp": None, "act": legacy_cert.get("act")})
+            source = source or "certificate"
+        legacy_lease = self._lease(now, rolled_back)
+        if legacy_lease is not None:
+            lexp = legacy_lease.get("lexp")
+            if lexp is None or lexp > now:
+                grants.setdefault(ENTITLEMENT, {"lt": legacy_lease.get("lt"), "exp": lexp,
+                                                "act": legacy_lease.get("act")})
+            offline_until = max(offline_until or 0, legacy_lease["exp"])
+            source = source or "lease"
+        return grants, source, offline_until
 
     def _certificate(self) -> dict | None:
         token = self.state.get("certificate")
@@ -294,22 +401,24 @@ class LicenseManager:
                     session_ended=self.state.get("session_end") if self.state.get("needs_sign_in") else None)
         if self.state.get("disabled"):
             return LicenseView(Status.DISABLED, msg(STATUS_TEXT[Status.DISABLED]), **base)
-        cert = self._certificate()
-        if cert is not None:
-            base.update(license_type="lifetime", activated_at=_ts(cert.get("act")), offline_eligible=True,
-                        source="certificate")
-            status = Status.ACTIVE_ONLINE if self._verified_this_run else Status.LIFETIME_OFFLINE
-            return LicenseView(status, msg(STATUS_TEXT[status]), **base)
-        lease = self._lease(now, trusted.rolled_back)
-        if lease is not None:
-            lexp = lease.get("lexp")
+        grants, source, offline_until = self._grants(now, trusted.rolled_back)
+        if grants:
+            # the license shown first: AKENO Full when there is one, otherwise the first module
+            main = grants.get(ENTITLEMENT) or grants[sorted(grants)[0]]
+            lexp = main["exp"]
             remaining = None if lexp is None else max(0.0, lexp - now)
-            base.update(license_type=lease.get("lt"), activated_at=_ts(lease.get("act")) or base["activated_at"],
-                        expires_at=lexp, remaining=remaining, offline_until=lease["exp"], source="lease",
-                        offline_eligible=lease.get("lt") == "lifetime")
-            status = Status.ACTIVE_ONLINE if self._verified_this_run else Status.ACTIVE_CACHED
-            if remaining is not None and remaining < EXPIRING_SOON.get(lease.get("lt"), 0):
-                status = Status.EXPIRING
+            lifetime_only = all(g["exp"] is None for g in grants.values())
+            base.update(license_type=main["lt"], activated_at=_ts(main.get("act")) or base["activated_at"],
+                        expires_at=lexp, remaining=remaining, offline_until=None if lifetime_only else offline_until,
+                        source=source, offline_eligible=any(g["exp"] is None for g in grants.values()),
+                        grants=grants)
+            if lifetime_only and source == "certificate":
+                status = Status.ACTIVE_ONLINE if self._verified_this_run else Status.LIFETIME_OFFLINE
+            else:
+                status = Status.ACTIVE_ONLINE if self._verified_this_run else Status.ACTIVE_CACHED
+            for g in grants.values():
+                if g["exp"] is not None and g["exp"] - now < EXPIRING_SOON.get(g["lt"], EXPIRING_MODULE):
+                    status = Status.EXPIRING
             return LicenseView(status, msg(STATUS_TEXT[status]), **base)
         expires = _ts(known.get("expires_at"))
         base.update(expires_at=expires, remaining=None if expires is None else max(0.0, expires - now))
@@ -387,8 +496,8 @@ class LicenseManager:
             self.state["session_end"] = exc.code       # expired, ended on another device, password changed …
         elif exc.code == "account_disabled":
             self.state["disabled"] = True
-            self.state.pop("lease", None)
-            self.state.pop("certificate", None)
+            for key in ("lease", "certificate", "access_lease", "access_certificate"):
+                self.state.pop(key, None)
         self._save()
 
     # -- account actions (blocking) ----------------------------------------------------------------------------------
@@ -483,17 +592,33 @@ class LicenseManager:
                                "The license server's answer could not be verified.") from exc
             return self._notify()
 
-    def _validate_once(self, api: LicenseApi) -> tuple[dict, str]:
-        serial = None
-        cert = self.state.get("certificate")
-        if cert:
+    def _serial(self) -> str | None:
+        for key, typ in (("access_certificate", "akeno-access-offline"), ("certificate", "akeno-offline-license")):
+            token = self.state.get(key)
+            if token:
+                try:
+                    return crypto.verify(token, self.trusted_keys(), typ)[1].get("serial")
+                except crypto.BadSignature:
+                    continue
+        return None
+
+    def _with_access(self, api: LicenseApi, path: str, body: dict) -> dict:
+        """Ask for module licenses; a server that predates them refuses the field (validation_error) and is asked
+        the original way, for the rest of this run."""
+        if not self._legacy_server:
             try:
-                serial = crypto.verify(cert, self.trusted_keys(), "akeno-offline-license")[1].get("serial")
-            except crypto.BadSignature:
-                serial = None
+                return self._authed(api, "POST", path, {**body, "access": 1})
+            except ApiError as exc:
+                if exc.status != 422 or exc.code != "validation_error":
+                    raise
+                log.info("license server without module licenses: using the original requests")
+                self._legacy_server = True
+        return self._authed(api, "POST", path, body)
+
+    def _validate_once(self, api: LicenseApi) -> tuple[dict, str]:
         nonce = secrets.token_urlsafe(24)               # fresh per request: an old answer cannot be replayed
-        out = self._authed(api, "POST", "/licenses/validate", {
-            "device_id": self.state["device_id"], "app_version": __version__, "certificate_serial": serial,
+        out = self._with_access(api, "/licenses/validate", {
+            "device_id": self.state["device_id"], "app_version": __version__, "certificate_serial": self._serial(),
             "nonce": nonce})
         return out, nonce
 
@@ -503,8 +628,10 @@ class LicenseManager:
         token = out.get("validation") if isinstance(out, dict) else None
         if not isinstance(token, str):
             raise crypto.BadSignature("the answer carries no signed validation")
-        st = self._verify(api, token, "akeno-validation")
-        if st.get("iss") != cfgmod.ISSUER or st.get("aud") != cfgmod.AUDIENCE or st.get("ent") != ENTITLEMENT:
+        access = crypto.header(token).get("typ") == "akeno-access-validation"
+        st = self._verify(api, token, "akeno-access-validation" if access else "akeno-validation")
+        if st.get("iss") != cfgmod.ISSUER or st.get("aud") != cfgmod.AUDIENCE or \
+                st.get("ent") != (ACCESS if access else ENTITLEMENT):
             raise crypto.BadSignature("the validation is not for this app")
         if st.get("nonce") != nonce:
             raise crypto.BadSignature("the validation answers another request (replayed)")
@@ -520,6 +647,8 @@ class LicenseManager:
 
     def _apply(self, api: LicenseApi, out: dict, nonce: str) -> None:
         st = self._statement(api, out, nonce)
+        if st.get("ent") == ACCESS:
+            return self._apply_access(api, out, nonce, st)
         lease = out.get("lease")
         lease_payload = None
         if lease:
@@ -554,10 +683,61 @@ class LicenseManager:
         self.state.pop("disabled", None)
         if st.get("res") == "account_disabled":
             self.state["disabled"] = True
+        for key in ("access_lease", "access_lease_iat", "access_certificate", "access"):
+            self.state.pop(key, None)                  # a server without module licenses: suite only
+        self._done(server_time)
+
+    def _done(self, server_time: float) -> None:
         self.state["last_validation"] = server_time
         self.state.pop("last_error", None)
         self._verified_this_run = True
         self._save()
+
+    def _apply_access(self, api: LicenseApi, out: dict, nonce: str, st: dict) -> None:
+        """An answer with module licenses: every document is verified before anything is kept."""
+        lease = out.get("lease")
+        lease_payload = None
+        if lease:
+            lease_payload = self._verify(api, lease, "akeno-access-lease")
+            if not self._bound_here(lease_payload, ACCESS) or lease_payload.get("nonce") != nonce:
+                raise crypto.BadSignature("the lease is not for this PC or this request")
+        cert = out.get("offline_certificate")
+        if cert and cert != "unchanged":
+            payload = self._verify(api, cert, "akeno-access-offline")
+            if not self._bound_here(payload, ACCESS) or not self._claims(payload, lifetime_only=True):
+                raise crypto.BadSignature("the offline license is not for this PC")
+        server_time = float(st["iat"])
+        self.clock.learn(server_time)
+        claims = self._claims(st)
+        suite = claims.get(ENTITLEMENT)
+        status = "active" if st.get("res") == "ok" else {"expired": "expired", "license_disabled": "disabled",
+                                                         "license_revoked": "revoked"}.get(st.get("res"), "none")
+        self.state["license"] = {"status": status, "license_type": (suite or {}).get("lt"),
+                                 "expires_at": (suite or {}).get("exp"), "activated_at": (suite or {}).get("act")}
+        self.state["access"] = {"result": st.get("res"), "grants": claims, "at": server_time}
+        self.state["license_info"] = out.get("license") or {}
+        self.state["access_info"] = out.get("access") or {}          # unsigned extras, shown only
+        self.state["validation_interval"] = int(out.get("validation_interval_seconds") or 12 * 3600)
+        self.state["min_client_version"] = out.get("min_client_version")
+        self.state["latest_client_version"] = out.get("latest_client_version")
+        # the original suite documents are replaced by the access documents from now on
+        for key in ("lease", "lease_iat", "certificate"):
+            self.state.pop(key, None)
+        if st.get("crev") or st.get("res") != "ok":
+            self.state.pop("access_certificate", None)
+        if lease_payload is not None:
+            if lease_payload.get("iat", 0) >= self.state.get("access_lease_iat", 0):
+                self.state["access_lease"] = lease
+                self.state["access_lease_iat"] = lease_payload.get("iat", 0)
+        else:
+            self.state.pop("access_lease", None)
+            self.state.pop("access_lease_iat", None)
+        if cert and cert != "unchanged" and st.get("res") == "ok":
+            self.state["access_certificate"] = cert
+        self.state.pop("disabled", None)
+        if st.get("res") == "account_disabled":
+            self.state["disabled"] = True
+        self._done(server_time)
 
     def check_if_due(self) -> LicenseView:
         """Background check: never raises; offline simply keeps the saved state."""
@@ -573,9 +753,10 @@ class LicenseManager:
     def redeem(self, code: str) -> LicenseView:
         with self._lock:
             api = self._api()
-            out = self._authed(api, "POST", "/licenses/redeem", {"code": code})
+            out = self._with_access(api, "/licenses/redeem", {"code": code})
             self.state["license"] = out.get("license") or {}
             self.state["last_redeemed"] = out.get("code_type")
+            self.state["last_redeemed_entitlement"] = out.get("entitlement", ENTITLEMENT)
             self._save()
             return self.validate(api)
 

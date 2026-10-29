@@ -22,7 +22,7 @@ from akeno.ui.widgets import (Card, Divider, FlowLayout, KeyValueGrid, PageHeade
 
 EVENT_NAMES = {"redeem": "Code redeemed", "extend": "Extended by support", "change_type": "License type changed",
                "grant_lifetime": "Lifetime granted", "status_disabled": "Disabled", "status_active": "Enabled again",
-               "status_revoked": "Revoked"}
+               "status_revoked": "Revoked", "grant": "Given by support"}
 
 
 def _ts(value) -> float | None:
@@ -59,14 +59,17 @@ class _LicensePageBase(QWidget):
             for b in buttons:
                 b.setEnabled(True)
 
+        # a redeemed code can rebuild the window (new modules) before the answer arrives: the old page is gone
         def done(res):
-            finish()
-            on_done(res)
+            if shiboken6.isValid(self):
+                finish()
+                on_done(res)
 
         def failed(exc):
-            finish()
-            self.say(error_text(exc), error=True)
-            self.show_view(self.m.view())
+            if shiboken6.isValid(self):
+                finish()
+                self.say(error_text(exc), error=True)
+                self.show_view(self.m.view())
         workers.run(fn, done, failed)
 
     def show_view(self, view: LicenseView) -> None:
@@ -134,7 +137,9 @@ class LicensePage(_LicensePageBase):
             kind = t(EVENT_NAMES.get(item.get("kind", ""), item.get("kind", "")))
             new_type = t(TYPE_NAMES.get(item.get("new_type") or "", item.get("new_type") or ""))
             until = item.get("new_expires_at")
-            text = f"{when(_ts(item.get('at')))} · {kind} · {new_type}"
+            from akeno.licensing import entitlements as ents
+            product = t(ents.name(item.get("entitlement") or ents.SUITE))
+            text = f"{when(_ts(item.get('at')))} · {product} · {kind} · {new_type}"
             if until:
                 text += " · " + t("until {d}", d=when(_ts(until)))
             self.history.addWidget(label(text, shrink=True))

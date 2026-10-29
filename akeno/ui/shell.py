@@ -6,6 +6,8 @@
   and verified online when the server's interval has passed. Network problems change nothing.
 * License ended: the suite window is hidden (after a running installation or restore has finished) and the
   welcome screen explains why. Nothing is closed or deleted, so redeeming a code opens everything again.
+* Modules changed (a code added one, AKENO Full ended while AKENO VPN stays): the window rebuilds its pages for
+  the new entitlements, after a running task has finished. Settings and saved data are not touched.
 """
 
 from __future__ import annotations
@@ -114,6 +116,9 @@ class SuiteShell(QObject):
         if view.unlocked:
             if (self.win is None or not self.win.isVisible()) and self.gate is not None:
                 self.open_suite(view)
+            elif self.win is not None and hasattr(self.win, "apply_license") and not self._busy():
+                if self.win.apply_license(view):
+                    log.info("license modules changed: %s", ", ".join(view.entitlements))
             self._last = view.status
             return
         if self.win is not None and self.win.isVisible():

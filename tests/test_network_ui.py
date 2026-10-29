@@ -174,12 +174,53 @@ def test_status_probe_runs_once_and_only_with_a_license(qtbot):
             calls.append(key)
             done({'enabled': False, 'transport': 'not_implemented', 'relay': False})
             return True
-    p = AkenoNetworkPage(Probe(), SimpleNamespace(license=object()))
+    p = AkenoNetworkPage(Probe(), SimpleNamespace(license=Licensed('*')))
     qtbot.addWidget(p)
     p.show()
     p.hide()
     p.show()
     assert calls == ['akeno-network-status'] and not p.create_button.isEnabled()
+
+
+class Licensed:
+    """A license manager whose view includes the given modules ('*': AKENO Full)."""
+
+    def __init__(self, *modules):
+        self.modules = set(modules)
+
+    def view(self):
+        return SimpleNamespace(allows=lambda m: '*' in self.modules or m in self.modules)
+
+
+def test_a_vpn_only_license_locks_lan_play_and_never_asks_the_lan_server(qtbot):
+    from akeno.ui.pages.akeno_network import AkenoNetworkPage
+    calls, went = [], []
+
+    class Probe(Ctl):
+        def run(self, key, fn, done=None, failed=None, **kw):
+            calls.append(key)
+            return True
+    window = SimpleNamespace(license=Licensed('vpn'), go=went.append)
+    p = AkenoNetworkPage(Probe(), window)
+    qtbot.addWidget(p)
+    p.show()
+    assert calls == [] and p.tab_bar.currentIndex() == 1
+    assert p.lan_locked.isVisibleTo(p.tab_pages[0]) and not p.lan_card.isVisibleTo(p.tab_pages[0])
+    assert not p.lan_off.isVisibleTo(p.tab_pages[0]) and not p.vpn_locked.isVisibleTo(p.tab_pages[1])
+    assert 'not included' in p.lan_dash.detail_label.text()
+    from PySide6.QtWidgets import QPushButton
+    redeem = [b for b in p.lan_locked.findChildren(QPushButton) if b.text() == 'Redeem activation code']
+    redeem[0].click()
+    assert went == ['license']
+
+
+def test_a_lan_only_license_locks_the_vpn(qtbot):
+    from akeno.ui.pages.akeno_network import AkenoNetworkPage
+    p = AkenoNetworkPage(Ctl(), SimpleNamespace(license=Licensed('lan_play')))
+    qtbot.addWidget(p)
+    assert p.tab_bar.currentIndex() == 0
+    assert p.vpn_locked.isVisibleTo(p.tab_pages[1]) and not p.vpn_content.isVisibleTo(p.tab_pages[1])
+    assert not p.lan_locked.isVisibleTo(p.tab_pages[0])
 
 
 def test_dashboard_shows_room_owner_names_and_virtual_ip(page, monkeypatch):

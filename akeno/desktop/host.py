@@ -586,7 +586,7 @@ def main(argv: list[str] | None = None) -> int:
     def licensed() -> bool:
         from akeno.licensing import manager
         try:
-            return manager().view().unlocked
+            return manager().view().allows("desktop")      # Desktop Studio: AKENO Full (or its own module)
         except Exception as exc:                  # an unreadable license store locks, it never crashes the host
             log.warning("license check failed: %s", exc)
             return False

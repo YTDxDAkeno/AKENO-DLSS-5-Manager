@@ -134,9 +134,31 @@ class AkenoNetworkPage(QWidget):
         self.timer = QTimer(self)
         self.timer.setInterval(2000)
         self.timer.timeout.connect(self.poll_session)
-        self.show_tab(0)
+        # a VPN-only license opens on the VPN tab
+        self.show_tab(1 if self.licensed('vpn') and not self.licensed('lan_play') else 0)
         self.refresh_profiles()
         self.show_modules()
+
+    def licensed(self, module):
+        """The license includes ``module`` (``vpn``: AKENO VPN or AKENO Full; ``lan_play``: AKENO LAN Play or
+        AKENO Full). The elevated helper and the server check it again for every connection."""
+        license_ = getattr(self.window, 'license', None)
+        if license_ is None:
+            return True
+        try:
+            return license_.view().allows(module)
+        except Exception:
+            return False
+
+    def _locked_card(self, title, icon):
+        card = Card(title, icon, right=StatusPill(t('Not included'), 'unknown'))
+        card.body.addWidget(label(t('This module is not included in your current AKENO license.'), 'h3', wrap=True))
+        card.body.addWidget(label(t('Nothing of it runs or connects. A code for this module or for AKENO Full '
+                                    'unlocks it right away; your settings stay as they are.'), 'dim', wrap=True))
+        go = getattr(self.window, 'go', None)
+        card.body.addWidget(button(t('Redeem activation code'), 'key', 'primary',
+                                   on_click=lambda: go('license') if go else None))
+        return card
 
     # -- modules ------------------------------------------------------------------------------------------------------
     def _off_card(self, module, title, icon, text):
@@ -159,15 +181,22 @@ class AkenoNetworkPage(QWidget):
         self.show_modules()
 
     def show_modules(self):
-        lan, vpn = self.modules.enabled('lan_play'), self.modules.enabled('vpn')
+        lan_ok, vpn_ok = self.licensed('lan_play'), self.licensed('vpn')
+        lan, vpn = lan_ok and self.modules.enabled('lan_play'), vpn_ok and self.modules.enabled('vpn')
         self.lan_card.setVisible(lan)
-        self.lan_off.setVisible(not lan)
+        self.lan_off.setVisible(lan_ok and not lan)
+        self.lan_locked.setVisible(not lan_ok)
         self.vpn_content.setVisible(vpn)
-        self.vpn_off.setVisible(not vpn)
+        self.vpn_off.setVisible(vpn_ok and not vpn)
+        self.vpn_locked.setVisible(not vpn_ok)
         self.show_room()
-        if not lan:
+        if not lan_ok:
+            self.lan_dash.set_state(t('Not included'), 'unknown', t('LAN Play is not included in your AKENO license.'))
+        elif not lan:
             self.lan_dash.set_state(t('Off'), 'unknown', t('Turn on LAN Play in the LAN Play tab.'))
-        if not vpn:
+        if not vpn_ok:
+            self.vpn_dash.set_state(t('Not included'), 'unknown', t('The VPN is not included in your AKENO license.'))
+        elif not vpn:
             self.vpn_dash.set_state(t('Off'), 'unknown', t('Turn on the VPN in the VPN tab.'))
         elif self.vpn_dash.state_label.text() == t('Off'):
             self.vpn_dash.set_state(t('Disconnected'), 'unknown', t('Your internet traffic uses your normal connection.'))
@@ -183,12 +212,13 @@ class AkenoNetworkPage(QWidget):
             self.tab_bar.setCurrentIndex(index)
         vpn = getattr(self, 'automatic_vpn', None)
         # Opening the VPN tab asks the AKENO server once (read-only) which countries have a verified exit.
-        if index == 1 and vpn is not None and not vpn.loaded and self.modules.enabled('vpn') and \
+        if index == 1 and vpn is not None and not vpn.loaded and self.modules.enabled('vpn') and self.licensed('vpn') and \
                 getattr(self.window, 'license', None) is not None and WINDOWS:
             vpn.refresh()
         free = getattr(self, 'free_vpn', None)
         # ... and reads the public VPN Gate list once (rate-limited, cached without profiles).
-        if index == 1 and free is not None and not free.loaded and self.modules.enabled('vpn') and WINDOWS:
+        if index == 1 and free is not None and not free.loaded and self.modules.enabled('vpn') and \
+                self.licensed('vpn') and WINDOWS:
             free.refresh()
 
     def show_free_vpn(self, text, colour, country, ipv4, active):
@@ -227,8 +257,8 @@ class AkenoNetworkPage(QWidget):
     def probe_service(self):
         """One read-only GET: does the AKENO server offer LAN Play? A server without it is shown as such."""
         license_ = getattr(self.window, 'license', None)
-        if license_ is None:
-            return
+        if license_ is None or not self.licensed('lan_play'):
+            return                              # without LAN Play in the license the server is not asked
 
         def done(result):
             self.service = result
@@ -405,6 +435,8 @@ class AkenoNetworkPage(QWidget):
             'Play LAN games with friends over the internet in a private, encrypted room. Needs the official WireGuard '
             'for Windows; it does not need the VPN.'))
         lay.addWidget(self.lan_off)
+        self.lan_locked = self._locked_card(t('LAN Play'), 'wifi')
+        lay.addWidget(self.lan_locked)
         return page
 
     def identity(self):
@@ -811,6 +843,8 @@ class AkenoNetworkPage(QWidget):
             'Send your internet traffic through a WireGuard server you choose, for example your own. Needs the '
             'official WireGuard for Windows; it does not need LAN Play.'))
         lay.addWidget(self.vpn_off)
+        self.vpn_locked = self._locked_card(t('VPN'), 'shield')
+        lay.addWidget(self.vpn_locked)
         for b in (self.disconnect_button, self.status_button, self.exit_button):
             b.setEnabled(BUILT)
         self.render_history()
@@ -1110,11 +1144,14 @@ def diagnostics(license_manager):
     rows.append(('ok' if device else 'fail', msg('Signed in on this PC'),
                  msg('This PC is registered with your AKENO account.') if device else msg('Sign in and register this PC first.')))
     try:
-        unlocked = license_manager.view().unlocked
+        view = license_manager.view()
+        vpn, lan = view.allows('vpn'), view.allows('lan_play')
     except Exception:
-        unlocked = False
-    rows.append(('ok' if unlocked else 'fail', msg('AKENO license'), msg('Active.') if unlocked else
-                 msg('LAN Play and connecting the VPN need an active license.')))
+        vpn = lan = False
+    rows.append(('ok' if (vpn or lan) else 'fail', msg('AKENO license'),
+                 msg('Active: LAN Play and the VPN.') if vpn and lan else msg('Active: the VPN (LAN Play is not '
+                 'included).') if vpn else msg('Active: LAN Play (the VPN is not included).') if lan else
+                 msg('LAN Play and connecting the VPN need an AKENO Full, AKENO VPN or AKENO LAN Play license.')))
     from akeno.network.windows import NativeUnavailable, WindowsWireGuard, service_state
     try:
         WindowsWireGuard()._trusted('wireguard.exe')

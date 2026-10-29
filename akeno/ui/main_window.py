@@ -78,6 +78,7 @@ class NavButton(QPushButton):
         self.child = child
         self.group = group
         self.opened = False
+        self.locked = False                    # the license does not include this page's module
         self._hover = False
         self.setCheckable(not group)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -133,7 +134,10 @@ class NavButton(QPushButton):
         p.setFont(font)
         p.setPen(color)
         tx = x + size + 12
-        right = 28 if self.group else 8
+        right = 28 if self.group else (26 if self.locked else 8)
+        if self.locked:
+            lock = icons.pixmap("lock", theme.TEXT_MUTED, 12)
+            p.drawPixmap(QRectF(self.width() - 20, (self.height() - 12) / 2, 12, 12), lock, QRectF())
         text_rect = QRectF(tx, 0, self.width() - tx - right, self.height())
         p.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft,
                    self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, int(text_rect.width())))
@@ -259,6 +263,15 @@ class Sidebar(QFrame):
                 self.buttons[key].setVisible(opened)
             self.groups[gkey].opened = opened
             self.groups[gkey].update()
+
+    def set_locked(self, keys) -> None:
+        """Mark the pages the license does not include (they stay visible, with a lock)."""
+        keys = set(keys)
+        for key, b in self.buttons.items():
+            if hasattr(b, "locked"):
+                b.locked = key in keys
+                b.setToolTip(t("Not included in your current AKENO license") if b.locked else "")
+                b.update()
 
     def select(self, key: str) -> None:
         # a group is open while one of its pages is (and when the user opens it); leaving it closes it again
@@ -387,6 +400,7 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(icons.QIcon(art.app_icon_pixmap(256)))
         self._initial_size()
         self.setMinimumSize(self._minimum())
+        self.entitlements = tuple(self.license.view().entitlements)
         self._build()
         controller.navigate.connect(self.go)
         controller.status.connect(lambda m: self.statusBar().showMessage(m, 8000))
@@ -396,7 +410,7 @@ class MainWindow(QMainWindow):
         self._status_footer()
         for i, (key, _, _) in enumerate(NAV[:9]):
             QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self, activated=lambda k=key: self.go(k))
-        self.go("home")
+        self.go(self.start_page())
 
     @staticmethod
     def _minimum() -> QSize:
@@ -461,10 +475,15 @@ class MainWindow(QMainWindow):
         self.pages = {}
         self.hosts = {}
         advanced = {}
-        for key, cls in (("dashboard", DashboardPage), ("profiles", ProfilesPage), ("install", InstallPage)):
-            page = cls(self.ctl, self)
-            page.setObjectName(f"page_{key}")
-            advanced[key] = page
+        from akeno.licensing import entitlements as ents_mod
+        from akeno.ui.locked import LockedModulePage
+        allowed = lambda key: ents_mod.page_allowed(self.entitlements, key)   # noqa: E731
+        self.locked_pages = [key for key, _, _ in NAV if not allowed(key)]
+        if allowed("advanced"):
+            for key, cls in (("dashboard", DashboardPage), ("profiles", ProfilesPage), ("install", InstallPage)):
+                page = cls(self.ctl, self)
+                page.setObjectName(f"page_{key}")
+                advanced[key] = page
         main = {"akeno_network": AkenoNetworkPage, "library": LibraryPage, "fivem": FiveMPage, "installed": InstalledPage, "downloads": DownloadsPage,
                 "backups": BackupsPage, "hardware": HardwarePage, "settings": SettingsPage, "account": AccountPage,
                 "license": LicensePage, "recent": RecentPage, "booster": BoosterPage, "benchmark": BenchmarkPage,
@@ -472,7 +491,17 @@ class MainWindow(QMainWindow):
                 "community": CommunityPage, "sync": CloudSyncPage, "updates": UpdatesPage, "home": HomePage,
                 "doctor": DoctorPage, "cleaner": CleanerPage, "network": NetworkPage}
         from akeno.ui.system_ui import UnavailablePage
+        titles = {key: title for key, title, _ in NAV}
         for key, _, _ in NAV:
+            if not allowed(key):
+                # a module outside the license is not built at all: nothing of it loads, scans or starts
+                page = LockedModulePage(key, titles[key], self)
+                page.setObjectName(f"page_{key}")
+                host = PageHost(page)
+                self.pages[key] = page
+                self.hosts[key] = host
+                self.stack.addWidget(host)
+                continue
             try:
                 if key == "security":
                     main[key] = lambda *_: self.security_component_page()
@@ -489,7 +518,36 @@ class MainWindow(QMainWindow):
             self.hosts[key] = host
             self.stack.addWidget(host)
         self.pages.update(advanced)
+        self.sidebar.set_locked(self.locked_pages)
         self._apply_density()
+
+    def allows(self, module: str) -> bool:
+        from akeno.licensing import entitlements as ents_mod
+        return ents_mod.allows(self.entitlements, module)
+
+    def start_page(self) -> str:
+        """The dashboard with AKENO Full; otherwise the first page the license includes (AKENO Network for a
+        VPN or LAN Play license), the license page when nothing is included."""
+        for key in ("home", "akeno_network"):
+            if key not in self.locked_pages:
+                return key
+        return next((k for k, _, _ in NAV if k not in self.locked_pages and k not in ("account", "settings",
+                                                                                       "updates")), "license")
+
+    def apply_license(self, view) -> bool:
+        """Rebuild the pages when the entitlements changed (a code was redeemed, a module ended). Settings,
+        games and every saved file stay as they are; only which pages exist changes. True: rebuilt."""
+        ents = tuple(view.entitlements)
+        if ents == self.entitlements or not ents:
+            return False
+        current = self.current_page()
+        self.entitlements = ents
+        old = self.takeCentralWidget()
+        old.deleteLater()
+        self._build()
+        target = current if current not in self.locked_pages else self.start_page()
+        QTimer.singleShot(0, lambda: self.go(target))
+        return True
 
     def security_component_page(self):
         from akeno.ui.components import ComponentUnavailablePage
@@ -517,6 +575,8 @@ class MainWindow(QMainWindow):
             self.stack.setCurrentWidget(host)
 
     def _auto_sync(self) -> None:
+        if not self.allows("online"):
+            return                                      # Cloud Sync belongs to AKENO Full
         page = getattr(self, "pages", {}).get("sync")
         if page is not None and self.sync.state["enabled"] and self.sync.state["folder"] and \
                 not self.sync.lock.locked():
@@ -554,7 +614,7 @@ class MainWindow(QMainWindow):
 
     def current_page(self) -> str:
         key = [k for k, _, _ in NAV][self.stack.currentIndex()]
-        if key == "advanced":
+        if key == "advanced" and key not in self.locked_pages:
             return self.pages["advanced"].keys[self.pages["advanced"].tabs.currentIndex()]
         return key
 

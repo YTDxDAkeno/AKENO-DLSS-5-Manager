@@ -71,6 +71,7 @@ def free_vpn(store,request):
             _fresh(request,{'action','consent','created'})
             if request['consent'] is not True:
                 raise ProfileError('The network request is invalid or expired.')
+            _licensed('vpn')                          # nothing is installed for a module outside the license
             from akeno.network.openvpn_windows import install
             store.save({'done':True,'result':install(consent=True)})
             return 0
@@ -101,7 +102,7 @@ def free_vpn(store,request):
         session=free.FreeVPNSession(VPNGateProvider(sub('network')/'vpngate-cache.json'),OpenVPNProcess,
                                     journal,status,control,
                                     busy=lambda:_active(lan_stores()[0]) or not NetworkModules().enabled('vpn')
-                                    or not licenses.view().unlocked)
+                                    or not licenses.view().allows('vpn'))
         store.save({'done':True,'result':{'state':'starting','session_id':session.session_id}})
         session.run(request['country'])
         return 0
@@ -114,12 +115,22 @@ def free_vpn(store,request):
     return 1
 
 
-def _new_connection(module):
+def _licensed(*modules):
+    """The signed license on this PC includes one of ``modules`` (``vpn``: AKENO VPN or AKENO Full; ``lan_play``:
+    AKENO LAN Play or AKENO Full). Checked here, in the elevated helper, whatever the window shows."""
     from akeno.licensing import manager as license_manager
-    from akeno.components.service import NetworkModules
     licenses=license_manager()
-    if not licenses.view().unlocked:
+    view=licenses.view()
+    if not view.unlocked:
         raise ProfileError('An active AKENO license is required to connect. Disconnect and recovery remain available.')
+    if not any(view.allows(m) for m in modules):
+        raise ProfileError('Your AKENO license does not include this module. Disconnect and recovery remain available.')
+    return licenses
+
+
+def _new_connection(module):
+    from akeno.components.service import NetworkModules
+    licenses=_licensed(module)
     if not NetworkModules().enabled(module):
         raise ProfileError('Enable this network module before connecting. Disconnect and recovery remain available.')
     return licenses
@@ -178,14 +189,14 @@ def lan(store,request):
         if request['action'] not in ('lan_session','lan_recover') or not isinstance(request['room_id'],str) or \
                 not re.fullmatch('[0-9a-f]{32}',request['room_id']):
             raise ProfileError('The network request is invalid or expired.')
-        native=WindowsWireGuard()
         if request['action']=='lan_recover':
-            recover(native,journal)
+            recover(WindowsWireGuard(),journal)
             status.save({'state':'stopped','room':request['room_id'],'updated':time.time()})
             store.save({'done':True,'result':{'state':'stopped'}})
             return 0
-        licenses=_new_connection('lan_play')
+        licenses=_new_connection('lan_play')           # before anything native: no LAN Play without its license
         _no_vpn()
+        native=WindowsWireGuard()
         if journal.load().get('phase') not in (None,'disconnected'):
             recover(native,journal)                      # a previous session did not end cleanly
         room=request['room_id']
@@ -239,7 +250,7 @@ def vpn(store,request):
             from akeno.components.service import NetworkModules
             value=stop.load()
             return (value.get('session_id')==session_id and bool(value.get('stop'))) or \
-                not NetworkModules().enabled('vpn') or not licenses.view().unlocked
+                not NetworkModules().enabled('vpn') or not licenses.view().allows('vpn')
         session=ManagedVPNSession(client,profiles,manager,journal,Status(),stopped,lan_journal=lan_stores()[0])
         if action=='vpn_recover':
             result=session.recover()
@@ -295,6 +306,7 @@ def _execute(store,request):
             _fresh(request,{'action','consent','created'})
             if request['consent'] is not True:
                 raise ProfileError('The network request is invalid or expired.')
+            _licensed('vpn','lan_play')
             _no_lan();_no_vpn()
             from akeno.network.bootstrap import install
             result = install(consent=True)
