@@ -25,14 +25,24 @@ def redeem(body: schemas.RedeemIn, request: Request, caller: Caller = Depends(cu
     limit(request, "redeem_user", str(caller.user.id))
     if auth.needs_verification(db, caller.user):
         raise forbidden("email_not_verified", "Confirm your e-mail address before redeeming a code.")
-    done = lic.redeem(db, caller.user, body.code, client_ip(request), "app")
-    return {"license": lic.describe(done.license, utcnow()), "code_type": done.code_type,
-            "already_redeemed": done.already}
+    done = lic.redeem(db, caller.user, body.code, client_ip(request), "app", access=bool(body.access))
+    now = utcnow()
+    out = {"license": lic.describe(lic.license_of(db, caller.user.id), now), "code_type": done.code_type,
+           "already_redeemed": done.already, "entitlement": done.entitlement}
+    if body.access:
+        out["access"] = lic.describe_access(db, caller.user.id, now)
+    return out
 
 
 @router.get("/current", response_model=schemas.LicenseOut)
 def current_license(caller: Caller = Depends(current), db: Session = Depends(get_db)):
     return lic.describe(lic.license_of(db, caller.user.id), utcnow())
+
+
+@router.get("/access", response_model=schemas.AccessOut)
+def current_access(caller: Caller = Depends(current), db: Session = Depends(get_db)):
+    """Every entitlement of the account (AKENO Full and single modules), for display."""
+    return lic.describe_access(db, caller.user.id, utcnow())
 
 
 @router.post("/validate", response_model=schemas.ValidateOut)
@@ -42,7 +52,7 @@ def validate(body: schemas.ValidateIn, request: Request, caller: Caller = Depend
     device = lic.find_device(db, caller.user, body.device_id)
     try:
         out = lic.validate(db, caller.user, device, body.app_version, client_ip(request), body.certificate_serial,
-                           body.nonce)
+                           body.nonce, access=bool(body.access))
     except SigningUnavailable as exc:
         raise unavailable("signing_unavailable", "The license server cannot sign licenses right now.") from exc
     if device is not None and caller.session.device_id != device.id:
@@ -70,4 +80,7 @@ def offline_certificate(body: schemas.CertificateIn, request: Request, caller: C
 @router.get("/history", response_model=list[schemas.HistoryItem])
 def history(caller: Caller = Depends(current), db: Session = Depends(get_db)):
     license_ = lic.license_of(db, caller.user.id)
-    return license_history(db, license_) if license_ else []
+    items = license_history(db, license_) if license_ else []
+    for grant in lic.grants_of(db, caller.user.id):
+        items += lic.grant_history(db, grant)
+    return sorted(items, key=lambda e: e["at"], reverse=True)

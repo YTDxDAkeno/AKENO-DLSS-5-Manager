@@ -402,5 +402,16 @@
   "The registered exit agent credential is required.": "Die Berechtigung des registrierten Exit-Agenten ist erforderlich.",
   "This game has no reviewed LAN port profile.": "Für dieses Spiel gibt es kein geprüftes LAN-Portprofil.",
   "Use the configured HTTPS control endpoint.": "Verwende den eingerichteten HTTPS-Steuerungsendpunkt.",
-  "VPN tunnel credentials cannot be issued.": "VPN-Tunnelberechtigungen können nicht ausgestellt werden."
+  "VPN tunnel credentials cannot be issued.": "VPN-Tunnelberechtigungen können nicht ausgestellt werden.",
+  "An active AKENO LAN Play or AKENO Full license is required.": "Eine aktive Lizenz für AKENO LAN Play oder AKENO Full ist erforderlich.",
+  "An active AKENO VPN or AKENO Full license is required.": "Eine aktive Lizenz für AKENO VPN oder AKENO Full ist erforderlich.",
+  "Choose a module (for example AKENO VPN or AKENO LAN Play).": "Wähle ein Modul (zum Beispiel AKENO VPN oder AKENO LAN Play).",
+  "Choose between 1 and 3650 days.": "Wähle zwischen 1 und 3650 Tagen.",
+  "This account already has this module for life.": "Dieses Konto besitzt dieses Modul bereits lebenslang.",
+  "This account already has this module for life; the code was not used.": "Dieses Konto besitzt dieses Modul bereits lebenslang; der Code wurde nicht verwendet.",
+  "This account does not have this module.": "Dieses Konto besitzt dieses Modul nicht.",
+  "This activation code cannot be used.": "Dieser Aktivierungscode kann nicht verwendet werden.",
+  "This module license is disabled. Please contact support.": "Diese Modul-Lizenz ist deaktiviert. Bitte wende dich an den Support.",
+  "This code unlocks a single AKENO module. Update AKENO to version 3.2.0 or later, then redeem it again; the code stays unused.": "Dieser Code schaltet ein einzelnes AKENO-Modul frei. Aktualisiere AKENO auf Version 3.2.0 oder neuer und löse ihn dann erneut ein; der Code bleibt unbenutzt.",
+  "Your lifetime AKENO Full license already includes this module; the code was not used.": "Deine lebenslange AKENO-Full-Lizenz enthält dieses Modul bereits; der Code wurde nicht verwendet."
 }

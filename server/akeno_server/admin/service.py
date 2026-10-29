@@ -267,7 +267,7 @@ def user_detail(db: Session, user: User) -> dict:
 
 
 def license_history(db: Session, lic: License) -> list[dict]:
-    return [{"at": e.at, "kind": e.kind, "old_type": e.old_type, "new_type": e.new_type,
+    return [{"at": e.at, "kind": e.kind, "entitlement": "akeno-suite", "old_type": e.old_type, "new_type": e.new_type,
              "old_expires_at": e.old_expires_at, "new_expires_at": e.new_expires_at, "note": e.note}
             for e in db.scalars(select(LicenseEvent).where(LicenseEvent.license_id == lic.id)
                                 .order_by(LicenseEvent.at.desc(), LicenseEvent.id.desc()))]

@@ -109,14 +109,38 @@ class LicenseOut(BaseModel):
     server_time: datetime | None = None
 
 
+class EntitlementOut(BaseModel):
+    entitlement: str
+    name: str
+    type: str
+    status: str
+    active: bool
+    lifetime: bool
+    activated_at: datetime | None = None
+    expires_at: datetime | None = None
+    remaining_seconds: int | None = None
+    device_limit: int | None = None
+
+
+class AccessOut(BaseModel):
+    entitlements: list[EntitlementOut]
+    running: list[str]
+    modules: list[str]
+    server_time: datetime
+
+
 class RedeemIn(Strict):
     code: str = Field(max_length=64)
+    # 1: this app understands module licenses (AKENO 3.2.0+); older apps are told to update for a module code
+    access: int | None = Field(None, ge=1, le=1)
 
 
 class RedeemOut(BaseModel):
     license: LicenseOut
     code_type: LicenseTypeName
     already_redeemed: bool
+    entitlement: str = "akeno-suite"
+    access: AccessOut | None = None
 
 
 class ValidateIn(Strict):
@@ -125,6 +149,8 @@ class ValidateIn(Strict):
     certificate_serial: str | None = Field(None, max_length=40)
     # a fresh random value per request: the signed answer must carry it (no replayed answers)
     nonce: str = Field(min_length=22, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    # 1: answer with the access token family (every entitlement); absent: the original suite-only answer
+    access: int | None = Field(None, ge=1, le=1)
 
 
 class ValidateOut(BaseModel):
@@ -139,6 +165,7 @@ class ValidateOut(BaseModel):
     offline_grace_seconds: int
     min_client_version: str | None
     latest_client_version: str | None
+    access: AccessOut | None = None
 
 
 class CertificateIn(Strict):
@@ -153,6 +180,7 @@ class CertificateOut(BaseModel):
 class HistoryItem(BaseModel):
     at: datetime
     kind: str
+    entitlement: str = "akeno-suite"
     old_type: str | None
     new_type: str | None
     old_expires_at: datetime | None

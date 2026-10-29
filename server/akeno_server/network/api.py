@@ -11,7 +11,7 @@ from akeno_server.clock import utcnow
 from akeno_server.config import get_config
 from akeno_server.db import get_db
 from akeno_server.errors import ApiError, forbidden, unavailable
-from akeno_server.licensing import service as licenses
+from akeno_server.licensing import entitlements
 from akeno_server.network import signing
 from akeno_server.models import Device, User
 from akeno_server.network.rooms import RoomError
@@ -41,9 +41,8 @@ def authorised(request:Request,device_id:uuid.UUID,caller:Caller,db:Session):
     limit(request,'lan_user',str(caller.user.id))
     if caller.user.email_verified_at is None:
         raise forbidden('email_not_verified','Confirm your email before using LAN Play.')
-    license_=licenses.license_of(db,caller.user.id)
-    if license_ is None or not license_.running(utcnow()):
-        raise forbidden('active_license_required','An active AKENO suite license is required.')
+    if not entitlements.has(db,caller.user.id,entitlements.LAN_PLAY):
+        raise forbidden('active_license_required','An active AKENO LAN Play or AKENO Full license is required.')
     device=db.get(Device,device_id)
     if device is None or device.user_id!=caller.user.id or not device.active or caller.session.device_id!=device.id:
         raise forbidden('device_not_authorised','Register and use the device bound to this session.')
@@ -72,9 +71,8 @@ def members(actor,room,s,db):
         except ValueError:
             continue
         user,device=db.get(User,uid),db.get(Device,did)
-        license_=licenses.license_of(db,uid)
         if user and user.active and device and device.active and device.user_id==uid and \
-                license_ and license_.running(utcnow()) and peer['status']=='registered':
+                entitlements.has(db,uid,entitlements.LAN_PLAY) and peer['status']=='registered':
             # only the public display name the member chose for their account; never the e-mail address
             valid.append({**peer,'name':(user.display_name or '')[:80]})
     return valid

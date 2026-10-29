@@ -18,7 +18,7 @@ from akeno_server.clock import utcnow
 from akeno_server.config import get_config
 from akeno_server.db import get_db
 from akeno_server.errors import forbidden, bad_request, unavailable
-from akeno_server.licensing import service as licenses
+from akeno_server.licensing import entitlements
 from akeno_server.models import Device, User
 from akeno_server.network import signing
 from akeno_server.vpn.proofs import verify_proof
@@ -84,9 +84,8 @@ def authenticated(request, device_id, caller, db, *, cleanup=False):
     if not cleanup:
         if caller.user.email_verified_at is None:
             raise forbidden('email_not_verified', 'Confirm your email before using AKENO VPN.')
-        license_ = licenses.license_of(db, caller.user.id)
-        if license_ is None or not license_.running(utcnow()):
-            raise forbidden('active_license_required', 'An active AKENO suite license is required.')
+        if not entitlements.has(db, caller.user.id, entitlements.VPN):
+            raise forbidden('active_license_required', 'An active AKENO VPN or AKENO Full license is required.')
     return str(caller.user.id), str(device.id)
 
 
@@ -189,9 +188,8 @@ def _entitled(db, row):
     except ValueError:
         return False
     user, device = db.get(User, uid), db.get(Device, did)
-    entitlement = licenses.license_of(db, uid)
     return bool(user and user.active and user.email_verified_at and device and device.active and device.user_id == uid
-                and entitlement and entitlement.running(utcnow()))
+                and entitlements.has(db, uid, entitlements.VPN))
 
 
 @router.get('/agent/{ident}/peers')

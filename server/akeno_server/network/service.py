@@ -45,13 +45,14 @@ def bind_address(value: str) -> tuple[str, int]:
 
 
 def authority(rooms):
-    """Live membership of a WireGuard key: a fresh room lease AND an active account, device and suite license."""
+    """Live membership of a WireGuard key: a fresh room lease AND an active account, device and LAN Play
+    entitlement (AKENO LAN Play or AKENO Full)."""
     def check(public_key: str):
         grant = rooms.grant_for(public_key)
         if grant is None:
             return None
         from akeno_server.db import session
-        from akeno_server.licensing import service as licenses
+        from akeno_server.licensing import entitlements
         from akeno_server.models import Device, User
         try:
             uid, did = uuid.UUID(grant['actor']), uuid.UUID(grant['device'])
@@ -59,9 +60,8 @@ def authority(rooms):
             return None
         with session() as db:
             user, device = db.get(User, uid), db.get(Device, did)
-            license_ = licenses.license_of(db, uid)
-            if not (user and user.active and device and device.active and device.user_id == uid and license_
-                    and license_.running(utcnow())):
+            if not (user and user.active and device and device.active and device.user_id == uid
+                    and entitlements.has(db, uid, entitlements.LAN_PLAY, utcnow())):
                 return None
         return Grant(grant['room'], grant['expires'],account=grant['actor'])
     return check
