@@ -41,8 +41,6 @@ Open legal point: AKENO is a licensed (paid) product. Whether a commercial produ
 free, unpaid feature — is not answered by these pages (“Academic Use Only” on operator entries). Publication needs
 the owner's decision, ideally written permission from the VPN Gate project. See the final report.
 
-## Log
-
 ### Official OpenVPN for Windows (CI, run 40809247326 and later)
 
 | Fact | Value |
