@@ -26,6 +26,20 @@ def _migrate(args) -> int:
     return 0
 
 
+def _migrate_down(args) -> int:
+    """Take the database back to an older migration, for a rollback to an older server version (update.sh
+    --rollback runs it with the newer code before the older code returns). 0002 → 0001 removes module grants and
+    withdraws unused module codes, so the older server can never treat them as AKENO Full codes."""
+    from alembic import command
+    from alembic.config import Config
+    root = Path(__file__).resolve().parent.parent
+    cfg = Config(str(root / "alembic.ini"))
+    cfg.set_main_option("script_location", str(root / "migrations"))
+    command.downgrade(cfg, args.revision)
+    print(f"database taken back to migration {args.revision}")
+    return 0
+
+
 def _read_password(args) -> str:
     if args.password_stdin:
         return sys.stdin.readline().rstrip("\n")
@@ -152,6 +166,9 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("migrate", help="apply database migrations")
     p.add_argument("revision", nargs="?", default="head")
     p.set_defaults(fn=_migrate)
+    p = sub.add_parser("migrate-down", help="take the database back to an older migration (rollback only)")
+    p.add_argument("revision")
+    p.set_defaults(fn=_migrate_down)
     p = sub.add_parser("create-super-admin", help="create the first super admin (only while none exists)")
     p.add_argument("--email", required=True)
     p.add_argument("--name", default="")

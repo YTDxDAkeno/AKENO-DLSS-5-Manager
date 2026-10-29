@@ -61,6 +61,16 @@ case "$mode" in
     rollback)
         [ -d "$root/.previous/server" ] || { echo "no previous version kept"; exit 1; }
         ./backup.sh
+        # The previous server must not run on a newer database schema: take the database back to the previous
+        # version's newest migration first, with the newer code that knows how (0002 -> 0001 withdraws unused
+        # module codes, which the older server would otherwise treat as AKENO Full codes).
+        newest_migration() { ls "$1" 2>/dev/null | sed -n 's/^\([0-9][0-9][0-9][0-9]\)_.*\.py$/\1/p' | sort | tail -1; }
+        previous_head=$(newest_migration "$root/.previous/server/migrations/versions")
+        current_head=$(newest_migration "$root/server/migrations/versions")
+        if [ -n "$previous_head" ] && [ "$previous_head" != "$current_head" ]; then
+            echo "Taking the database back from migration $current_head to $previous_head"
+            docker compose run --rm akeno-api akeno-server migrate-down "$previous_head"
+        fi
         rm -rf "$root/server" && cp -a "$root/.previous/server" "$root/server"
         (cd "$root/.previous/deploy" && find . -mindepth 1 -maxdepth 1 ! -name .env ! -name backups \
             -exec cp -a {} "$root/deploy/" \;)

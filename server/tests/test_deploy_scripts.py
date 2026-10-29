@@ -92,6 +92,21 @@ def test_update_from_bundle_keeps_vps_data_and_can_roll_back(tmp_path):
     assert (root / "deploy" / ".env").read_text() == "POSTGRES_PASSWORD=secret-of-this-vps\n"
 
 
+def test_rollback_takes_the_database_back_before_the_older_server_returns(tmp_path):
+    root, ctx = vps(tmp_path)
+    (root / "server" / "migrations" / "versions" / "0002_feature_entitlements.py").unlink()   # the 3.1 server
+    bundle = make_bundle(tmp_path)
+    digest = hashlib.sha256(bundle.read_bytes()).hexdigest()
+    assert run(root, ctx, "--bundle", str(bundle), "--sha256", digest).returncode == 0
+    out = run(root, ctx, "--rollback")
+    assert out.returncode == 0, out.stdout + out.stderr
+    calls = ctx["log"].read_text().splitlines()
+    down = [i for i, c in enumerate(calls) if "akeno-server migrate-down 0001" in c]
+    assert down and "compose run --rm akeno-api" in calls[down[0]], calls
+    assert any("compose up -d" in c for c in calls[down[0]:])          # the older server starts afterwards
+    assert (root / "server" / "OLD_MARKER").exists()
+
+
 def test_tampered_or_foreign_bundles_are_refused(tmp_path):
     root, ctx = vps(tmp_path)
     bundle = make_bundle(tmp_path)

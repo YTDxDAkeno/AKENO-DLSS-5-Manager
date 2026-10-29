@@ -16,6 +16,14 @@ def run_offline() -> None:
         context.run_migrations()
 
 
+def _sqlite_batch_mode(connection) -> None:
+    """SQLite changes a column by copying its table (batch mode). With foreign keys enforced, dropping the old copy
+    of a table that other rows point to fails, so they are off while migrating (set before any transaction;
+    the copies keep every row and key). PostgreSQL alters tables in place and is not affected."""
+    if connection.dialect.name == "sqlite":
+        connection.connection.driver_connection.execute("PRAGMA foreign_keys=OFF")
+
+
 def run_online() -> None:
     connectable = context.config.attributes.get("connection")
     if connectable is not None:
@@ -25,6 +33,7 @@ def run_online() -> None:
         return
     engine = make_engine(get_config().database_url)
     with engine.connect() as connection:
+        _sqlite_batch_mode(connection)
         context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
         with context.begin_transaction():
             context.run_migrations()
