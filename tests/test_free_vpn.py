@@ -60,6 +60,9 @@ class Checks:
         return {'index': 7, 'source': '10.0.0.2'}
     def exit_address(self, index, source):
         return '45.76.99.1'
+    def cleanup(self, servers=()):
+        self.cleaned = list(servers)
+        return True
 
 
 def session(servers_csv, script=None, verdicts=None, control=None, busy=False):
@@ -100,7 +103,7 @@ def test_connects_to_the_best_server_of_exactly_the_chosen_country_and_reports_v
     assert connected['server_ip'] == '45.76.10.1' and connected['latency_ms'] == 42.0 and connected['ipv6'] == 'blocked'
     assert ('start', '45.76.10.2') not in log                                  # never another country
     assert result['state'] == 'stopped' and log[-1] == ('stop', '45.76.10.1')
-    assert s.journal.value == {'phase': 'disconnected'}
+    assert s.journal.value == {'phase': 'disconnected'} and s.checks.cleaned == ['45.76.10.1']
 
 
 def test_country_without_servers_is_reported_honestly_without_trying_another_country():
@@ -195,8 +198,22 @@ def test_observers_disagreeing_about_the_address_is_unverified():
 
 
 def test_recovery_only_reports_stopped_after_akenos_openvpn_is_gone():
-    journal, status = Memory({'phase': 'connected'}), Memory()
-    assert free_vpn.recover(journal, status, kill=lambda: False)['state'] == 'recovery_required'
+    journal, status = Memory({'phase': 'connected', 'servers': ['45.76.10.1']}), Memory()
+    cleaned = []
+    def routes(servers):
+        cleaned.append(list(servers))
+        return True
+    assert free_vpn.recover(journal, status, kill=lambda: False, routes=routes)['state'] == 'recovery_required'
     assert journal.value['phase'] == 'connected'
-    assert free_vpn.recover(journal, status, kill=lambda: True)['state'] == 'stopped'
-    assert journal.value == {'phase': 'disconnected'}
+    assert free_vpn.recover(journal, status, kill=lambda: True, routes=lambda s: False)['state'] == 'recovery_required'
+    assert free_vpn.recover(journal, status, kill=lambda: True, routes=routes)['state'] == 'stopped'
+    assert journal.value == {'phase': 'disconnected'} and cleaned == [['45.76.10.1']]
+
+
+def test_route_cleanup_only_touches_akenos_adapter_and_the_used_server_routes():
+    scripts = []
+    assert free_vpn.cleanup_routes(['45.76.10.1'], run=lambda s, timeout: scripts.append(s) or '0')
+    script = scripts[0]
+    assert "-InterfaceAlias 'AKENO-FreeVPN'" in script and "'45.76.10.1/32'" in script and "'0.0.0.0/1'" in script
+    assert "'0.0.0.0/0'" not in script
+    assert not free_vpn.cleanup_routes([], run=lambda s, timeout: '2')

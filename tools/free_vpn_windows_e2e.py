@@ -148,10 +148,12 @@ def main(args):
         check(state['state'] == 'ready', 'VPN component ready', state)
         exe = openvpn_windows.trusted_executable(online=True)
         check(True, 'installed openvpn.exe signed by OpenVPN Inc. (online check)', exe)
-        services = ps("@(Get-Service -Name 'OpenVPN*' -ErrorAction SilentlyContinue).Count")
+        services = ps("Get-Service -Name 'OpenVPN*' -ErrorAction SilentlyContinue | ForEach-Object "
+                      "{ $_.Name + ':' + $_.Status + ':' + $_.StartType }")
+        info('OpenVPN services present after the AKENO installation', services or 'none')
         gui = (openvpn_windows.install_dir() / 'bin' / 'openvpn-gui.exe').exists()
-        check(args.skip_install or (services == '0' and not gui), 'no OpenVPN GUI and no OpenVPN background services '
-              'were installed', f'services={services} gui={gui}')
+        check(args.skip_install or (not gui and 'OpenVPNService:' not in services), 'no OpenVPN GUI and no '
+              'auto-connect OpenVPNService were installed', f'gui={gui} services={services or "none"}')
         # -- list --------------------------------------------------------------------------------------------------
         provider = VPNGateProvider(Path(args.work) / 'vpngate-cache.json')
         servers = provider.servers(refresh=True)

@@ -258,6 +258,7 @@ def test_free_vpn_requires_an_active_license_but_recovery_does_not(helper,monkey
     assert code==1 and 'active AKENO license' in reply['error']
     import akeno.network.free_vpn as free
     monkeypatch.setattr(free,'_kill_akeno_openvpn',lambda:True)
+    monkeypatch.setattr(free,'cleanup_routes',lambda servers,run=None:True)
     h.free_vpn_stores()[0].save({'phase':'connected'})
     code,reply=request({'action':'free_vpn_recover','created':time.time()})
     assert code==0 and reply['result']['state']=='stopped' and h.free_vpn_stores()[0].load()=={'phase':'disconnected'}

@@ -149,11 +149,37 @@ class WindowsChecks:
         return {**verdict, 'dns_verified': evidence.get('dns_verified') is True, 'ipv6': 'blocked',
                 'denied_dns_paths': evidence.get('denied_paths'), 'latency_ms': self.latency()}
 
+    def cleanup(self, servers=()) -> bool:
+        """Remove what OpenVPN may leave after a forced end: the full-tunnel routes on AKENO's own adapter and the
+        host routes to the VPN Gate servers this session used. Only those routes; returns True when none remain."""
+        return cleanup_routes(servers, self.run)
+
     def exit_address(self, index: int, source: str) -> str | None:
         try:
             return self.observe('ipify', source, index)[0]
         except Exception:
             return None
+
+
+REDIRECT_ROUTES = ('0.0.0.0/1', '128.0.0.0/1', '::/3', '2000::/4', '3000::/4', 'fc00::/7', '::/1', '8000::/1')
+
+
+def cleanup_routes(servers=(), run=None) -> bool:
+    if run is None:
+        from akeno.network.lan_windows import powershell as run
+    hosts = [f'{ipaddress.ip_address(ip)}/32' for ip in servers if ipaddress.ip_address(ip).version == 4]
+    prefixes = ','.join(f"'{p}'" for p in REDIRECT_ROUTES)
+    targets = ','.join(f"'{h}'" for h in hosts) or "''"
+    script = (f"$a=@(Get-NetRoute -InterfaceAlias '{ADAPTER}' -ErrorAction SilentlyContinue | Where-Object "
+              f"DestinationPrefix -in {prefixes}); "
+              f"$h=@(Get-NetRoute -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object DestinationPrefix -in {targets}); "
+              "foreach($r in $a+$h){ Remove-NetRoute -InputObject $r -Confirm:$false -ErrorAction SilentlyContinue }; "
+              f"@(Get-NetRoute -InterfaceAlias '{ADAPTER}' -ErrorAction SilentlyContinue | Where-Object DestinationPrefix -in {prefixes}).Count + "
+              f"@(Get-NetRoute -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object DestinationPrefix -in {targets}).Count")
+    try:
+        return run(script, timeout=30).strip() == '0'
+    except Exception:
+        return False
 
 
 class FreeVPNSession:
@@ -199,8 +225,9 @@ class FreeVPNSession:
         config = render(parse(server.profile, server.ip), server_name=SERVER_NAME, credentials=CREDENTIALS,
                         dns=TUNNEL_DNS)
         self.process = self.process_factory()
+        self.used = sorted(set(getattr(self, 'used', [])) | {server.ip})
         self.journal.save({'phase': 'connecting', 'session_id': self.session_id, 'server_ip': server.ip,
-                           'created': self.clock()})
+                           'servers': self.used, 'created': self.clock()})
         self.process.start(config)
         deadline = self.clock() + self.CONNECT_SECONDS
         while self.clock() < deadline:
@@ -214,11 +241,12 @@ class FreeVPNSession:
         return 'timeout'
 
     def _stop_process(self) -> bool:
+        """End OpenVPN and remove whatever routes a forced end left, before the next server or the end."""
         if self.process is None:
             return True
         ok = self.process.stop()
         self.process = None if ok else self.process
-        return ok
+        return ok and self.checks.cleanup(getattr(self, 'used', []))
 
     # -- the session ----------------------------------------------------------------------------------------------
     def run(self, country: str) -> dict:
@@ -257,8 +285,7 @@ class FreeVPNSession:
                 if outcome != 'connected':
                     failures[outcome] = failures.get(outcome, 0) + 1
                     if not self._stop_process():
-                        final = self._status('recovery_required', country, server, error='free_vpn_cleanup_incomplete')
-                        return final
+                        return self._status('recovery_required', country, server, error='free_vpn_cleanup_incomplete')
                     continue
                 self._status('verifying', country, server)
                 try:
@@ -272,7 +299,7 @@ class FreeVPNSession:
                     break
                 self.connected_since = self.connected_since or self.clock()
                 self.journal.save({'phase': 'connected', 'session_id': self.session_id, 'server_ip': server.ip,
-                                   'created': self.clock()})
+                                   'servers': self.used, 'created': self.clock()})
                 outcome = self._watch(country, server, evidence)
                 self._stop_process()
                 if outcome == 'stop':
@@ -284,7 +311,7 @@ class FreeVPNSession:
             final = self._status('stopped', country)
         except Exception:
             final = self._status('failed', country, error='free_vpn_session_failed')
-        if not self._stop_process():
+        if not self._stop_process() or not self.checks.cleanup(getattr(self, 'used', [])):
             return self._status('recovery_required', country, error='free_vpn_cleanup_incomplete')
         self.journal.save({'phase': 'disconnected'})
         return final
@@ -331,7 +358,7 @@ class FreeVPNSession:
                         return 'lost'
 
 
-def recover(journal, status, *, kill=None) -> dict:
+def recover(journal, status, *, kill=None, routes=None) -> dict:
     """After a crash: the helper's job object already ended OpenVPN with it; this clears the journal and stops any
     openvpn.exe still running with AKENO's configuration file (and nothing else)."""
     state = journal.load()
@@ -340,7 +367,9 @@ def recover(journal, status, *, kill=None) -> dict:
         return {'state': 'stopped'}
     if kill is None:
         kill = _kill_akeno_openvpn
-    if not kill():
+    if routes is None:
+        routes = cleanup_routes
+    if not kill() or not routes(state.get('servers') or ([state['server_ip']] if state.get('server_ip') else [])):
         status.save({'state': 'recovery_required', 'error': 'free_vpn_cleanup_incomplete', 'updated': time.time()})
         return {'state': 'recovery_required'}
     journal.save({'phase': 'disconnected'})
