@@ -44,7 +44,7 @@ def test_vpn_gate_shaped_profile_becomes_akenos_own_configuration():
                      'proto tcp-client', '<ca>', '<cert>', '<key>', 'dev-node AKENO-FreeVPN', 'disable-dco',
                      'verify-x509-name opengw.net name', 'pull-filter ignore "route "', 'pull-filter ignore "dhcp-option"'):
         assert required in text
-    for absent in ('resolv-retry infinite', 'persist-tun', 'http-proxy', 'auth-user-pass', 'log ', '\\'):
+    for absent in ('resolv-retry infinite', 'persist-tun', 'http-proxy', 'auth-user-pass', 'log ', '\\', 'mute'):
         assert absent not in text
     assert 'BEGIN PRIVATE KEY' in text and 'BEGIN RSA PRIVATE KEY' not in text          # re-serialised, not copied
 

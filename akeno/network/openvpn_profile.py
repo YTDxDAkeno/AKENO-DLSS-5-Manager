@@ -289,7 +289,8 @@ def render(profile: SafeProfile, *, dns: tuple[str, ...] = ('1.1.1.1', '9.9.9.9'
         'pull-filter ignore "redirect-private"', 'pull-filter ignore "dhcp-option"', 'pull-filter ignore "dns "',
         'pull-filter ignore "setenv"', 'pull-filter ignore "echo"', 'pull-filter ignore "register-dns"',
         'pull-filter ignore "block-outside-dns"',
-        'ping 10', 'ping-restart 45', 'verb 3', 'mute 20',
+        # no 'mute': it also suppresses OpenVPN's "Initialization Sequence Completed", the only connected signal
+        'ping 10', 'ping-restart 45', 'verb 3',
     ]
     if profile.fallback:
         lines.append(f'data-ciphers-fallback {profile.fallback}')
