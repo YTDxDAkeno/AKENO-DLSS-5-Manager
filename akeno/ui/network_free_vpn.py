@@ -328,7 +328,8 @@ class FreeVPN(Card):
         if not confirm(self, t('Install VPN component'), t(
                 'AKENO downloads the official OpenVPN {v} installer from openvpn.org, checks that it is exactly the '
                 'reviewed file and signed by OpenVPN Inc., and installs only the program and its network driver '
-                '(no extra apps or start-up services). Then it creates the "AKENO-FreeVPN" network adapter. Windows '
+                '(no OpenVPN GUI, no auto-connect service). OpenVPN\'s own "Interactive Service" comes with the '
+                'program; AKENO does not use it. Then AKENO creates the "AKENO-FreeVPN" network adapter. Windows '
                 'asks for permission once.').format(v=_component_version())):
             return
         from akeno.network.helper import invoke

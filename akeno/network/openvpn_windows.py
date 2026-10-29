@@ -3,7 +3,9 @@
 Installation (only ``install(consent=True)`` in the elevated helper, after the user agreed):
 * the pinned official community MSI is downloaded from openvpn.org, its SHA-256 must equal the pinned value and its
   Authenticode signature (online revocation check) must name ``OpenVPN Inc.``;
-* only the program and the TAP driver are installed (no GUI, no logon autostart, no background services);
+* only the program and the TAP driver are installed (no GUI, no logon autostart, no auto-connect OpenVPNService);
+  the MSI's program feature also brings OpenVPN's "Interactive Service" (verified on Windows), which AKENO does not
+  use or change;
 * AKENO creates its own TAP adapter ``AKENO-FreeVPN`` with the signed ``tapctl.exe`` so that routes and DNS checks
   concern exactly this tunnel. An existing OpenVPN installation is used when it is signed by OpenVPN Inc. and recent.
 
