@@ -19,6 +19,7 @@ import re
 import subprocess
 import sys
 import time
+import urllib.request
 import uuid
 from pathlib import Path
 
@@ -105,18 +106,28 @@ def status() -> dict:
     return {'state': 'ready', 'reason': None, 'version': '.'.join(map(str, version))}
 
 
+class _HttpsRedirects(urllib.request.HTTPRedirectHandler):
+    """openvpn.org answers with a redirect to its download mirror. Only HTTPS targets, at most three hops; the
+    bytes are accepted only if they equal the pinned SHA-256 (and later the OpenVPN Inc. signature)."""
+    max_redirections = 3
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if not str(newurl).lower().startswith('https://'):
+            return None
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def _download() -> bytes:
     import ssl
     import urllib.error
     import urllib.request
-    from akeno.network.bootstrap import _NoRedirect
-    opener = urllib.request.build_opener(_NoRedirect(),
+    opener = urllib.request.build_opener(_HttpsRedirects(),
                                          urllib.request.HTTPSHandler(context=ssl.create_default_context()))
     request = urllib.request.Request(URL, headers={'User-Agent': 'AKENO-Network-component-setup/1',
                                                    'Accept-Encoding': 'identity'})
     try:
         with opener.open(request, timeout=60) as response:
-            if response.status != 200 or response.geturl() != URL:
+            if response.status != 200 or not response.geturl().lower().startswith('https://'):
                 raise NativeUnavailable('The official OpenVPN source returned an unexpected response.')
             data = response.read(MSI_SIZE + 1)
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
