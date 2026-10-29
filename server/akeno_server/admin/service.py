@@ -17,10 +17,11 @@ from akeno_server.auth import totp
 from akeno_server.clock import utcnow
 from akeno_server.errors import bad_request, conflict, forbidden, not_found
 from akeno_server.licensing import codes as codegen
+from akeno_server.licensing import entitlements
 from akeno_server.licensing import service as lic_service
-from akeno_server.models import (AdminAuditEvent, Device, License, LicenseCode, LicenseEvent, LicenseRedemption,
-                                 LicenseType, LicenseValidation, OfflineCertificate, Role, SignInEvent, User,
-                                 UserSession)
+from akeno_server.models import (AdminAuditEvent, Device, FeatureGrant, License, LicenseCode, LicenseEvent,
+                                 LicenseRedemption, LicenseType, LicenseValidation, OfflineCertificate, Role,
+                                 SignInEvent, User, UserSession)
 
 S, A, SA = Role.SUPPORT, Role.ADMIN, Role.SUPER_ADMIN
 PERMISSIONS: dict[str, Role] = {
@@ -28,7 +29,7 @@ PERMISSIONS: dict[str, Role] = {
     "rename_device": S, "revoke_device": S,
     "generate_codes": A, "revoke_codes": A, "reserve_codes": A, "extend": A, "set_license": A, "grant_lifetime": A,
     "license_status": A, "user_status": A, "export": A, "transfer_device": A, "audit": A, "settings": A,
-    "change_role": SA, "disable_2fa": SA, "keys": SA,
+    "change_role": SA, "disable_2fa": SA, "keys": SA, "vpn_licenses": SA,
 }
 
 
@@ -66,13 +67,33 @@ def paginate(db: Session, query, page: int, per_page: int) -> tuple[list, int]:
 
 
 # -- codes -----------------------------------------------------------------------------------------------------------
+def module_allowed(db: Session, ent: str) -> None:
+    """AKENO VPN licenses stay locked until the owner switched them on (the free VPN uses VPN Gate, whose use in
+    a licensed product must be clarified first)."""
+    if ent == entitlements.VPN and not settings.get(db, "vpn_module_licenses"):
+        raise conflict("vpn_licenses_locked", "AKENO VPN licenses are switched off. A super admin can switch them "
+                       "on in Settings once the use of VPN Gate in AKENO is cleared.")
+
+
 def generate_codes(db: Session, actor: User, code_type: str, count: int, device_allowance: int | None = None,
                    expires_in_days: int | None = None, note: str = "", batch: str = "",
-                   assigned_email: str | None = None, ip: str = "") -> tuple[str, list[tuple[str, LicenseCode]]]:
+                   assigned_email: str | None = None, ip: str = "", entitlement: str = entitlements.SUITE,
+                   duration_days: int | None = None) -> tuple[str, list[tuple[str, LicenseCode]]]:
+    """``entitlement``: AKENO Full (``akeno-suite``) or one offered module. ``duration_days``: the length of a time
+    code when it is not the type's own (a 90- or 365-day code is a ``monthly`` code with 90 or 365 days)."""
     require(actor, "generate_codes")
     kind = LicenseType(code_type)
     if not 1 <= count <= 500:
         raise bad_request("invalid_count", "Generate between 1 and 500 codes at a time.")
+    if entitlement not in entitlements.CATALOG or not entitlements.CATALOG[entitlement].offered:
+        raise bad_request("invalid_entitlement", "Choose AKENO Full or an offered module.")
+    if entitlement != entitlements.SUITE:
+        if kind.trial:
+            raise bad_request("invalid_code_type", "Module codes are lifetime or time codes, not trials.")
+        module_allowed(db, entitlement)
+    if duration_days is not None:
+        if kind is not LicenseType.MONTHLY or not 1 <= duration_days <= 3650:
+            raise bad_request("invalid_duration", "A custom length (1 to 3650 days) belongs to a time code.")
     assigned = None
     if assigned_email:
         assigned = auth.user_by_email(db, assigned_email)
@@ -90,20 +111,22 @@ def generate_codes(db: Session, actor: User, code_type: str, count: int, device_
             if db.scalar(select(LicenseCode.id).where(LicenseCode.verifier == verifier)) is None:
                 break
         row = LicenseCode(verifier=verifier, hint=codegen.hint(body), code_type=kind.value,
-                          device_allowance=device_allowance, expires_at=expires, note=note.strip()[:300],
+                          entitlement=entitlement, duration_days=duration_days, device_allowance=device_allowance,
+                          expires_at=expires, note=note.strip()[:300],
                           batch=batch[:80], assigned_user_id=assigned.id if assigned else None, created_by=actor.id,
                           created_at=now)
         db.add(row)
         out.append((plain, row))
     db.flush()
     audit.record(db, actor, "codes.generate", "batch", batch, ip, code_type=kind.value, count=count,
+                 entitlement=entitlement, duration_days=duration_days,
                  device_allowance=device_allowance, expires_at=expires, note=note[:300],
                  assigned=assigned.email if assigned else None)
     return batch, out
 
 
 def list_codes(db: Session, status: str = "", code_type: str = "", batch: str = "", q: str = "", page: int = 1,
-               per_page: int = 50):
+               per_page: int = 50, entitlement: str = ""):
     query = select(LicenseCode).order_by(LicenseCode.created_at.desc(), LicenseCode.id)
     if status == "expired":
         query = query.where(LicenseCode.status.in_(("available", "reserved")), LicenseCode.expires_at <= utcnow())
@@ -113,6 +136,8 @@ def list_codes(db: Session, status: str = "", code_type: str = "", batch: str = 
         query = query.where(LicenseCode.code_type == code_type)
     if batch:
         query = query.where(LicenseCode.batch == batch)
+    if entitlement:
+        query = query.where(LicenseCode.entitlement == entitlement)
     if q:
         text = q.strip().upper()
         body_hint = text.replace("-", "")[-4:]
@@ -134,6 +159,8 @@ def code_out(db: Session, row: LicenseCode) -> dict:
     if status in ("available", "reserved") and row.expires_at is not None and row.expires_at <= utcnow():
         status = "expired"
     return {"id": str(row.id), "display": row.display(), "code_type": row.code_type, "status": status,
+            "entitlement": row.entitlement, "product": entitlements.name(row.entitlement),
+            "duration_days": row.duration_days, "length": code_length(row),
             "device_allowance": row.device_allowance, "expires_at": row.expires_at, "note": row.note,
             "batch": row.batch, "assigned_email": assigned.email if assigned else None, "created_at": row.created_at,
             "redeemed_at": row.redeemed_at, "redeemed_by_email": redeemer.email if redeemer else None,
@@ -197,13 +224,22 @@ def release_code(db: Session, actor: User, code_id: str, ip: str = "") -> Licens
     return row
 
 
+def code_length(row: LicenseCode) -> str:
+    """``lifetime``, ``24 hours``, ``72 hours`` or ``N days``: how long the license or module runs."""
+    if row.seconds is None:
+        return "lifetime"
+    return f"{row.seconds // 3600} hours" if row.seconds < 7 * 86400 else f"{row.seconds // 86400} days"
+
+
 def codes_csv(items: list[tuple[str, LicenseCode]]) -> str:
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["code", "type", "device_allowance", "expires_at", "batch", "note"])
+    w.writerow(["code", "product", "entitlement", "type", "length", "device_allowance", "expires_at", "batch",
+                "note"])
     for plain, row in items:
-        w.writerow([plain, row.code_type, row.device_allowance or "", row.expires_at.isoformat() if row.expires_at
-                    else "", row.batch, _csv_safe(row.note)])
+        w.writerow([plain, entitlements.name(row.entitlement), row.entitlement, row.code_type, code_length(row),
+                    row.device_allowance or "", row.expires_at.isoformat() if row.expires_at else "", row.batch,
+                    _csv_safe(row.note)])
     return buf.getvalue()
 
 
@@ -246,6 +282,7 @@ def user_summary(db: Session, user: User) -> dict:
             "status": user.status, "email_verified": user.email_verified_at is not None,
             "two_factor": bool(user.credential.totp_enabled_at), "created_at": user.created_at,
             "last_login_at": user.last_login_at, "license": lic_service.describe(lic, utcnow()),
+            "access": lic_service.describe_access(db, user.id, utcnow()),
             "devices": len(lic_service.active_devices(db, user.id))}
 
 
@@ -259,7 +296,10 @@ def user_detail(db: Session, user: User) -> dict:
         select(Device).where(Device.user_id == user.id).order_by(Device.created_at.desc()))]
     out["sessions"] = [session_out(s) for s in db.scalars(
         select(UserSession).where(UserSession.user_id == user.id).order_by(UserSession.created_at.desc()).limit(30))]
-    out["history"] = license_history(db, lic) if lic else []
+    history = license_history(db, lic) if lic else []
+    for grant in lic_service.grants_of(db, user.id):
+        history += lic_service.grant_history(db, grant)
+    out["history"] = sorted(history, key=lambda e: e["at"], reverse=True)
     out["sign_ins"] = [{"at": e.at, "success": e.success, "reason": e.reason, "channel": e.channel, "ip": e.ip}
                        for e in db.scalars(select(SignInEvent).where(SignInEvent.user_id == user.id)
                                            .order_by(SignInEvent.at.desc()).limit(30))]
@@ -267,8 +307,10 @@ def user_detail(db: Session, user: User) -> dict:
 
 
 def license_history(db: Session, lic: License) -> list[dict]:
-    return [{"at": e.at, "kind": e.kind, "entitlement": "akeno-suite", "old_type": e.old_type, "new_type": e.new_type,
-             "old_expires_at": e.old_expires_at, "new_expires_at": e.new_expires_at, "note": e.note}
+    return [{"at": e.at, "kind": e.kind, "entitlement": "akeno-suite", "entitlement_name": "AKENO Full",
+             "old_type": e.old_type,
+             "new_type": e.new_type, "old_expires_at": e.old_expires_at, "new_expires_at": e.new_expires_at,
+             "note": e.note}
             for e in db.scalars(select(LicenseEvent).where(LicenseEvent.license_id == lic.id)
                                 .order_by(LicenseEvent.at.desc(), LicenseEvent.id.desc()))]
 
@@ -358,6 +400,41 @@ def license_status(db: Session, actor: User, user: User, status: str, note: str 
     return lic
 
 
+def set_grant(db: Session, actor: User, user: User, entitlement: str, days: int | None, note: str = "",
+              ip: str = "", device_limit: int | None = None):
+    """Give one module for life (``days`` None) or for ``days`` from now. The suite and other modules stay."""
+    require(actor, "grant_lifetime" if days is None else "set_license")
+    _guard_target(actor, user)
+    module_allowed(db, entitlement)
+    grant = lic_service.admin_set_grant(db, actor, user, entitlement, days, note, device_limit)
+    audit.record(db, actor, "grant.lifetime" if days is None else "grant.set", "user", user.id, ip,
+                 email=user.email, entitlement=entitlement, days=days, expires_at=grant.expires_at, note=note)
+    return grant
+
+
+def extend_grant(db: Session, actor: User, user: User, entitlement: str, days: int, note: str = "", ip: str = ""):
+    require(actor, "extend")
+    _guard_target(actor, user)
+    module_allowed(db, entitlement)
+    grant = lic_service.admin_extend_grant(db, actor, user, entitlement, days, note)
+    audit.record(db, actor, "grant.extend", "user", user.id, ip, email=user.email, entitlement=entitlement,
+                 days=days, expires_at=grant.expires_at, note=note)
+    return grant
+
+
+def grant_status(db: Session, actor: User, user: User, entitlement: str, status: str, note: str = "",
+                 ip: str = ""):
+    """Disable, revoke or re-activate one module grant (always possible, also while new VPN licenses are off)."""
+    require(actor, "license_status")
+    _guard_target(actor, user)
+    if status == "active":
+        module_allowed(db, entitlement)
+    grant = lic_service.admin_set_grant_status(db, actor, user, entitlement, status, note)
+    audit.record(db, actor, f"grant.{status}", "user", user.id, ip, email=user.email, entitlement=entitlement,
+                 note=note)
+    return grant
+
+
 def reset_devices(db: Session, actor: User, user: User, ip: str = "") -> int:
     require(actor, "reset_devices")
     _guard_target(actor, user)
@@ -405,7 +482,7 @@ def users_csv(db: Session, actor: User, ip: str = "") -> str:
     buf = io.StringIO()
     w = csv.writer(buf)
     w.writerow(["id", "email", "display_name", "role", "status", "email_verified", "created_at", "last_login_at",
-                "license_type", "license_status", "expires_at", "devices"])
+                "license_type", "license_status", "expires_at", "devices", "modules"])
     now = utcnow()
     for user in db.scalars(select(User).order_by(User.created_at)):
         lic = lic_service.license_of(db, user.id)
@@ -414,7 +491,8 @@ def users_csv(db: Session, actor: User, ip: str = "") -> str:
                     user.email_verified_at is not None, user.created_at.isoformat(),
                     user.last_login_at.isoformat() if user.last_login_at else "", d.get("license_type") or "",
                     d["status"], d["expires_at"].isoformat() if d.get("expires_at") else "",
-                    len(lic_service.active_devices(db, user.id))])
+                    len(lic_service.active_devices(db, user.id)),
+                    " ".join(lic_service.describe_access(db, user.id, now)["running"])])
     audit.record(db, actor, "users.export", "users", "", ip)
     return buf.getvalue()
 
@@ -525,6 +603,9 @@ def statistics(db: Session) -> dict:
         "expiring_7_days": count(License, License.status == "active", License.expires_at > now,
                                  License.expires_at <= now + timedelta(days=7)),
         "codes": codes_by,
+        "module_grants": {e: count(FeatureGrant, FeatureGrant.entitlement == e, FeatureGrant.status == "active",
+                                   or_(FeatureGrant.expires_at.is_(None), FeatureGrant.expires_at > now))
+                          for e in entitlements.FEATURES if entitlements.CATALOG[e].offered},
         "devices_active": count(Device, Device.revoked_at.is_(None)),
         "offline_certificates": count(OfflineCertificate, OfflineCertificate.revoked_at.is_(None)),
         "validations_24h": count(LicenseValidation, LicenseValidation.at > now - timedelta(hours=24)),
@@ -540,6 +621,8 @@ def update_settings(db: Session, actor: User, values: dict, ip: str = "") -> dic
     changed = {}
     for key, value in values.items():
         old = settings.get(db, key)
+        if key == "vpn_module_licenses" and settings.coerce(key, value) != old:
+            require(actor, "vpn_licenses")
         new = settings.put(db, key, value, actor.id)
         if new != old:
             changed[key] = [old, new]

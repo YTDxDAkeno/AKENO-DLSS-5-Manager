@@ -214,6 +214,8 @@ class DeviceOut(BaseModel):
 # -- admin -----------------------------------------------------------------------------------------------------------
 class GenerateCodesIn(Strict):
     code_type: LicenseTypeName
+    entitlement: str = Field("akeno-suite", max_length=40)       # akeno-suite (AKENO Full) or one module
+    duration_days: int | None = Field(None, ge=1, le=3650)       # a time code's own length (monthly codes)
     count: int = Field(1, ge=1, le=500)
     device_allowance: int | None = Field(None, ge=1, le=50)
     expires_in_days: int | None = Field(None, ge=1, le=3650)
@@ -226,6 +228,10 @@ class CodeOut(BaseModel):
     id: str
     display: str
     code_type: str
+    entitlement: str = "akeno-suite"
+    product: str = "AKENO Full"
+    duration_days: int | None = None
+    length: str = ""
     status: str
     device_allowance: int | None
     expires_at: datetime | None
@@ -265,6 +271,25 @@ class ExtendIn(Strict):
 class SetLicenseIn(Strict):
     license_type: LicenseTypeName
     expires_at: datetime | None = None
+    note: str = Field("", max_length=300)
+
+
+class GrantIn(Strict):
+    entitlement: str = Field(max_length=40)
+    days: int | None = Field(None, ge=1, le=3650)                # None: lifetime
+    device_limit: int | None = Field(None, ge=1, le=50)
+    note: str = Field("", max_length=300)
+
+
+class GrantExtendIn(Strict):
+    entitlement: str = Field(max_length=40)
+    days: int = Field(ge=1, le=3650)
+    note: str = Field("", max_length=300)
+
+
+class GrantStatusIn(Strict):
+    entitlement: str = Field(max_length=40)
+    status: Literal["active", "disabled", "revoked"]
     note: str = Field("", max_length=300)
 
 

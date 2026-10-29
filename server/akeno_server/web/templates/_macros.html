@@ -16,3 +16,5 @@
   {% if page < pages %}<a class="btn small" href="{{ base }}page={{ page + 1 }}">→</a>{% endif %}
 </div>
 {%- endmacro %}
+
+{% macro length(value) -%}{% if value == 'lifetime' %}{{ t("Lifetime") }}{% elif value.endswith(' hours') %}{{ t("{n} hours", n=value.split()[0]) }}{% elif value %}{{ t("{n} days", n=value.split()[0]) }}{% else %}—{% endif %}{%- endmacro %}

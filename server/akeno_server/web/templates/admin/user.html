@@ -36,7 +36,7 @@
       <div><label for="f-role">{{ t("Role") }}</label><select id="f-role" name="role">{% for r, label in [("user", "User"), ("support", "Support"), ("admin", "Admin"), ("super_admin", "Super Admin")] %}<option value="{{ r }}" {% if target.role == r %}selected{% endif %}>{{ t(label) }}</option>{% endfor %}</select></div>
       <button type="submit">{{ t("Change role") }}</button></form>{% endif %}
   </section>
-  <section class="card"><h2>{{ t("License") }}
+  <section class="card"><h2>{{ t("AKENO Full") }}
     {% if lic.active %}<span class="badge ok">{{ t("Active") }}</span>{% elif lic.status == 'none' %}<span class="badge">{{ t("No license") }}</span>{% else %}<span class="badge fail">{{ t({"expired": "Expired", "disabled": "Disabled", "revoked": "Revoked"}.get(lic.status, lic.status)) }}</span>{% endif %}</h2>
     {% if lic.status != 'none' %}<dl class="kv">
       <dt>{{ t("Type") }}</dt><dd>{{ t({"trial_24h": "Trial (24 hours)", "trial_72h": "Extended trial (72 hours)", "monthly": "Monthly (30 days)", "lifetime": "Lifetime"}[lic.license_type]) }}</dd>
@@ -63,6 +63,30 @@
     </div>
   </section>
 </div>
+<section class="card" id="modules"><h2>{{ t("Modules") }}</h2>
+  <p class="muted">{{ t("Single modules next to AKENO Full. Changing a module never changes AKENO Full or another module.") }}</p>
+  <div class="table-wrap"><table><thead><tr><th>{{ t("Module") }}</th><th>{{ t("Status") }}</th><th>{{ t("Until") }}</th><th>{{ t("Actions") }}</th></tr></thead><tbody>
+  {% for mod in modules %}{% set e = mod.entry %}<tr>
+    <td><strong>{{ mod.name }}</strong>{% if mod.locked %}<div class="muted">{{ t("New licenses locked") }}</div>{% endif %}</td>
+    <td>{% if not e %}<span class="badge">{{ t("No license") }}</span>{% elif e.active %}<span class="badge ok">{{ t("Active") }}</span>{% else %}<span class="badge fail">{{ t({"expired": "Expired", "disabled": "Disabled", "revoked": "Revoked"}.get(e.status, e.status)) }}</span>{% endif %}</td>
+    <td>{% if e %}{% if e.lifetime %}{{ t("Lifetime") }}{% else %}{{ m.when(e.expires_at) }}{% endif %}{% else %}—{% endif %}</td>
+    <td>
+      {% if can('set_license') and not mod.locked %}
+      <form method="post" action="/admin/users/{{ target.id }}/action" class="inline">{{ m.csrf_field() }}<input type="hidden" name="action" value="module_grant"><input type="hidden" name="entitlement" value="{{ mod.id }}">
+        <div><label for="f-len-{{ loop.index }}">{{ t("Give") }}</label><select id="f-len-{{ loop.index }}" name="length"><option value="lifetime">{{ t("Lifetime") }}</option><option value="30">{{ t("30 days") }}</option><option value="90">{{ t("90 days") }}</option><option value="365">{{ t("365 days") }}</option></select></div>
+        <div>{{ m.field("note", t("Note"), "text", "", False, maxlength=300) }}</div>
+        <button class="small" type="submit">{{ t("Add / set") }}</button></form>{% endif %}
+      {% if e and not e.lifetime and can('extend') and not mod.locked %}
+      <form method="post" action="/admin/users/{{ target.id }}/action" class="inline mt-s">{{ m.csrf_field() }}<input type="hidden" name="action" value="module_extend"><input type="hidden" name="entitlement" value="{{ mod.id }}">
+        <div>{{ m.field("days", t("Extend by (days)"), "number", "30", True, extra='min="1" max="3650"') }}</div>
+        <button class="small" type="submit">{{ t("Extend") }}</button></form>{% endif %}
+      {% if e and can('license_status') %}<div class="row mt-s">
+        {% if e.status == 'active' %}<form method="post" action="/admin/users/{{ target.id }}/action" data-confirm="{{ t('Disable this module? AKENO locks it at its next check.') }}">{{ m.csrf_field() }}<input type="hidden" name="action" value="module_disable"><input type="hidden" name="entitlement" value="{{ mod.id }}"><button class="small danger" type="submit">{{ t("Disable") }}</button></form>
+          <form method="post" action="/admin/users/{{ target.id }}/action" data-confirm="{{ t('Revoke this module? It can be given again later.') }}">{{ m.csrf_field() }}<input type="hidden" name="action" value="module_revoke"><input type="hidden" name="entitlement" value="{{ mod.id }}"><button class="small danger" type="submit">{{ t("Revoke") }}</button></form>
+        {% elif not mod.locked %}<form method="post" action="/admin/users/{{ target.id }}/action">{{ m.csrf_field() }}<input type="hidden" name="action" value="module_enable"><input type="hidden" name="entitlement" value="{{ mod.id }}"><button class="small" type="submit">{{ t("Enable") }}</button></form>{% endif %}
+      </div>{% endif %}
+    </td></tr>
+  {% endfor %}</tbody></table></div></section>
 {% if can('notes') %}<section class="card"><h2>{{ t("Notes") }}</h2>
   <form method="post" action="/admin/users/{{ target.id }}/action">{{ m.csrf_field() }}<input type="hidden" name="action" value="notes">
     <label for="f-notes" class="muted">{{ t("Visible to staff only") }}</label><textarea id="f-notes" name="notes" maxlength="5000">{{ target.notes }}</textarea>
@@ -77,7 +101,7 @@
 <div class="grid two">
   <section class="card"><h2>{{ t("License history") }}</h2>
     <div class="table-wrap"><table><thead><tr><th>{{ t("When") }}</th><th>{{ t("What") }}</th><th>{{ t("Until") }}</th></tr></thead><tbody>
-    {% for h in d.history %}<tr><td>{{ m.when(h.at) }}</td><td>{{ t({"redeem": "Code redeemed", "extend": "Extended by support", "change_type": "License type changed", "grant_lifetime": "Lifetime granted", "status_disabled": "Disabled", "status_active": "Enabled again", "status_revoked": "Revoked"}.get(h.kind, h.kind)) }}<div class="muted">{{ h.note }}</div></td><td>{% if h.new_type == 'lifetime' %}{{ t("Never") }}{% else %}{{ m.when(h.new_expires_at) }}{% endif %}</td></tr>
+    {% for h in d.history %}<tr><td>{{ m.when(h.at) }}</td><td>{% if h.entitlement != 'akeno-suite' %}<strong>{{ h.entitlement_name }}</strong> · {% endif %}{{ t({"redeem": "Code redeemed", "extend": "Extended by support", "change_type": "License type changed", "grant_lifetime": "Lifetime granted", "grant": "Given by support", "status_disabled": "Disabled", "status_active": "Enabled again", "status_revoked": "Revoked"}.get(h.kind, h.kind)) }}<div class="muted">{{ h.note }}</div></td><td>{% if h.new_type == 'lifetime' %}{{ t("Never") }}{% else %}{{ m.when(h.new_expires_at) }}{% endif %}</td></tr>
     {% else %}<tr><td colspan="3" class="dim">{{ t("No entries yet.") }}</td></tr>{% endfor %}</tbody></table></div></section>
   <section class="card"><h2>{{ t("Sign-ins") }}</h2>
     <div class="table-wrap"><table><thead><tr><th>{{ t("When") }}</th><th>{{ t("Result") }}</th><th>{{ t("Address") }}</th></tr></thead><tbody>

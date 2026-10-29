@@ -447,7 +447,8 @@ def admin_set_grant_status(db: Session, actor: User, user: User, ent: str, statu
 
 
 def grant_history(db: Session, grant: FeatureGrant) -> list[dict]:
-    return [{"at": e.at, "kind": e.kind, "entitlement": grant.entitlement, "old_type": e.old_type,
+    return [{"at": e.at, "kind": e.kind, "entitlement": grant.entitlement,
+             "entitlement_name": entitlements.name(grant.entitlement), "old_type": e.old_type,
              "new_type": e.new_type, "old_expires_at": e.old_expires_at, "new_expires_at": e.new_expires_at,
              "note": e.note}
             for e in db.scalars(select(FeatureGrantEvent).where(FeatureGrantEvent.grant_id == grant.id)

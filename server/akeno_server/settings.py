@@ -24,6 +24,8 @@ DEFAULTS: dict[str, tuple[Any, type, float | None, float | None]] = {
     "min_client_version": ("", str, None, 40),
     "latest_client_version": ("", str, None, 40),
     "retention_days": (180, int, 30, 3650),
+    # AKENO VPN licenses (codes and grants) stay off until the use of VPN Gate in AKENO is cleared
+    "vpn_module_licenses": (False, bool, None, None),
 }
 
 VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)")

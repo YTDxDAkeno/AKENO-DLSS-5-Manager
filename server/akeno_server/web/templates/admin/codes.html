@@ -6,9 +6,14 @@
 <section class="card" id="generate"><h2>{{ t("Generate activation codes") }}</h2>
   <form method="post" action="/admin/codes/generate">{{ m.csrf_field() }}
     <div class="inline">
-      <div><label for="f-type">{{ t("License type") }}</label><select id="f-type" name="code_type" required>
-        <option value="trial_24h">{{ t("Trial (24 hours)") }}</option><option value="trial_72h">{{ t("Extended trial (72 hours)") }}</option>
-        <option value="monthly" selected>{{ t("Monthly (30 days)") }}</option><option value="lifetime">{{ t("Lifetime") }}</option></select></div>
+      <div><label for="f-product">{{ t("Product / module") }}</label><select id="f-product" name="entitlement" required>
+        {% for p in products %}<option value="{{ p.id }}" {% if p.locked %}disabled{% endif %}>{{ p.name }}{% if p.locked %} — {{ t("locked") }}{% endif %}</option>{% endfor %}</select></div>
+      <div><label for="f-length">{{ t("Duration") }}</label><select id="f-length" name="length" required>
+        <option value="lifetime">{{ t("Lifetime") }}</option><option value="30" selected>{{ t("30 days") }}</option>
+        <option value="90">{{ t("90 days") }}</option><option value="365">{{ t("365 days") }}</option>
+        <option value="custom">{{ t("Custom (days)") }}</option>
+        <option value="trial_24h">{{ t("Trial (24 hours, AKENO Full only)") }}</option><option value="trial_72h">{{ t("Extended trial (72 hours, AKENO Full only)") }}</option></select></div>
+      <div>{{ m.field("custom_days", t("Custom duration (days)"), "number", "", False, extra='min="1" max="3650"') }}</div>
       <div>{{ m.field("count", t("Number of codes"), "number", "1", True, extra='min="1" max="500"') }}</div>
       <div>{{ m.field("device_allowance", t("PCs allowed"), "number", "", False, extra='min="1" max="50" placeholder="' ~ default_devices ~ '"') }}</div>
       <div>{{ m.field("expires_in_days", t("Unused code expires after (days)"), "number", "", False, extra='min="1" max="3650" placeholder="' ~ t("never") ~ '"') }}</div>
@@ -20,6 +25,8 @@
     </div>
     <div class="row mt"><button class="primary" type="submit">{{ t("Generate") }}</button>
       <span class="muted">{{ t("Codes are shown once, right after generating. AKENO stores only a verifier.") }}</span></div>
+    <p class="muted">{{ t("A module code unlocks only that module (for example AKENO VPN); AKENO Full unlocks every module. The duration starts when the code is redeemed; the expiry of an unused code is separate.") }}</p>
+    {% if vpn_locked %}<p class="muted">{{ t("AKENO VPN codes are locked until a super admin switches on AKENO VPN licenses in Settings (after the use of VPN Gate in AKENO is cleared).") }}</p>{% endif %}
   </form></section>
 {% endif %}
 <section class="card"><h2>{{ t("Codes") }}</h2>
@@ -27,6 +34,8 @@
     <div>{{ m.field("q", t("Search (code, note, batch, reserved for)"), "search", filters.q) }}</div>
     <div><label for="f-status">{{ t("Status") }}</label><select id="f-status" name="status"><option value="">{{ t("All") }}</option>
       {% for s, label in [("available", "Available"), ("reserved", "Reserved"), ("redeemed", "Redeemed"), ("revoked", "Withdrawn"), ("expired", "Expired")] %}<option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ t(label) }}</option>{% endfor %}</select></div>
+    <div><label for="f-ent">{{ t("Product") }}</label><select id="f-ent" name="entitlement"><option value="">{{ t("All") }}</option>
+      {% for p in products %}<option value="{{ p.id }}" {% if filters.entitlement == p.id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}</select></div>
     <div><label for="f-ct">{{ t("Type") }}</label><select id="f-ct" name="code_type"><option value="">{{ t("All") }}</option>
       {% for ty in types %}<option value="{{ ty }}" {% if filters.code_type == ty %}selected{% endif %}>{{ t({"trial_24h": "Trial (24 hours)", "trial_72h": "Extended trial (72 hours)", "monthly": "Monthly (30 days)", "lifetime": "Lifetime"}[ty]) }}</option>{% endfor %}</select></div>
     <div>{{ m.field("batch", t("Batch"), "text", filters.batch) }}</div>
@@ -34,10 +43,10 @@
   </form>
   {% if filters.batch and can('revoke_codes') %}<form method="post" action="/admin/batches/revoke" class="mt-s" data-confirm="{{ t('Withdraw every unused code of this batch?') }}">{{ m.csrf_field() }}<input type="hidden" name="batch" value="{{ filters.batch }}"><button class="small danger" type="submit">{{ t("Withdraw unused codes of this batch") }}</button></form>{% endif %}
   <div class="table-wrap mt"><table>
-    <thead><tr><th>{{ t("Code") }}</th><th>{{ t("Type") }}</th><th>{{ t("Status") }}</th><th>{{ t("Batch / note") }}</th><th>{{ t("Created") }}</th><th>{{ t("Redeemed") }}</th><th></th></tr></thead>
+    <thead><tr><th>{{ t("Code") }}</th><th>{{ t("Product") }}</th><th>{{ t("Status") }}</th><th>{{ t("Batch / note") }}</th><th>{{ t("Created") }}</th><th>{{ t("Redeemed") }}</th><th></th></tr></thead>
     <tbody>{% for c in items %}<tr>
       <td class="mono nowrap">{{ c.display }}{% if c.assigned_email %}<div class="muted">{{ t("for") }} {{ c.assigned_email }}</div>{% endif %}</td>
-      <td>{{ t({"trial_24h": "Trial (24 hours)", "trial_72h": "Extended trial (72 hours)", "monthly": "Monthly (30 days)", "lifetime": "Lifetime"}[c.code_type]) }}{% if c.device_allowance %}<div class="muted">{{ t("{n} PCs", n=c.device_allowance) }}</div>{% endif %}</td>
+      <td><strong>{{ c.product }}</strong><div>{{ m.length(c.length) }}</div>{% if c.device_allowance %}<div class="muted">{{ t("{n} PCs", n=c.device_allowance) }}</div>{% endif %}</td>
       <td><span class="badge {{ {'available': 'ok', 'reserved': 'info', 'redeemed': '', 'revoked': 'fail', 'expired': 'warn'}[c.status] }}">{{ t({"available": "Available", "reserved": "Reserved", "redeemed": "Redeemed", "revoked": "Withdrawn", "expired": "Expired"}[c.status]) }}</span>{% if c.reserved_for %}<div class="muted">{{ c.reserved_for }}</div>{% endif %}{% if c.expires_at and c.status in ('available', 'reserved') %}<div class="muted">{{ t("until") }} {{ m.when(c.expires_at) }}</div>{% endif %}</td>
       <td>{% if c.batch %}<a href="/admin/codes?batch={{ c.batch|urlencode }}">{{ c.batch }}</a>{% endif %}<div class="muted">{{ c.note }}</div></td>
       <td>{{ m.when(c.created_at) }}</td>

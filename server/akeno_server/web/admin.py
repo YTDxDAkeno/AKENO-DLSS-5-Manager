@@ -18,7 +18,7 @@ from akeno_server.api.deps import base_url, client_ip, limit
 from akeno_server.config import get_config
 from akeno_server.db import get_db
 from akeno_server.errors import ApiError
-from akeno_server.licensing import signing
+from akeno_server.licensing import entitlements, signing
 from akeno_server.models import LicenseType, Role
 from akeno_server.web import account as account_pages
 from akeno_server.web import session as web_session
@@ -78,13 +78,42 @@ async def security_confirm(request: Request, db: Session = Depends(get_db)):
 # -- activation codes ------------------------------------------------------------------------------------------------
 @router.get("/codes")
 def codes(request: Request, status: str = "", code_type: str = "", batch: str = "", q: str = "",
-          page: int = Query(1, ge=1), db: Session = Depends(get_db)):
+          entitlement: str = "", page: int = Query(1, ge=1), db: Session = Depends(get_db)):
     actor, _ = _staff(request, db)
-    rows, total = admin.list_codes(db, status, code_type, batch, q, page, 50)
-    base = f"/admin/codes?status={status}&code_type={code_type}&batch={batch}&q={q}&"
+    rows, total = admin.list_codes(db, status, code_type, batch, q, page, 50, entitlement)
+    base = f"/admin/codes?status={status}&code_type={code_type}&batch={batch}&q={q}&entitlement={entitlement}&"
     return _page(request, "admin/codes.html", actor, items=[admin.code_out(db, r) for r in rows], total=total,
-                 page=page, filters={"status": status, "code_type": code_type, "batch": batch, "q": q}, base=base,
-                 types=TYPES, section="codes", default_devices=settings.get(db, "default_device_limit"))
+                 page=page, filters={"status": status, "code_type": code_type, "batch": batch, "q": q,
+                                     "entitlement": entitlement}, base=base,
+                 types=TYPES, section="codes", default_devices=settings.get(db, "default_device_limit"),
+                 products=_products(db), vpn_locked=not settings.get(db, "vpn_module_licenses"))
+
+
+def _products(db: Session) -> list[dict]:
+    """AKENO Full and every offered module; AKENO VPN is locked while its licenses are switched off."""
+    vpn_on = settings.get(db, "vpn_module_licenses")
+    return [{"id": e.id, "name": e.name, "locked": e.id == entitlements.VPN and not vpn_on}
+            for e in entitlements.offered()]
+
+
+LENGTHS = {"lifetime": ("lifetime", None), "30": ("monthly", None), "90": ("monthly", 90),
+           "365": ("monthly", 365), "trial_24h": ("trial_24h", None), "trial_72h": ("trial_72h", None)}
+
+
+def code_length(form) -> tuple[str, int | None]:
+    """The form's duration as (code type, days): lifetime, 30/90/365 days, a custom number of days or a trial.
+    A form of the earlier admin page (``code_type`` only) keeps working."""
+    length = str(form.get("length", "")).strip()
+    if not length:
+        return str(form.get("code_type", "")), None
+    if length == "custom":
+        days = str(form.get("custom_days", "")).strip()
+        if not days.isdigit():
+            raise ValueError("custom duration")
+        return "monthly", int(days)
+    if length not in LENGTHS:
+        raise ValueError("duration")
+    return LENGTHS[length]
 
 
 @router.post("/codes/generate")
@@ -98,17 +127,21 @@ async def generate(request: Request, db: Session = Depends(get_db)):
         return int(value) if value.isdigit() else None
     try:
         limit(request, "admin_codes", str(actor.id))
+        code_type, days = code_length(form)
         batch, items = admin.generate_codes(
-            db, actor, str(form.get("code_type", "")), number("count") or 1, number("device_allowance"),
+            db, actor, code_type, number("count") or 1, number("device_allowance"),
             number("expires_in_days"), str(form.get("note", "")), str(form.get("batch", "")),
-            str(form.get("assigned_email", "")).strip() or None, client_ip(request))
+            str(form.get("assigned_email", "")).strip() or None, client_ip(request),
+            entitlement=str(form.get("entitlement", "")).strip() or entitlements.SUITE, duration_days=days)
         db.commit()
     except (ApiError, ValueError) as exc:
         db.rollback()
         message = exc.message if isinstance(exc, ApiError) else "Choose a license type."
         return redirect(request, "/admin/codes", message, "error")
+    first = items[0][1]
     return _page(request, "admin/codes_generated.html", actor, batch=batch, codes=[p for p, _ in items],
-                 csv=admin.codes_csv(items), code_type=items[0][1].code_type, section="codes")
+                 csv=admin.codes_csv(items), code_type=first.code_type, section="codes",
+                 product=entitlements.name(first.entitlement), length=admin.code_length(first))
 
 
 @router.post("/codes/{code_id}/{action}")
@@ -189,7 +222,10 @@ def user_detail(user_id: str, request: Request, db: Session = Depends(get_db)):
     if admin.can(actor, "audit"):
         rows, _ = admin.list_audit(db, actor, q=str(target.id), page=1, per_page=30)
         audit_rows = [admin.audit_out(e) for e in rows]
-    return _page(request, "admin/user.html", actor, target=target, detail=admin.user_detail(db, target),
+    detail = admin.user_detail(db, target)
+    owned = {e["entitlement"]: e for e in detail["access"]["entitlements"]}
+    modules = [p | {"entry": owned.get(p["id"])} for p in _products(db) if p["id"] != entitlements.SUITE]
+    return _page(request, "admin/user.html", actor, target=target, detail=detail, modules=modules,
                  types=TYPES, audit=audit_rows, section="users")
 
 
@@ -218,6 +254,18 @@ async def user_action(user_id: str, request: Request, db: Session = Depends(get_
         elif action in ("license_disable", "license_enable", "license_revoke"):
             admin.license_status(db, actor, target, {"license_disable": "disabled", "license_enable": "active",
                                                      "license_revoke": "revoked"}[action], note, ip)
+        elif action == "module_grant":
+            ent = str(form.get("entitlement", ""))
+            length = str(form.get("length", "lifetime"))
+            days = None if length == "lifetime" else int(str(form.get("days", "")) or length)
+            admin.set_grant(db, actor, target, ent, days, note, ip)
+        elif action == "module_extend":
+            admin.extend_grant(db, actor, target, str(form.get("entitlement", "")),
+                               int(str(form.get("days", "0")) or 0), note, ip)
+        elif action in ("module_disable", "module_enable", "module_revoke"):
+            admin.grant_status(db, actor, target, str(form.get("entitlement", "")),
+                               {"module_disable": "disabled", "module_enable": "active",
+                                "module_revoke": "revoked"}[action], note, ip)
         elif action in ("disable", "enable"):
             admin.patch_user(db, actor, target, ip, status="disabled" if action == "disable" else "active",
                              disabled_reason=note)
@@ -311,6 +359,7 @@ SETTING_LABELS = {
     "min_client_version": "Minimum app version (empty: any)",
     "latest_client_version": "Latest app version (shown in the app)",
     "retention_days": "Keep validations, sign-in events and old sessions for (days)",
+    "vpn_module_licenses": "AKENO VPN licenses can be issued (only after the use of VPN Gate is cleared; super admin)",
 }
 
 

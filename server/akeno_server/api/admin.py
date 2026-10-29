@@ -24,7 +24,8 @@ def generate(body: schemas.GenerateCodesIn, request: Request, caller: Caller = D
     limit(request, "admin_codes", str(caller.user.id))
     batch, items = admin.generate_codes(db, caller.user, body.code_type, body.count, body.device_allowance,
                                         body.expires_in_days, body.note, body.batch, body.assigned_email,
-                                        client_ip(request))
+                                        client_ip(request), entitlement=body.entitlement,
+                                        duration_days=body.duration_days)
     out = {"batch": batch, "codes": [plain for plain, _ in items], "items": [admin.code_out(db, r) for _, r in items]}
     db.commit()
     return out
@@ -32,9 +33,10 @@ def generate(body: schemas.GenerateCodesIn, request: Request, caller: Caller = D
 
 @router.get("/codes", response_model=schemas.Page)
 def codes(status: str = "", code_type: str = "", batch: str = "", q: str = "", page: int = Query(1, ge=1),
-          per_page: int = Query(50, ge=1, le=200), caller: Caller = Depends(support), db: Session = Depends(get_db)):
+          per_page: int = Query(50, ge=1, le=200), entitlement: str = "", caller: Caller = Depends(support),
+          db: Session = Depends(get_db)):
     admin.require(caller.user, "view")
-    rows, total = admin.list_codes(db, status, code_type, batch, q, page, per_page)
+    rows, total = admin.list_codes(db, status, code_type, batch, q, page, per_page, entitlement)
     return page_out([admin.code_out(db, r) for r in rows], page, per_page, total)
 
 
@@ -123,6 +125,34 @@ def license_status(user_id: str, body: schemas.LicenseStatusIn, request: Request
                    db: Session = Depends(get_db)):
     target = admin.get_user(db, user_id)
     admin.license_status(db, caller.user, target, body.status, body.note, client_ip(request))
+    db.commit()
+    return admin.user_summary(db, target)
+
+
+@router.post("/users/{user_id}/grants")
+def set_grant(user_id: str, body: schemas.GrantIn, request: Request, caller: Caller = Depends(support),
+              db: Session = Depends(get_db)):
+    target = admin.get_user(db, user_id)
+    admin.set_grant(db, caller.user, target, body.entitlement, body.days, body.note, client_ip(request),
+                    body.device_limit)
+    db.commit()
+    return admin.user_summary(db, target)
+
+
+@router.post("/users/{user_id}/grants/extend")
+def extend_grant(user_id: str, body: schemas.GrantExtendIn, request: Request, caller: Caller = Depends(support),
+                 db: Session = Depends(get_db)):
+    target = admin.get_user(db, user_id)
+    admin.extend_grant(db, caller.user, target, body.entitlement, body.days, body.note, client_ip(request))
+    db.commit()
+    return admin.user_summary(db, target)
+
+
+@router.post("/users/{user_id}/grants/status")
+def grant_status(user_id: str, body: schemas.GrantStatusIn, request: Request, caller: Caller = Depends(support),
+                 db: Session = Depends(get_db)):
+    target = admin.get_user(db, user_id)
+    admin.grant_status(db, caller.user, target, body.entitlement, body.status, body.note, client_ip(request))
     db.commit()
     return admin.user_summary(db, target)
 

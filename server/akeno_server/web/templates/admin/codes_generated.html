@@ -5,6 +5,7 @@
 <div class="flash warn" role="status">{{ t("Copy or download the codes now. They are not shown again: the server keeps only a verifier.") }}</div>
 <section class="card">
   <h2>{{ t("Batch") }} <span class="mono">{{ batch }}</span> · {{ codes|length }}</h2>
+  <p><strong>{{ product }}</strong> · {{ m.length(length) }}</p>
   <div id="codes" class="codes">{% for c in codes %}{{ c }}
 {% endfor %}</div>
   <textarea id="codes-csv" hidden>{{ csv }}</textarea>
