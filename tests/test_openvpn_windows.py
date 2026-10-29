@@ -53,3 +53,18 @@ def test_state_comes_from_openvpns_own_log(tmp_path, log, code, state):
     process.log.write_text(log)
     process.process = Proc(code)
     assert process.state() == state
+
+
+def test_a_slow_adapter_query_is_reported_never_taken_for_a_missing_adapter(monkeypatch):
+    import subprocess
+    from akeno.network import lan_windows
+    from akeno.network import openvpn_windows as ow
+    from akeno.network.windows import NativeUnavailable
+
+    def slow(script, timeout=60):
+        assert timeout >= 60                                  # the first start after an MSI install can be slow
+        raise subprocess.TimeoutExpired('powershell.exe', timeout)
+    monkeypatch.setattr(lan_windows, 'powershell', slow)
+    with pytest.raises(NativeUnavailable) as exc:
+        ow._adapter_present()
+    assert 'did not answer' in str(exc.value)

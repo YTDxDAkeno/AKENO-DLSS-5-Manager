@@ -82,11 +82,20 @@ def trusted_executable(name: str = 'openvpn.exe', *, online: bool = False) -> Pa
     return path
 
 
+ADAPTER_QUERY_SECONDS = 60      # the first PowerShell start right after an MSI installation can take over 15 s
+
+
 def _adapter_present() -> bool:
+    """Whether AKENO's TAP adapter exists. A query that Windows does not answer in time raises NativeUnavailable
+    (never "missing": that would make the installation create a second adapter)."""
     from akeno.network.lan_windows import powershell
     try:
         out = powershell(f"@(Get-NetAdapter -Name '{ADAPTER}' -IncludeHidden -ErrorAction SilentlyContinue | "
-                         "Where-Object InterfaceDescription -like 'TAP-Windows Adapter V9*').Count", timeout=15)
+                         "Where-Object InterfaceDescription -like 'TAP-Windows Adapter V9*').Count",
+                         timeout=ADAPTER_QUERY_SECONDS)
+    except subprocess.TimeoutExpired as exc:
+        raise NativeUnavailable('Windows did not answer the network adapter query in time. Try again in a '
+                                'moment.') from exc
     except (NativeUnavailable, OSError, ValueError):
         return False
     return out.strip() == '1'
@@ -103,7 +112,11 @@ def status() -> dict:
     version = _version(exe)
     if version is None or version < MIN_VERSION:
         return {'state': 'outdated', 'reason': 'The installed OpenVPN is too old. Install the current version.'}
-    if not _adapter_present():
+    try:
+        present = _adapter_present()
+    except NativeUnavailable as exc:
+        return {'state': 'incomplete', 'reason': str(exc)}
+    if not present:
         return {'state': 'incomplete', 'reason': 'The AKENO VPN adapter is missing. Repair the VPN component.'}
     return {'state': 'ready', 'reason': None, 'version': '.'.join(map(str, version))}
 
