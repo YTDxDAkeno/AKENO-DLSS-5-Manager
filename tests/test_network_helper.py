@@ -8,6 +8,7 @@ import pytest
 
 from akeno.components.service import NetworkModules
 from akeno.network import helper as h
+from akeno.network.profiles import ProfileError
 from akeno.network.windows import NativeUnavailable
 
 
@@ -224,3 +225,49 @@ def test_helper_never_raises_even_if_the_result_cannot_be_saved(helper,monkeypat
         def save(self,value):raise OSError('read-only store')
     monkeypatch.setattr(h,'request_store',lambda ident:Broken())
     assert h.execute('a'*32)==1 and not helper.events
+
+
+@pytest.mark.parametrize('body',[{'action':'free_vpn_session','country':'US','consent':0,'created':time.time()},
+    {'action':'free_vpn_session','country':'us','consent':1,'created':time.time()},
+    {'action':'free_vpn_session','country':'US','consent':1,'created':time.time()-600},
+    {'action':'free_vpn_session','country':'US','consent':1,'created':time.time(),'server':'1.2.3.4'},
+    {'action':'install_vpn_component','consent':False,'created':time.time()}])
+def test_free_vpn_requests_need_country_consent_and_freshness(helper,body):
+    NetworkModules().set_enabled('vpn',True)
+    code,reply=request(body)
+    assert code==1 and 'error' in reply and 'native' not in helper.events
+
+
+def test_free_vpn_refused_while_lan_play_runs_and_lan_refused_while_free_vpn_runs(helper):
+    NetworkModules().set_enabled('vpn',True)
+    h.lan_stores()[0].save({'phase':'active'})
+    code,reply=request({'action':'free_vpn_session','country':'US','consent':1,'created':time.time()})
+    assert code==1 and 'LAN Play' in reply['error']
+    h.lan_stores()[0].save({'phase':'disconnected'})
+    h.free_vpn_stores()[0].save({'phase':'connected'})
+    with pytest.raises(ProfileError):
+        h._no_vpn()
+    with pytest.raises(ProfileError):
+        h._no_free_vpn()
+
+
+def test_free_vpn_requires_an_active_license_but_recovery_does_not(helper,monkeypatch):
+    NetworkModules().set_enabled('vpn',True)
+    helper.license.unlocked=False
+    code,reply=request({'action':'free_vpn_session','country':'US','consent':1,'created':time.time()})
+    assert code==1 and 'active AKENO license' in reply['error']
+    import akeno.network.free_vpn as free
+    monkeypatch.setattr(free,'_kill_akeno_openvpn',lambda:True)
+    h.free_vpn_stores()[0].save({'phase':'connected'})
+    code,reply=request({'action':'free_vpn_recover','created':time.time()})
+    assert code==0 and reply['result']['state']=='stopped' and h.free_vpn_stores()[0].load()=={'phase':'disconnected'}
+
+
+def test_gui_requests_only_reach_the_running_session(helper):
+    with pytest.raises(ProfileError):
+        h.free_vpn_request(stop=True)
+    h.free_vpn_stores()[1].save({'state':'connected','session_id':'d'*32})
+    h.free_vpn_request(switch=True)
+    h.free_vpn_request(switch=True)
+    h.free_vpn_request(stop=True)
+    assert h.free_vpn_stores()[2].load()=={'session_id':'d'*32,'switch':2,'stop':True}

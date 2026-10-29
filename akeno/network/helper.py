@@ -30,6 +30,11 @@ def vpn_stores():
     return SecureStore(base/'managed-vpn-journal'),SecureStore(base/'managed-vpn-status'),SecureStore(base/'managed-vpn-stop')
 
 
+def free_vpn_stores():
+    base=sub('network')
+    return SecureStore(base/'free-vpn-journal'),SecureStore(base/'free-vpn-status'),SecureStore(base/'free-vpn-control')
+
+
 def _fresh(request, fields):
     if not isinstance(request,dict) or set(request)!=fields or type(request.get('created')) not in (int,float) \
             or not 0<=time.time()-request['created']<=120:
@@ -47,8 +52,66 @@ def _no_lan():
 
 
 def _no_vpn():
-    if _active(SecureStore(sub('network')/'tunnel')) or _active(vpn_stores()[0]):
+    if _active(SecureStore(sub('network')/'tunnel')) or _active(vpn_stores()[0]) or _active(free_vpn_stores()[0]):
         raise ProfileError('Disconnect or recover the VPN before starting LAN Play.')
+
+
+def _no_free_vpn():
+    if _active(free_vpn_stores()[0]):
+        raise ProfileError('Disconnect or recover the free VPN first. Only one VPN connection runs at a time.')
+
+
+def free_vpn(store,request):
+    """One free VPN session (VPN Gate over OpenVPN), its recovery, or the consented component installation."""
+    from akeno.network import free_vpn as free
+    journal,status,control=free_vpn_stores()
+    try:
+        action=request.get('action')
+        if action=='install_vpn_component':
+            _fresh(request,{'action','consent','created'})
+            if request['consent'] is not True:
+                raise ProfileError('The network request is invalid or expired.')
+            from akeno.network.openvpn_windows import install
+            store.save({'done':True,'result':install(consent=True)})
+            return 0
+        if action=='free_vpn_recover':
+            _fresh(request,{'action','created'})
+            store.save({'done':True,'result':free.recover(journal,status)})
+            return 0
+        if action!='free_vpn_session':
+            raise ProfileError('Unknown free VPN operation.')
+        _fresh(request,{'action','country','consent','created'})
+        if not isinstance(request['country'],str) or not re.fullmatch('[A-Z]{2}',request['country']) or \
+                request['consent']!=free.CONSENT_VERSION:
+            raise ProfileError('Select a country and accept the free VPN notice first.')
+        licenses=_new_connection('vpn')
+        _no_lan()
+        if _active(SecureStore(sub('network')/'tunnel')) or _active(vpn_stores()[0]):
+            raise ProfileError('Disconnect or recover the other VPN connection first.')
+        if _active(journal):
+            free.recover(journal,status)                  # a previous session did not end cleanly
+            if _active(journal):
+                raise ProfileError('Recover the previous free VPN connection first.')
+        from akeno.network.openvpn_windows import OpenVPNProcess,kill_with_this_process,status as component
+        if component()['state']!='ready':
+            raise ProfileError('Install the VPN component (official OpenVPN) first.')
+        kill_with_this_process()
+        from akeno.network.vpngate import VPNGateProvider
+        from akeno.components.service import NetworkModules
+        session=free.FreeVPNSession(VPNGateProvider(sub('network')/'vpngate-cache.json'),OpenVPNProcess,
+                                    journal,status,control,
+                                    busy=lambda:_active(lan_stores()[0]) or not NetworkModules().enabled('vpn')
+                                    or not licenses.view().unlocked)
+        store.save({'done':True,'result':{'state':'starting','session_id':session.session_id}})
+        session.run(request['country'])
+        return 0
+    except (ProfileError,NativeUnavailable,ValueError) as exc:
+        if request.get('action')=='free_vpn_session':
+            status.save({'state':'failed','error':str(exc)[:300],'updated':time.time()})
+        store.save({'done':True,'error':str(exc)[:300]})
+    except Exception:
+        store.save({'done':True,'error':'The free VPN stopped unexpectedly; recover before retrying.'})
+    return 1
 
 
 def _new_connection(module):
@@ -156,7 +219,7 @@ def vpn(store,request):
                     not isinstance(request['session_id'],str) or not re.fullmatch('[0-9a-f]{32}',request['session_id']):
                 raise ProfileError('Invalid VPN country or session identity.')
             licenses=_new_connection('vpn')
-            _no_lan()
+            _no_lan();_no_free_vpn()
             if _active(journal) or _active(SecureStore(sub('network')/'tunnel')):
                 raise ProfileError('Disconnect or recover the previous VPN session first.')
         elif action=='vpn_recover':
@@ -226,6 +289,8 @@ def _execute(store,request):
             return lan(store,request)
         if request.get('action') in ('vpn_session','vpn_recover'):
             return vpn(store,request)
+        if request.get('action') in ('free_vpn_session','free_vpn_recover','install_vpn_component'):
+            return free_vpn(store,request)
         if request.get('action') == 'install_components':
             _fresh(request,{'action','consent','created'})
             if request['consent'] is not True:
@@ -242,7 +307,7 @@ def _execute(store,request):
             raise ProfileError('The network request is invalid or expired.')
         action=request['action']
         if action=='connect':
-            _new_connection('vpn');_no_lan()
+            _new_connection('vpn');_no_lan();_no_free_vpn()
             if _active(vpn_stores()[0]):
                 raise ProfileError('Disconnect or recover the managed VPN session first.')
             if _active(SecureStore(sub('network')/'tunnel')):
@@ -299,18 +364,43 @@ def vpn_status():
     return vpn_stores()[1].load()
 
 
+def free_vpn_status():
+    return free_vpn_stores()[1].load()
+
+
+def free_vpn_request(**values):
+    """Disconnect (stop=True) or switch server (switch=True) for the running free VPN session. No elevation."""
+    _,status,control=free_vpn_stores()
+    session_id=status.load().get('session_id')
+    if not re.fullmatch('[0-9a-f]{32}',str(session_id)):
+        raise ProfileError('No free VPN connection is running. Use Recover if the page still shows one.')
+    current=control.load() if control.load().get('session_id')==session_id else {'session_id':session_id}
+    if values.get('stop'):
+        current['stop']=True
+    if values.get('switch'):
+        current['switch']=int(current.get('switch',0))+1
+    control.save({**current,'session_id':session_id})
+
+
 def invoke(action,profile_id=None,*,consent=False):
     """Only explicit UI actions call this. Administrator rights are scoped to one helper process."""
     if sys.platform!='win32' or not getattr(sys,'frozen',False):
         raise NativeUnavailable('Network elevation is available in the built Windows application only.')
     if action not in ('connect','disconnect','status','exit_ip','lan_session','lan_recover','install_components',
-                      'vpn_session','vpn_recover'):
+                      'vpn_session','vpn_recover','free_vpn_session','free_vpn_recover','install_vpn_component'):
         raise ProfileError('Unknown network operation.')
     ident=uuid.uuid4().hex;store=request_store(ident)
-    if action == 'install_components':
+    if action in ('install_components','install_vpn_component'):
         if consent is not True:
             raise ProfileError('Explicit consent is required to install the network components.')
         store.save({'action':action,'consent':True,'created':time.time()})
+    elif action=='free_vpn_session':
+        from akeno.network.free_vpn import CONSENT_VERSION
+        if not isinstance(profile_id,str) or not re.fullmatch('[A-Z]{2}',profile_id) or consent!=CONSENT_VERSION:
+            raise ProfileError('Select a country and accept the free VPN notice first.')
+        store.save({'action':action,'country':profile_id,'consent':CONSENT_VERSION,'created':time.time()})
+    elif action=='free_vpn_recover':
+        store.save({'action':action,'created':time.time()})
     elif action=='vpn_session':
         if not isinstance(profile_id,str) or not re.fullmatch('[A-Z]{2}',profile_id):
             raise ProfileError('Select an available VPN country.')
@@ -339,7 +429,7 @@ def invoke(action,profile_id=None,*,consent=False):
     try:
         if not shell.ShellExecuteExW(ctypes.byref(info)):
             raise NativeUnavailable('Network elevation was declined or could not start.')
-        if action in ('lan_session','vpn_session'):
+        if action in ('lan_session','vpn_session','free_vpn_session'):
             # The session keeps running in its own elevated process; wait only until it has accepted the request.
             deadline=time.monotonic()+60
             while time.monotonic()<deadline:
@@ -351,7 +441,7 @@ def invoke(action,profile_id=None,*,consent=False):
             result=store.load()
             if result.get('error'):raise NativeUnavailable(result['error'])
             raise NativeUnavailable('The network session did not start. Recover before retrying.')
-        timeout=300000 if action=='install_components' else 90000
+        timeout=300000 if action in ('install_components','install_vpn_component') else 90000
         if kernel.WaitForSingleObject(info.hProcess,timeout)!=0:
             raise NativeUnavailable('The network helper did not finish. Recover the tunnel before retrying.')
         result=store.load()
@@ -360,4 +450,4 @@ def invoke(action,profile_id=None,*,consent=False):
         return result['result']
     finally:
         if info.hProcess:kernel.CloseHandle(info.hProcess)
-        if action not in ('lan_session','vpn_session') or store.load().get('done'):store.clear()
+        if action not in ('lan_session','vpn_session','free_vpn_session') or store.load().get('done'):store.clear()
