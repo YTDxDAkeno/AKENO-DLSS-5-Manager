@@ -63,6 +63,15 @@ the owner's decision, ideally written permission from the VPN Gate project. See 
 | 4 | geolocation services disagree for some addresses (runner: ifconfig.co "GB", others "US") | "connected" needs ≥ 2 confirmations and more confirmations than contradictions |
 | 6 | the VPN Gate list itself timed out once (30 s read timeout) | one quiet retry, then an honest "list not reachable" |
 
+## Phase 5–7 — real end-to-end on Windows (production code, `tools/free_vpn_windows_e2e.py`)
+
+| Run | Commit | Result | Notes |
+|---|---|---|---|
+| [40813800435](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40813800435) | earlier | 22/26 | `0.0.0.0/1`, `128.0.0.0/1` left on `AKENO-FreeVPN` after a forced OpenVPN end; `OpenVPNServiceInteractive` installed although only `OpenVPN,Drivers,Drivers.TAPWindows6` were selected |
+| [40814425437](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40814425437) | `a81586d` | **26/26** | route cleanup after every end and in recovery; check and consent text name the Interactive Service honestly. JP via `60.141.30.170` (normal IP `52.159.244.74`), confirmed JP by country.is, ifconfig.co, ipinfo; switch → `126.15.240.234`; outage → `118.106.121.219`; TR unavailable; KR servers labelled US rejected twice |
+
+Final CI on the last code commit: see `docs/AKENO_FREE_VPN_FINAL_REPORT.md`.
+
 ## Log
 
 - `openvpn_profile.py`: untrusted profile → validated data → AKENO's own configuration (48 tests).
