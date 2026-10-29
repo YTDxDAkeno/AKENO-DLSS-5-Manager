@@ -100,7 +100,7 @@ def test_lifetime_works_offline_on_next_start(server, home):
     m = client(server)
     m.create_account("player@example.test", PASSWORD)
     m.redeem(make_codes("lifetime")[0])
-    assert m.state.get("certificate")
+    assert m.state.get("access_certificate")
     later = client(server, api=DownApi)                     # a new start without network, years later
     later.clock.state["high_water"] = time.time()
     view = later.view()
@@ -199,7 +199,7 @@ def test_disabled_account_locks_and_drops_offline_license(server, home):
     with pytest.raises(ApiError):
         m.validate()
     view = m.view()
-    assert view.status is Status.DISABLED and not view.unlocked and not m.state.get("certificate")
+    assert view.status is Status.DISABLED and not view.unlocked and not m.state.get("access_certificate") and not m.state.get("certificate")
 
 
 def test_admin_reset_devices_reregisters(server, home):
@@ -212,7 +212,7 @@ def test_admin_reset_devices_reregisters(server, home):
         admin.reset_devices(db, auth.user_by_email(db, "boss@example.test"),
                             auth.user_by_email(db, "player@example.test"))
     view = m.validate()
-    assert view.unlocked and m.state["device_id"] == first and m.state.get("certificate")
+    assert view.unlocked and m.state["device_id"] == first and m.state.get("access_certificate")
 
 
 def test_device_limit_and_removing_a_pc(server, home, monkeypatch, tmp_path):
@@ -263,6 +263,7 @@ def test_attacker_vps_cannot_issue_an_accepted_license(server, home):
     with pytest.raises(ApiError):
         m.redeem(make_codes("lifetime")[0])                # a "lifetime" code of the attacker's server
     assert not m.view().unlocked and not m.state.get("certificate") and not m.state.get("lease")
+    assert not m.state.get("access_certificate") and not m.state.get("access_lease")
     assert set(m.trusted_keys()) == set(official_keys), "the attacker's keys were never learned"
     later = client(server, keys=official_keys, api=DownApi)
     assert not later.view().unlocked and later.view().status is not Status.LIFETIME_OFFLINE
@@ -283,7 +284,7 @@ def test_sign_out_forgets_license_but_nothing_else(server, home):
     m.create_account("player@example.test", PASSWORD)
     m.redeem(make_codes("lifetime")[0])
     view = m.sign_out()
-    assert view.status is Status.NOT_LOGGED_IN and not m.state.get("certificate")
+    assert view.status is Status.NOT_LOGGED_IN and not m.state.get("certificate") and not m.state.get("access_certificate")
     assert (home / "settings-marker").read_text() == "keep me"
 
 
