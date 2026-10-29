@@ -95,8 +95,9 @@ class LicensePage(_LicensePageBase):
         self.card.body.addLayout(actions)
         row.add(self.card, 3)
         redeem = Card(t("Extend or upgrade"), "check")
-        redeem.body.addWidget(label(t("A code adds its time to your license from the moment you redeem it; a lifetime "
-                                      "code makes the license permanent. One license unlocks every AKENO module."),
+        redeem.body.addWidget(label(t("A code adds its time from the moment you redeem it; a lifetime code makes it "
+                                      "permanent. AKENO Full unlocks every module; a module code (for example AKENO "
+                                      "VPN) unlocks only that module and keeps everything else as it is."),
                                     "dim", shrink=True))
         self.code = CodeEdit()
         self.code.submitted.connect(lambda _: self._redeem())

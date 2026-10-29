@@ -4971,5 +4971,10 @@
   "DLSS Manager": "DLSS Manager",
   "Performance Tools": "Performance-Tools",
   "Gaming Tools": "Gaming-Tools",
-  "Your AKENO license does not include this module. Disconnect and recovery remain available.": "Deine AKENO-Lizenz enthält dieses Modul nicht. Trennen und Wiederherstellen bleiben möglich."
+  "Your AKENO license does not include this module. Disconnect and recovery remain available.": "Deine AKENO-Lizenz enthält dieses Modul nicht. Trennen und Wiederherstellen bleiben möglich.",
+  "A code adds its time from the moment you redeem it; a lifetime code makes it permanent. AKENO Full unlocks every module; a module code (for example AKENO VPN) unlocks only that module and keeps everything else as it is.": "Ein Code fügt ab dem Einlösen seine Laufzeit hinzu; ein Lifetime-Code macht sie dauerhaft. AKENO Full schaltet alle Module frei; ein Modul-Code (zum Beispiel AKENO VPN) schaltet nur dieses Modul frei und lässt alles andere, wie es ist.",
+  "Send your internet traffic through a free VPN in a country you choose, with one click (VPN Gate community servers), or through your own WireGuard server. It does not need LAN Play.": "Leite deinen Internetverkehr mit einem Klick über ein kostenloses VPN in einem Land deiner Wahl (Community-Server von VPN Gate) oder über deinen eigenen WireGuard-Server. LAN Play wird dafür nicht benötigt.",
+  "Activated": "Aktiviert",
+  "Last verified": "Zuletzt geprüft",
+  "Works offline": "Funktioniert offline"
 }

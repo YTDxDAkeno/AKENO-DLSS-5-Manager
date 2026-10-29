@@ -840,8 +840,8 @@ class AkenoNetworkPage(QWidget):
         content.addWidget(self.expert_vpn)
         lay.addWidget(self.vpn_content)
         self.vpn_off = self._off_card('vpn', t('VPN'), 'shield', t(
-            'Send your internet traffic through a WireGuard server you choose, for example your own. Needs the '
-            'official WireGuard for Windows; it does not need LAN Play.'))
+            'Send your internet traffic through a free VPN in a country you choose, with one click (VPN Gate '
+            'community servers), or through your own WireGuard server. It does not need LAN Play.'))
         lay.addWidget(self.vpn_off)
         self.vpn_locked = self._locked_card(t('VPN'), 'shield')
         lay.addWidget(self.vpn_locked)
