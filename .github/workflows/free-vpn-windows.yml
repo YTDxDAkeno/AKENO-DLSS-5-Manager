@@ -1,0 +1,39 @@
+name: Free VPN on Windows (VPN Gate over OpenVPN)
+# AKENO's production free-VPN code on a disposable Windows runner against the public VPN Gate: consented install of
+# the official OpenVPN (pinned SHA-256, Authenticode), the live server list, real connections with verified exit IP and
+# country, DNS/IPv6 checks, server switch, outage, OpenVPN and helper crashes, recovery and a wrong-country rejection.
+# The runner's traffic goes through volunteer VPN Gate servers for a few minutes; no secrets are involved.
+on:
+  push:
+    branches: ['claude/akeno-free-vpn']
+    paths: ['akeno/network/**', 'tools/free_vpn_windows_e2e.py', '.github/workflows/free-vpn-windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: free-vpn-windows-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  free-vpn:
+    runs-on: windows-2022
+    timeout-minutes: 50
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: Free VPN end to end (production code, real VPN Gate servers)
+        run: python tools/free_vpn_windows_e2e.py --report free-vpn-report.json --work "$env:RUNNER_TEMP\free-vpn" --countries JP,KR,US
+      - name: OpenVPN log of the last connection on failure
+        if: failure()
+        run: |
+          Get-ChildItem "$env:ProgramFiles\.AkenoFreeVPN-*\openvpn.log" -ErrorAction SilentlyContinue | ForEach-Object { Get-Content $_ -Tail 80 }
+          Get-NetRoute -AddressFamily IPv4 | Where-Object DestinationPrefix -in '0.0.0.0/0','0.0.0.0/1','128.0.0.0/1' | Format-Table DestinationPrefix, InterfaceAlias, NextHop
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: free-vpn-windows-evidence
+          path: free-vpn-report.json
