@@ -198,11 +198,15 @@ def connect(exe):
             conf = work / f'{tried}.ovpn'
             pinned = True
             name = 'opengw.net' if pinned else None
-            conf.write_text(openvpn_profile.render(safe, server_name=name))
+            variant = 'full' if tried % 2 == 1 else 'no-ipv6-block'
+            text_conf = openvpn_profile.render(safe, server_name=name).replace('mute 20', 'verb 4')
+            if variant == 'no-ipv6-block':
+                text_conf = text_conf.replace('redirect-gateway def1 ipv6', 'redirect-gateway def1').replace('block-ipv6\n', '')
+            conf.write_text(text_conf)
             start = time.monotonic()
             process = subprocess.Popen([str(exe), '--config', str(conf.resolve()), '--log', str(log.resolve())])
             state = 'timeout'
-            while time.monotonic() - start < 75:
+            while time.monotonic() - start < 50:
                 text = log.read_text(errors='replace') if log.exists() else ''
                 if 'Initialization Sequence Completed' in text:
                     state = 'connected'
@@ -212,7 +216,7 @@ def connect(exe):
                     break
                 time.sleep(1)
             took = round(time.monotonic() - start, 1)
-            after = public_ip() if state == 'connected' else None
+            after = public_ip()
             route = subprocess.run(['powershell', '-NoProfile', '-Command',
                                     "Get-NetRoute -AddressFamily IPv4 | Where-Object DestinationPrefix -in '0.0.0.0/1','128.0.0.0/1','0.0.0.0/0' | ForEach-Object { $_.DestinationPrefix + ' ' + $_.InterfaceAlias }"],
                                    capture_output=True, text=True).stdout.strip().replace('\n', '; ')
@@ -222,14 +226,15 @@ def connect(exe):
             except subprocess.TimeoutExpired:
                 process.kill()
             text = log.read_text(errors='replace') if log.exists() else ''
-            after_push = text.split('PUSH_REPLY', 1)[1].splitlines()[1:60] if 'PUSH_REPLY' in text else []
+            after_push = [l for l in text.split('PUSH_REPLY', 1)[1].splitlines()[1:400]
+                          if not re.search(r'UDPv4|TCPv4|read|write|\[R\]|\[W\]|Data Channel|ACK', l)][:90] if 'PUSH_REPLY' in text else []
             interesting = [l[25:200] for l in text.splitlines() if re.search(
                 r'error|fail|warn|cipher|tls|peer|ncp|initializ|PUSH|route|dns|ipv6|wintun|block|verify|certificate',
                 l, re.I)][-30:]
             dns = subprocess.run(['powershell', '-NoProfile', '-Command',
                                   "Get-DnsClientServerAddress -AddressFamily IPv4 | Where-Object ServerAddresses | ForEach-Object { $_.InterfaceAlias + '=' + ($_.ServerAddresses -join ',') }"],
                                  capture_output=True, text=True).stdout.strip().replace('\n', '; ') if state == 'connected' else ''
-            print(f'=== {country} {row["IP"]} {safe.proto}:{safe.port} host={row["HostName"]} pinned={name} '
+            print(f'=== {country} {row["IP"]} {safe.proto}:{safe.port} host={row["HostName"]} pinned={name} variant={variant} '
                   f'catalog-ping={row["Ping"]} -> {state} in {took}s')
             print('    dns while up:', dns)
             print('    routes while up:', route)
