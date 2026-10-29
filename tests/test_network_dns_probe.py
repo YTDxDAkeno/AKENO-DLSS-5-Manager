@@ -94,3 +94,17 @@ def test_capture_result_reports_drop_proofs_and_whether_the_tunnel_was_recorded(
     assert result['dns_verified'] is True and result['kernel_drop_proofs']==2 and result['denied_paths']==6
     assert result['capture_recorded_tunnel'] is recorded
     assert ('capture_shape' in result)==(not recorded)
+
+
+def test_free_vpn_adapter_measures_classic_dns_paths_only(monkeypatch):
+    monkeypatch.setattr(probe.sys,'platform','win32')
+    document=native_document()
+    document['routes']=['AKENO-FreeVPN']
+    document['addresses'][0]['InterfaceAlias']='AKENO-FreeVPN'
+    calls=[]
+    def deny(address,**kw):calls.append(kw['port']);return True
+    result=probe.verify('AKENO-FreeVPN',['1.1.1.1'],run=lambda *a,**k:json.dumps(document),
+                        resolve=lambda address:True,deny=deny,encrypted_dns=False)
+    assert result['dns_verified'] is True and 853 not in calls and calls.count(53)==4
+    with pytest.raises(probe.DNSVerificationError):
+        probe.inventory('Other-Adapter',['1.1.1.1'],lambda *a,**k:json.dumps(document))

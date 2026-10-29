@@ -211,11 +211,24 @@ def kill_with_this_process():
     return job                                          # intentionally kept open for the process lifetime
 
 
+def protected_workdir() -> Path:
+    """A new Administrators/SYSTEM-only, high-integrity folder for one connection's configuration and log.
+
+    The non-elevated user cannot change the configuration between AKENO writing it and OpenVPN reading it."""
+    from akeno.network.bootstrap import _protected_directory
+    from akeno.updater.staging import no_links_on_the_way
+    base = _program_files()
+    no_links_on_the_way(base, base.anchor)
+    folder = base / ('.AkenoFreeVPN-' + uuid.uuid4().hex)
+    _protected_directory(folder)
+    return folder
+
+
 class OpenVPNProcess:
     """One running openvpn.exe with AKENO's configuration; ``state()`` reads OpenVPN's own log."""
 
-    def __init__(self, workdir: Path, executable: Path | None = None, *, popen=subprocess.Popen):
-        self.workdir = Path(workdir)
+    def __init__(self, workdir: Path | None = None, executable: Path | None = None, *, popen=subprocess.Popen):
+        self.workdir = Path(workdir) if workdir else protected_workdir()
         self.executable = executable
         self.popen = popen
         self.process = None
@@ -293,4 +306,10 @@ class OpenVPNProcess:
             ctypes.WinDLL('kernel32').CloseHandle(ctypes.c_void_p(self.event))
             self.event = None
         self.config.unlink(missing_ok=True)
+        self.log.unlink(missing_ok=True)
+        if self.workdir.name.startswith('.AkenoFreeVPN-'):
+            try:
+                self.workdir.rmdir()
+            except OSError:
+                pass
         return True

@@ -198,14 +198,15 @@ def connect(exe):
             conf = work / f'{tried}.ovpn'
             pinned = True
             name = 'opengw.net' if pinned else None
-            variant = 'vpn/vpn' if tried % 2 == 1 else 'certificate only'
-            text_conf = openvpn_profile.render(safe, server_name=name,
-                                               credentials=('vpn', 'vpn') if variant == 'vpn/vpn' else None)
+            variant = 'ip-win32 netsh' if tried % 2 == 1 else 'dhcp (default)'
+            text_conf = openvpn_profile.render(safe, server_name=name)
+            if variant == 'ip-win32 netsh':
+                text_conf = text_conf.replace('disable-dco\n', 'disable-dco\nip-win32 netsh\n')
             conf.write_text(text_conf)
             start = time.monotonic()
             process = subprocess.Popen([str(exe), '--config', str(conf.resolve()), '--log', str(log.resolve())])
             state = 'timeout'
-            while time.monotonic() - start < 35:
+            while time.monotonic() - start < 70:
                 text = log.read_text(errors='replace') if log.exists() else ''
                 if 'Initialization Sequence Completed' in text:
                     state = 'connected'
@@ -236,6 +237,8 @@ def connect(exe):
             print(f'=== {country} {row["IP"]} {safe.proto}:{safe.port} host={row["HostName"]} pinned={name} variant={variant} '
                   f'catalog-ping={row["Ping"]} -> {state} in {took}s')
             print('    dns while up:', dns)
+            stamps = re.findall(r'^(\S+ \S+) .*?(Peer Connection Initiated|Initialization Sequence Completed|TEST ROUTES|open_tun|DHCP|netsh)', text, re.M)
+            print('    timeline:', [(s[0][11:19], s[1]) for s in stamps][:12])
             print('    routes while up:', route)
             print('    exit:', after)
             for line in interesting:

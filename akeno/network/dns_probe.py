@@ -91,7 +91,7 @@ def blocked(address, *, source=None, interface=None, tcp=False, port=53, route_c
 
 
 def inventory(tunnel_name, dns, run):
-    if not re.fullmatch(r'AkenoVPN[0-9a-f]{24}',tunnel_name or ''):
+    if not re.fullmatch(r'AkenoVPN[0-9a-f]{24}|AKENO-FreeVPN',tunnel_name or ''):
         raise DNSVerificationError('Invalid native VPN interface.')
     targets=[str(ipaddress.ip_address(value)) for value in dns]
     if not 1<=len(targets)<=4 or len(set(targets))!=len(targets):
@@ -136,23 +136,25 @@ def inventory(tunnel_name, dns, run):
         raise DNSVerificationError('Native DNS routes, resolver or interface inventory is incomplete.') from None
 
 
-def verify(tunnel_name,dns,*,run=None,resolve=resolver_responds,deny=None):
+def verify(tunnel_name,dns,*,run=None,resolve=resolver_responds,deny=None,encrypted_dns=True):
+    """``encrypted_dns=False`` (the free OpenVPN mode) measures the classic DNS paths (UDP/TCP 53) only: OpenVPN's
+    ``block-outside-dns`` blocks those outside the tunnel, it is not a kill switch for every other port."""
     if sys.platform!='win32':raise DNSVerificationError('DNS leak verification requires native Windows.')
     if deny is not None or resolve is not resolver_responds:
-        return _verify(tunnel_name,dns,run=run,resolve=resolve,deny=deny)
+        return _verify(tunnel_name,dns,run=run,resolve=resolve,deny=deny,encrypted_dns=encrypted_dns)
     from akeno.network.dns_capture import DNSCapture,CaptureError
     capture=DNSCapture()
     try:
         capture.start()
         return _verify(tunnel_name,dns,run=run,resolve=lambda address:resolver_responds(address,capture),
-                       deny=None,capture=capture)
+                       deny=None,capture=capture,encrypted_dns=encrypted_dns)
     except CaptureError as exc:
         raise DNSVerificationError(str(exc)) from exc
     finally:
         capture.close()
 
 
-def _verify(tunnel_name,dns,*,run,resolve,deny,capture=None):
+def _verify(tunnel_name,dns,*,run,resolve,deny,capture=None,encrypted_dns=True):
     if sys.platform!='win32':
         raise DNSVerificationError('DNS leak verification requires native Windows.')
     if run is None:
@@ -179,7 +181,7 @@ def _verify(tunnel_name,dns,*,run,resolve,deny,capture=None):
         for index,address in sources:
             # Encrypted DNS may legitimately use the full tunnel. Port 853 is
             # required to be denied only on a physical/non-tunnel source path.
-            for tcp,port in ((False,53),(True,53),(True,853)):
+            for tcp,port in ((False,53),(True,53),(True,853))[:3 if encrypted_dns else 2]:
                 measured=deny(foreign,source=address,interface=index,tcp=tcp,port=port)
                 if measured=='unroutable':unroutable+=1
                 elif measured=='pending':pending+=1
