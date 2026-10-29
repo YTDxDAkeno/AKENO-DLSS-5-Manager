@@ -19,12 +19,12 @@ kein Lizenzserver-Eingriff. Laufender Arbeitsstand: `docs/AKENO_FREE_VPN_PROGRES
 | 5 | Wurde das Land unabhängig überprüft? | **Ja.** ipinfo, country.is und ifconfig.co bestätigten **JP** (mindestens 2 Bestätigungen und mehr Bestätigungen als Widersprüche sind Pflicht). Gegenprobe: KR-Server als „US“ ausgegeben → zweimal `country_mismatch`, **nie** „Verbunden“. |
 | 6 | Funktionieren Trennen und Recovery? | **Ja.** Trennen über OpenVPNs Exit-Event; danach kein AKENO-OpenVPN, **0** AKENO-Routen, normale IP zurück. Server-Ausfall (Firewall-Sperre) → Wechsel auf anderen JP-Server; getötetes OpenVPN sofort erkannt; abgestürzter Helfer nimmt OpenVPN mit (Job-Objekt); Wiederherstellung räumt Routen auf. |
 | 7 | Sind IPv4, IPv6 und DNS abgesichert? | **IPv4:** Full-Tunnel (`0/1`, `128/1` auf `AKENO-FreeVPN`), normaler Verkehr nachweislich über das VPN. **DNS:** Tunnel-DNS 1.1.1.1/9.9.9.9 durch den Tunnel, Server-DNS-Pushes verworfen, DNS außerhalb des Tunnels durch OpenVPNs `block-outside-dns` gesperrt und **nativ gemessen** (`dns_verified: True`). **IPv6:** `block-ipv6` + IPv6-Verbindungstest; auf dem CI-Runner gibt es **kein IPv6**, der Test ist dort trivial bestanden — auf einem IPv6-Anschluss noch nicht gemessen. **Kein Kill-Switch** (siehe 12). |
-| 8 | Welche Länder waren beim Test tatsächlich verfügbar? | Lauf 40814425437: JP 42, KR 12, TH 3, US 2, RU 2, **CA 1**, IT 1, LV 1 (nutzbare Server). Ziel-Länder: **US 2, CA 1, JP 42; TR, DE, NL, FR, GB 0**. Andere Abrufe: US 3–7, GB 1. Die Verfügbarkeit wechselt stündlich. |
+| 8 | Welche Länder waren beim Test tatsächlich verfügbar? | Lauf 40814425437: JP 42, KR 12, TH 3, US 2, RU 2, **CA 1**, IT 1, LV 1 (nutzbare Server). Ziel-Länder: **US 2, CA 1, JP 42; TR, DE, NL, FR, GB 0**. Lauf 40815399206 (04:03 UTC): JP 30, KR 26, VN 2, RO 1, TH 1, TW 1 — **USA, Türkei, Deutschland, Niederlande, Frankreich, Kanada, Großbritannien: 0**. Andere Abrufe: US 3–7, GB 1. Die Verfügbarkeit wechselt stündlich; Japan war in jedem Abruf verfügbar, USA nur zeitweise, Türkei nie. |
 | 9 | Welche Nutzungs- und Datenschutzbedingungen gelten? | Siehe Abschnitt „Nutzungsrechte und Datenschutz“. Kurz: eigener Client aus der CSV-Liste ausdrücklich vorgesehen; Server als „Academic Use Only“ gekennzeichnet; Verbindungsprotokolle ≥ 3 Monate, Paket-Header ≥ 2 Wochen, Herausgabe an Behörden. **Kommerzieller Kontext ungeklärt.** |
 | 10 | Welche OpenVPN-Komponenten, dürfen sie verteilt werden? | Offizielles **OpenVPN 2.7.8** (`OpenVPN-2.7.8-I002-amd64.msi`, SHA-256 `33104dd0…fe9f`, Authenticode „OpenVPN Inc.“), installiert nur `OpenVPN,Drivers,Drivers.TAPWindows6`. **AKENO verteilt OpenVPN nicht**: es lädt nach Zustimmung den offiziellen Installer von openvpn.org (GPLv2-Programm; TAP-Treiber von OpenVPN Inc. signiert). Der „OpenVPNServiceInteractive“ kommt mit dem Programm-Feature (CI-verifiziert) und wird von AKENO nicht genutzt. |
-| 11 | Welche Tests sind grün? | Abschnitt „Tests“. Reale Windows-E2E 26/26; Unit-/UI-Tests (Sanitizer 48, Provider 8, Sitzung 17, Komponente 10, Helfer 40, UI 8, DNS-Probe 30). Finale CI-Links in Abschnitt „CI auf dem finalen Commit“. |
+| 11 | Welche Tests sind grün? | Reale Windows-E2E 26/26 zweimal (`a81586d`, `35ec8e8`); alle 7 Workflows auf dem finalen Code grün; lokal 1646 bestanden. Details in „Tests“ und „CI auf dem finalen Commit“. |
 | 12 | Welche Tests fehlen noch? | Echter IPv6-Leck-Test auf IPv6-Anschluss; WLAN-Wechsel, Standby/Resume, Windows-Neustart mit aktivem VPN; UAC-Dialog auf normalem Benutzerkonto; Normales Heimnetz (CI ist ein Azure-Rechenzentrum); optionaler Kill-Switch (nicht implementiert); ARM64-Windows (Komponente nur x64). |
-| 13 | Wo ist der fertige private Installer? | Im Artefakt `AKENO-Gaming-Suite-windows-x64` des `build.yml`-Laufs auf dem finalen Commit (Link und SHA-256 im Abschnitt „CI auf dem finalen Commit“). |
+| 13 | Wo ist der fertige private Installer? | Artefakt `AKENO-Gaming-Suite-windows-x64` (ID 12874463394) von [Lauf 40815478068](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40815478068): `AKENO-Gaming-Suite-3.2.0-Setup-x64.exe`, SHA-256 `8fa5fe65…43fa`; Portable `7d058f3e…5467`. Unsigniert, nicht veröffentlicht. |
 | 14 | Was verhindert noch eine Freigabe? | (a) **Nutzungserlaubnis** von VPN Gate für ein kommerzielles Produkt bzw. deine ausdrückliche Entscheidung; (b) deine Tests auf dem eigenen PC (Abschnitt „Test auf deinem PC“); (c) Offline-Signatur Sequenz 4 nach Freigabe; (d) offene Messungen aus 12. |
 
 ## Was der Nutzer sieht
@@ -104,7 +104,37 @@ die Sitzung, OpenVPN-Absturz, Serverwechsel, Recovery nur nach entferntem Prozes
 
 ## CI auf dem finalen Commit
 
-wird nach dem letzten Code-Commit eingetragen.
+Letzter Code-Commit **`35ec8e8b680195efaec0ad06a86c1c2ff24d62ba`**; der Build lief auf **`9b544ada75fa490087ede9003ba9b22f7141d866`**
+(gleicher Code, nur die Fortschrittsdatei zusätzlich — der Build auf `35ec8e8` wurde von GitHubs Concurrency-Gruppe
+vor dem Start durch diesen neueren Lauf ersetzt). Lokal: 1646 Tests bestanden, 19 plattformbedingt übersprungen.
+
+| Workflow | Commit | Lauf | Ergebnis |
+|---|---|---|---|
+| Build and test (Linux, Upstream-Verträge, Lizenzserver, Windows-Build/Smoke, Update-E2E) | `9b544ad` | [40815478068](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40815478068) | **grün**; Update-E2E 58/58, Upgrades 3.0.0/3.1.0/3.1.1 → 3.2.0 je 57/57, Repair 15/15; Release/Publish übersprungen |
+| Free VPN on Windows (VPN Gate über OpenVPN) | `35ec8e8` | [40815399206](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40815399206) | **26/26**: JP über `112.68.148.47` (normal `20.169.62.224`), bestätigt von country.is, ifconfig.co, ipinfo; Wechsel → `124.213.90.207`; Ausfall → `175.129.84.161`; Liste: 95 Server, Ziel-Länder nur JP 30 |
+| WireGuard on Windows | `35ec8e8` | [40815399286](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40815399286) | grün |
+| LAN Play NAT lab | `35ec8e8` | [40815399184](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40815399184) | grün |
+| Isolated relay and VPN exit traffic | `35ec8e8` | [40815399225](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40815399225) | grün |
+| Optional components on Windows | `35ec8e8` | [40815399192](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40815399192) | grün |
+| Production read-only check | `35ec8e8` | [40815399338](https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40815399338) | grün |
+
+**Private Build-Artefakte** (Artefakt `AKENO-Gaming-Suite-windows-x64`, ID 12874463394, nur mit Repository-Zugriff
+herunterladbar, unsigniert):
+
+| Datei | Größe | SHA-256 |
+|---|---|---|
+| `AKENO-Gaming-Suite-3.2.0-Setup-x64.exe` | 158 377 131 B | `8fa5fe650e5126d57548c6348465e3899ec1bd102f55a83466d012ee2e9943fa` |
+| `AKENO-Gaming-Suite-3.2.0-portable-x64.zip` | 223 968 120 B | `7d058f3ef9ff34c6ca114bfc8f96a1d950383f49e27f69b68c097e66cc7e5467` |
+| `AKENO-Gaming-Suite-3.2.0-source.zip` | — | `0671bb0255611a0f8c62b5d5ab5bfc2a88b5e07c36ea6f8fc0283f617ac1d811` |
+| `AKENO-community-dependencies-3.2.0-x64.zip` | — | `e4f64730f7009bfeebf8e26486b7bbee19710d43c34c41386df089956602a155` |
+
+Portable: 2917 Dateien, 494 514 856 B entpackt, `content_sha256` `287a66df887ffac96fc02ae8631ffdb0b49292b73298d48161d2be58f7090284`,
+vom Updater akzeptiert, innerhalb der Release-Manager-Grenzen. Download:
+https://github.com/YTDxDAkeno/AKENO-DLSS-5-Manager/actions/runs/40815478068/artifacts/12874463394
+
+**Hinweis:** Dieser Bericht wird nach dem Build in einem reinen Doku-Commit ergänzt; dessen eigener Build-Lauf baut
+denselben Code erneut (andere Installer-SHA möglich, weil Zeitstempel einfließen). Maßgeblich für Tests auf deinem PC
+sind die oben genannten Dateien.
 
 ## Test auf deinem PC (Windows 10/11 x64, normales Konto)
 
