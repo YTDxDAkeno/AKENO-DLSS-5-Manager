@@ -216,6 +216,9 @@ class LicenseCode(Base):
     verifier: Mapped[str] = mapped_column(String(64), unique=True)
     hint: Mapped[str] = mapped_column(String(12))                             # last group, e.g. "7KQ2"
     code_type: Mapped[str] = mapped_column(String(20))
+    # what the code unlocks: akeno-suite (AKENO Full, the License row) or one module (a FeatureGrant)
+    entitlement: Mapped[str] = mapped_column(String(40), default="akeno-suite", server_default="akeno-suite")
+    duration_days: Mapped[int | None] = mapped_column(Integer)                # a time code's length when not the type's
     device_allowance: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), default="available")     # available|reserved|redeemed|revoked
     expires_at: Mapped[datetime | None]                                       # the unused code stops working then
@@ -234,11 +237,71 @@ class LicenseCode(Base):
     __table_args__ = (
         CheckConstraint("code_type in ('trial_24h','trial_72h','monthly','lifetime')", name="ck_codes_type"),
         CheckConstraint("status in ('available','reserved','redeemed','revoked')", name="ck_codes_status"),
+        CheckConstraint("duration_days IS NULL OR (duration_days >= 1 AND duration_days <= 3650)",
+                        name="ck_codes_duration_days"),
         Index("ix_license_codes_status_created", "status", "created_at"),
     )
 
     def display(self) -> str:
         return f"AKENO-····-····-····-{self.hint}"
+
+    @property
+    def seconds(self) -> int | None:
+        """How long the license or grant this code gives runs (None: lifetime)."""
+        if self.code_type == LicenseType.LIFETIME.value:
+            return None
+        return self.duration_days * 86400 if self.duration_days else LicenseType(self.code_type).seconds
+
+
+class FeatureGrant(Base):
+    """One module entitlement of an account (AKENO VPN, AKENO LAN Play …), next to and independent of the suite
+    license. One row per account and entitlement; codes and administrators extend it like the license."""
+
+    __tablename__ = "feature_grants"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    entitlement: Mapped[str] = mapped_column(String(40))
+    grant_type: Mapped[str] = mapped_column(String(20))                       # lifetime | timed
+    status: Mapped[str] = mapped_column(String(20), default="active")        # active | disabled | revoked
+    activated_at: Mapped[datetime] = mapped_column(default=utcnow)
+    expires_at: Mapped[datetime | None]                                       # None: lifetime
+    device_limit: Mapped[int] = mapped_column(Integer, default=2)
+    created_at: Mapped[datetime] = mapped_column(default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "entitlement", name="uq_feature_grants_user_entitlement"),
+        CheckConstraint("grant_type in ('lifetime','timed')", name="ck_feature_grants_type"),
+        CheckConstraint("status in ('active','disabled','revoked')", name="ck_feature_grants_status"),
+        CheckConstraint("(grant_type = 'lifetime') = (expires_at IS NULL)", name="ck_feature_grants_lifetime_expiry"),
+        CheckConstraint("device_limit >= 1", name="ck_feature_grants_device_limit"),
+    )
+
+    @property
+    def lifetime(self) -> bool:
+        return self.grant_type == "lifetime"
+
+    def running(self, now: datetime) -> bool:
+        return self.status == "active" and (self.expires_at is None or self.expires_at > now)
+
+
+class FeatureGrantEvent(Base):
+    """History of one feature grant: redemptions and every administrative change."""
+
+    __tablename__ = "feature_grant_events"
+
+    id: Mapped[int] = mapped_column(BigId, primary_key=True, autoincrement=True)
+    grant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("feature_grants.id", ondelete="CASCADE"), index=True)
+    at: Mapped[datetime] = mapped_column(default=utcnow)
+    kind: Mapped[str] = mapped_column(String(30))
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    old_type: Mapped[str | None] = mapped_column(String(20))
+    new_type: Mapped[str | None] = mapped_column(String(20))
+    old_expires_at: Mapped[datetime | None]
+    new_expires_at: Mapped[datetime | None]
+    code_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("license_codes.id", ondelete="SET NULL"))
+    note: Mapped[str] = mapped_column(String(300), default="")
 
 
 class LicenseRedemption(Base):
@@ -249,7 +312,8 @@ class LicenseRedemption(Base):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
     code_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("license_codes.id", ondelete="RESTRICT"), unique=True)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    license_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("licenses.id", ondelete="CASCADE"))
+    license_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("licenses.id", ondelete="CASCADE"))
+    grant_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("feature_grants.id", ondelete="CASCADE"))
     redeemed_at: Mapped[datetime] = mapped_column(default=utcnow)
     previous_type: Mapped[str | None] = mapped_column(String(20))
     previous_expires_at: Mapped[datetime | None]
@@ -278,12 +342,17 @@ class LicenseEvent(Base):
 
 
 class OfflineCertificate(Base):
-    """A signed lifetime license for one device. It has no expiry; revocation takes effect when the app is online."""
+    """A signed lifetime license for one device. It has no expiry; revocation takes effect when the app is online.
+
+    ``entitlements`` is None for the original suite certificate (``akeno-offline-license``) and the list of lifetime
+    entitlements for an access certificate (``akeno-access-offline``)."""
 
     __tablename__ = "offline_certificates"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=_uuid)
-    license_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("licenses.id", ondelete="CASCADE"), index=True)
+    license_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("licenses.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    entitlements: Mapped[list | None] = mapped_column(JSON)
     device_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), index=True)
     kid: Mapped[str] = mapped_column(String(32))
     issued_at: Mapped[datetime] = mapped_column(default=utcnow)
