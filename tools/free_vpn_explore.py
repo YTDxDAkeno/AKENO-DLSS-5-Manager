@@ -184,29 +184,28 @@ def connect(exe):
     print('tapctl create', made.returncode, made.stdout.strip()[:200], made.stderr.strip()[:200])
     tried = 0
     for country in ('JP', 'KR', 'US'):
-        for row in [r for r in servers if r['CountryShort'] == country][:6]:
+        for row in [r for r in servers if r['CountryShort'] == country][:10]:
             profile = base64.b64decode(row['OpenVPN_ConfigData_Base64']).decode('utf-8')
             try:
                 safe = openvpn_profile.parse(profile, row['IP'])
             except ValueError as exc:
                 print(country, row['IP'], 'rejected', exc)
                 continue
-            if tried >= 6:
+            if tried >= 10:
                 return
             tried += 1
             log = work / f'{tried}.log'
             conf = work / f'{tried}.ovpn'
             pinned = True
             name = 'opengw.net' if pinned else None
-            variant = 'full' if tried % 2 == 1 else 'no-ipv6-block'
-            text_conf = openvpn_profile.render(safe, server_name=name).replace('mute 20', 'verb 4')
-            if variant == 'no-ipv6-block':
-                text_conf = text_conf.replace('redirect-gateway def1 ipv6', 'redirect-gateway def1').replace('block-ipv6\n', '')
+            variant = 'vpn/vpn' if tried % 2 == 1 else 'certificate only'
+            text_conf = openvpn_profile.render(safe, server_name=name,
+                                               credentials=('vpn', 'vpn') if variant == 'vpn/vpn' else None)
             conf.write_text(text_conf)
             start = time.monotonic()
             process = subprocess.Popen([str(exe), '--config', str(conf.resolve()), '--log', str(log.resolve())])
             state = 'timeout'
-            while time.monotonic() - start < 50:
+            while time.monotonic() - start < 35:
                 text = log.read_text(errors='replace') if log.exists() else ''
                 if 'Initialization Sequence Completed' in text:
                     state = 'connected'

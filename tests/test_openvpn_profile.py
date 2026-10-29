@@ -107,6 +107,8 @@ def test_render_refuses_private_dns_and_paths_that_would_inject_directives():
     safe = parse(profile(), '45.76.10.7')
     with pytest.raises(ValueError):
         render(safe, dns=('192.168.1.1',))
-    for bad in ({'server_name': 'x\nup evil.cmd'}, {'adapter': 'a b'}, {'server_name': 'UPPER.example.com'}):
+    assert '<auth-user-pass>\nvpn\nvpn\n</auth-user-pass>' in render(safe, credentials=('vpn', 'vpn'))
+    for bad in ({'server_name': 'x\nup evil.cmd'}, {'adapter': 'a b'}, {'server_name': 'UPPER.example.com'},
+                {'credentials': ('vpn', 'x\nup evil.cmd')}, {'credentials': ('vpn',)}):
         with pytest.raises(ValueError):
             render(safe, **bad)

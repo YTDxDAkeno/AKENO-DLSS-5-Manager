@@ -252,7 +252,7 @@ ADAPTER = 'AKENO-FreeVPN'
 
 
 def render(profile: SafeProfile, *, dns: tuple[str, ...] = ('1.1.1.1', '9.9.9.9'), server_name: str | None = None,
-           adapter: str | None = ADAPTER, password_file: str | None = None) -> str:
+           adapter: str | None = ADAPTER, credentials: tuple[str, str] | None = None) -> str:
     """AKENO's complete client configuration: fixed directives plus validated values, nothing copied as text.
 
     File paths (log, status) are never written into the configuration: OpenVPN reads backslashes there as escapes.
@@ -265,8 +265,11 @@ def render(profile: SafeProfile, *, dns: tuple[str, ...] = ('1.1.1.1', '9.9.9.9'
         address = ipaddress.ip_address(value)
         if address.version != 4 or not address.is_global:
             raise ValueError('Tunnel DNS must be public IPv4 addresses reached through the tunnel.')
-    if profile.password_auth and not password_file:
-        raise ValueError('This provider needs its fixed credentials file.')
+    if credentials is not None and (len(credentials) != 2 or
+                                    not all(re.fullmatch(r'[A-Za-z0-9._-]{1,64}', c or '') for c in credentials)):
+        raise ValueError('Invalid provider credentials.')
+    if profile.password_auth and credentials is None:
+        raise ValueError('This provider needs its published fixed credentials.')
     lines = [
         '# AKENO free VPN: generated configuration. Provider values are validated; nothing else is accepted.',
         'client', 'dev tun', 'disable-dco',
@@ -298,10 +301,9 @@ def render(profile: SafeProfile, *, dns: tuple[str, ...] = ('1.1.1.1', '9.9.9.9'
         if not re.fullmatch(r'[a-z0-9-]{1,63}(?:\.[a-z0-9-]{1,63}){1,4}', server_name):
             raise ValueError('Invalid server name.')
         lines.append(f'verify-x509-name {server_name} name')
-    if profile.password_auth:
-        if any(ch in password_file for ch in '"\n\r\\'):
-            raise ValueError('Invalid credentials path.')
-        lines.append(f'auth-user-pass "{password_file}"')
+    if credentials is not None:
+        # the provider's published shared credentials (VPN Gate: vpn/vpn), inline: no file path, nothing secret
+        lines += ['<auth-user-pass>', credentials[0], credentials[1], '</auth-user-pass>']
     lines += ['<ca>', *(pem.strip() for pem in profile.ca), '</ca>']
     if profile.cert:
         lines += ['<cert>', profile.cert.strip(), '</cert>', '<key>', profile.key.strip(), '</key>']
