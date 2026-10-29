@@ -1,0 +1,43 @@
+name: Module licenses on Windows (AKENO VPN Lifetime end to end)
+# A throwaway local license server (own database and signing key, no production data) issues AKENO VPN, AKENO Full
+# and a second VPN code. AKENO's own licensing code redeems them on a disposable Windows runner; the real main window
+# and the real elevated network helper must unlock AKENO VPN only, run a real free VPN connection, refuse LAN Play,
+# unlock everything after the Full code and fall back to VPN only when Full ends. Screenshots are uploaded.
+on:
+  push:
+    branches: ['claude/akeno-feature-licenses']
+    paths: ['akeno/licensing/**', 'akeno/network/helper.py', 'akeno/ui/main_window.py', 'akeno/ui/locked.py',
+            'akeno/ui/pages/akeno_network.py', 'server/akeno_server/licensing/**', 'server/migrations/**',
+            'tools/feature_license_windows_e2e.py', 'tools/license_lab.py',
+            '.github/workflows/feature-licenses-windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: feature-licenses-windows-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  module-licenses:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    env:
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - name: The license server's packages in their own environment
+        run: |
+          python -m venv "$env:RUNNER_TEMP\server-env"
+          & "$env:RUNNER_TEMP\server-env\Scripts\python.exe" -m pip install -r server/requirements.txt
+      - name: AKENO VPN Lifetime from code to a real VPN connection
+        run: python tools/feature_license_windows_e2e.py --server-python "$env:RUNNER_TEMP\server-env\Scripts\python.exe" --work "$env:RUNNER_TEMP\feature-licenses" --report feature-license-report.json --evidence feature-license-evidence --country JP
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: feature-licenses-windows-evidence
+          path: |
+            feature-license-report.json
+            feature-license-evidence/*.png

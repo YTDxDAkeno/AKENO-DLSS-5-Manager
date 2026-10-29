@@ -477,7 +477,9 @@ class MainWindow(QMainWindow):
         advanced = {}
         from akeno.licensing import entitlements as ents_mod
         from akeno.ui.locked import LockedModulePage
-        allowed = lambda key: ents_mod.page_allowed(self.entitlements, key)   # noqa: E731
+        # Without any entitlement the window is only ever built for checks (smoke test, screenshots, the start
+        # check after an update): the shell never shows it then, so every page is built as before.
+        allowed = lambda key: not self.entitlements or ents_mod.page_allowed(self.entitlements, key)   # noqa: E731
         self.locked_pages = [key for key, _, _ in NAV if not allowed(key)]
         if allowed("advanced"):
             for key, cls in (("dashboard", DashboardPage), ("profiles", ProfilesPage), ("install", InstallPage)):
@@ -523,7 +525,7 @@ class MainWindow(QMainWindow):
 
     def allows(self, module: str) -> bool:
         from akeno.licensing import entitlements as ents_mod
-        return ents_mod.allows(self.entitlements, module)
+        return not self.entitlements or ents_mod.allows(self.entitlements, module)
 
     def start_page(self) -> str:
         """The dashboard with AKENO Full; otherwise the first page the license includes (AKENO Network for a
